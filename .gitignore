@@ -1,0 +1,21 @@
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Datos sensibles (por las dudas)
+*.env
+*.env.local
+secrets.json
+
+# Backups
+*.bak
+*.tmp

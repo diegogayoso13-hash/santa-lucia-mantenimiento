@@ -1,0 +1,2042 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>B/M Santa Lucía · Mantenimientos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --azul-profundo: #0c2340;
+    --azul-medio: #1e3a5f;
+    --acento: #d4a44a;
+    --rojo: #c1383b;
+    --ambar: #d99b29;
+    --verde: #2d8659;
+    --gris-1: #f7f5f0;
+    --gris-2: #e8e4dc;
+    --gris-3: #b8b3a8;
+    --texto: #1a1a1a;
+    --texto-suave: #5a5a5a;
+    --bg: #faf8f3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--texto);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .display { font-family: 'Fraunces', serif; font-weight: 600; letter-spacing: -0.01em; }
+
+  header.top {
+    background: linear-gradient(135deg, var(--azul-profundo) 0%, var(--azul-medio) 100%);
+    color: white;
+    padding: 24px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  header.top::before {
+    content: '';
+    position: absolute;
+    right: -40px; top: -30px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, var(--acento) 0%, transparent 70%);
+    opacity: 0.15;
+  }
+  .header-inner { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+  header.top h1 { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; }
+  header.top h1 .accent { color: var(--acento); }
+  header.top .sub { opacity: 0.75; font-size: 13px; margin-top: 2px; letter-spacing: 0.02em; }
+
+  nav.tabs {
+    background: white;
+    border-bottom: 1px solid var(--gris-2);
+    position: sticky; top: 0;
+    z-index: 50;
+  }
+  .tabs-inner { max-width: 1200px; margin: 0 auto; display: flex; padding: 0 28px; }
+  .tab {
+    background: none;
+    border: none;
+    padding: 14px 18px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--texto-suave);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 500;
+  }
+  .tab:hover { color: var(--azul-profundo); }
+  .tab.active { color: var(--azul-profundo); border-bottom-color: var(--acento); font-weight: 600; }
+  .tab .badge {
+    background: var(--rojo); color: white;
+    font-size: 11px; padding: 1px 6px; border-radius: 10px;
+    font-weight: 600; min-width: 18px; text-align: center;
+  }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 28px 60px; }
+  .section { display: none; }
+  .section.active { display: block; animation: fade 0.25s; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ALERTAS / DASHBOARD */
+  .alert-banner {
+    background: white;
+    border-left: 4px solid var(--rojo);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .alert-banner.ok { border-color: var(--verde); }
+  .alert-banner .icon { font-size: 28px; }
+  .alert-banner .text strong { font-family: 'Fraunces', serif; font-size: 17px; }
+  .alert-banner .text p { font-size: 13px; color: var(--texto-suave); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: white;
+    padding: 18px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--gris-2);
+    cursor: pointer;
+    transition: all 0.18s;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: var(--gris-3);
+  }
+  .stat-card.vencido::after { background: var(--rojo); }
+  .stat-card.proximo::after { background: var(--ambar); }
+  .stat-card.ok::after { background: var(--verde); }
+  .stat-card.todos::after { background: var(--azul-profundo); }
+  .stat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .stat-card.active { box-shadow: 0 0 0 2px var(--acento); }
+  .stat-card .num {
+    font-family: 'Fraunces', serif;
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat-card.vencido .num { color: var(--rojo); }
+  .stat-card.proximo .num { color: var(--ambar); }
+  .stat-card.ok .num { color: var(--verde); }
+  .stat-card .label {
+    font-size: 12px;
+    color: var(--texto-suave);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  /* FILTROS */
+  .toolbar {
+    background: white;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border: 1px solid var(--gris-2);
+  }
+  .toolbar input, .toolbar select {
+    padding: 9px 12px;
+    border: 1px solid var(--gris-2);
+    border-radius: 7px;
+    font: inherit;
+    font-size: 14px;
+    flex: 1;
+    min-width: 140px;
+    background: var(--gris-1);
+  }
+  .toolbar input:focus, .toolbar select:focus {
+    outline: none; border-color: var(--azul-profundo); background: white;
+  }
+
+  /* TARJETAS DE TAREAS */
+  .task-list { display: flex; flex-direction: column; gap: 8px; }
+  .task-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--gris-2);
+    border-left: 4px solid var(--gris-3);
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 16px;
+    align-items: center;
+    transition: all 0.15s;
+  }
+  .task-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .task-card.vencido { border-left-color: var(--rojo); background: #fff8f7; }
+  .task-card.proximo { border-left-color: var(--ambar); background: #fffaf2; }
+  .task-card.ok { border-left-color: var(--verde); }
+  .task-card.sin_dato { border-left-color: var(--gris-3); opacity: 0.78; }
+
+  .estado-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .vencido .estado-icon { background: #fde0df; }
+  .proximo .estado-icon { background: #fdf0d3; }
+  .ok .estado-icon { background: #dbf0e3; }
+  .sin_dato .estado-icon { background: var(--gris-2); }
+
+  .task-info .equipo { font-weight: 600; font-size: 14.5px; color: var(--azul-profundo); }
+  .task-info .tarea { font-size: 13px; color: var(--texto); margin-top: 1px; }
+  .task-info .meta { font-size: 11.5px; color: var(--texto-suave); margin-top: 4px; letter-spacing: 0.01em; }
+  .task-info .obs { font-size: 11.5px; color: #a8651a; font-style: italic; margin-top: 3px; }
+
+  .proxima-box { text-align: right; min-width: 80px; }
+  .proxima-box .valor { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; line-height: 1; }
+  .proxima-box .unidad { font-size: 10.5px; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+  .vencido .proxima-box .valor { color: var(--rojo); }
+  .proximo .proxima-box .valor { color: var(--ambar); }
+  .ok .proxima-box .valor { color: var(--verde); }
+
+  .btn {
+    background: var(--azul-profundo);
+    color: white;
+    border: none;
+    padding: 9px 14px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn:hover { background: var(--azul-medio); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-sec { background: var(--gris-2); color: var(--texto); }
+  .btn-sec:hover { background: var(--gris-3); color: white; }
+  .btn-acento { background: var(--acento); color: var(--azul-profundo); }
+  .btn-acento:hover { background: #c0942f; }
+  .btn-pequeno { padding: 5px 10px; font-size: 12px; }
+  .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+  /* MODAL */
+  .modal-bg {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 35, 64, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 14px;
+    padding: 28px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    color: var(--azul-profundo);
+    margin-bottom: 4px;
+  }
+  .modal .modal-sub {
+    font-size: 13px;
+    color: var(--texto-suave);
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--gris-2);
+  }
+  .modal .field { margin-bottom: 14px; }
+  .modal label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--texto-suave);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .modal input, .modal textarea, .modal select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--gris-2);
+    border-radius: 7px;
+    font: inherit;
+    font-size: 14px;
+    background: var(--gris-1);
+  }
+  .modal input:focus, .modal textarea:focus, .modal select:focus {
+    outline: none; border-color: var(--azul-profundo); background: white;
+  }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+
+  /* CARGA MENSUAL */
+  .carga-form {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid var(--gris-2);
+    margin-bottom: 16px;
+  }
+  .carga-form h3 { font-family: 'Fraunces', serif; font-size: 19px; color: var(--azul-profundo); margin-bottom: 14px; }
+  .equipo-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .equipo-row:nth-child(odd) { background: var(--gris-1); }
+  .equipo-row label { font-size: 13px; font-weight: 500; }
+
+  /* HISTORIAL */
+  .hist-item {
+    background: white;
+    border: 1px solid var(--gris-2);
+    border-left: 3px solid var(--acento);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+  }
+  .hist-fecha {
+    text-align: center;
+    background: var(--gris-1);
+    border-radius: 6px;
+    padding: 6px 10px;
+    min-width: 60px;
+  }
+  .hist-fecha .dia { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 700; line-height: 1; color: var(--azul-profundo); }
+  .hist-fecha .mes { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--texto-suave); margin-top: 3px; }
+  .hist-info .equipo { font-weight: 600; font-size: 14px; color: var(--azul-profundo); }
+  .hist-info .tarea { font-size: 13px; }
+  .hist-info .por { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+  .hist-info .notas { font-size: 12px; color: #a8651a; font-style: italic; margin-top: 3px; }
+  .hist-hrs { font-family: 'Fraunces', serif; font-weight: 700; color: var(--azul-profundo); }
+
+  /* VARIOS */
+  .empty {
+    text-align: center;
+    padding: 50px 20px;
+    color: var(--texto-suave);
+    background: white;
+    border-radius: 10px;
+    border: 1px dashed var(--gris-2);
+  }
+  .empty .big { font-size: 40px; margin-bottom: 10px; }
+  .loading { text-align: center; padding: 40px; color: var(--texto-suave); }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--azul-profundo); color: white;
+    padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    z-index: 200;
+    opacity: 0; transition: opacity 0.25s;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: var(--rojo); }
+
+  .panel-titulo {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    color: var(--azul-profundo);
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-titulo::before {
+    content: ''; width: 6px; height: 24px;
+    background: var(--acento); border-radius: 3px;
+  }
+
+  .acciones-globales {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+
+  /* CONFIRMACIÓN TAREAS REALIZADAS */
+  .confirm-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--gris-2);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    background: var(--gris-1);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .confirm-item:hover { background: white; border-color: var(--azul-medio); }
+  .confirm-item input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; accent-color: var(--azul-profundo); }
+  .confirm-item .ci-info .equipo { font-weight: 600; font-size: 14px; color: var(--azul-profundo); }
+  .confirm-item .ci-info .tarea { font-size: 13px; color: var(--texto); }
+  .confirm-item .ci-info .meta { font-size: 11.5px; color: var(--texto-suave); margin-top: 2px; }
+  .confirm-item .ci-estado { font-size: 12px; padding: 4px 8px; border-radius: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .confirm-item .ci-estado.vencido { background: #fde0df; color: var(--rojo); }
+  .confirm-item .ci-estado.proximo { background: #fdf0d3; color: var(--ambar); }
+
+  @media (max-width: 700px) {
+    .confirm-item { grid-template-columns: auto 1fr; }
+    .confirm-item .ci-estado { grid-column: 2; justify-self: start; margin-top: 4px; }
+  }
+
+  /* STOCK */
+  .stock-list { display: flex; flex-direction: column; gap: 8px; }
+  .stock-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--gris-2);
+    border-left: 4px solid var(--verde);
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 14px;
+    align-items: center;
+    transition: all 0.15s;
+  }
+  .stock-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .stock-card.bajo { border-left-color: var(--ambar); background: #fffaf2; }
+  .stock-card.cero { border-left-color: var(--rojo); background: #fff8f7; }
+  .stock-info .nombre { font-weight: 600; font-size: 14.5px; color: var(--azul-profundo); }
+  .stock-info .cod { font-size: 12px; color: var(--texto-suave); margin-top: 2px; font-family: monospace; }
+  .stock-info .cat { display: inline-block; background: var(--gris-1); color: var(--texto-suave); font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-top: 4px; letter-spacing: 0.02em; }
+  .stock-cant { text-align: right; min-width: 80px; }
+  .stock-cant .num { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; line-height: 1; color: var(--azul-profundo); }
+  .stock-cant.bajo .num { color: var(--ambar); }
+  .stock-cant.cero .num { color: var(--rojo); }
+  .stock-cant .min { font-size: 11px; color: var(--texto-suave); margin-top: 4px; letter-spacing: 0.02em; }
+
+  @media (max-width: 700px) {
+    .stock-card { grid-template-columns: 1fr auto; }
+    .stock-card .stock-cant { grid-column: 2; }
+    .stock-card button { grid-column: 1 / -1; justify-self: start; }
+  }
+
+  @media (max-width: 700px) {
+    main { padding: 16px; }
+    header.top { padding: 18px 16px; }
+    .tabs-inner { padding: 0 16px; }
+    .tab { padding: 12px 12px; font-size: 13px; }
+    .task-card { grid-template-columns: auto 1fr; }
+    .task-card .proxima-box, .task-card .btn { grid-column: 2; justify-self: start; text-align: left; }
+    .equipo-row { grid-template-columns: 1fr; }
+    .stat-card .num { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PANTALLA DE LOGIN -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,var(--azul-profundo),var(--azul-medio));z-index:1000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:14px;padding:36px 32px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:48px;margin-bottom:8px">⚓</div>
+      <h2 style="font-family:'Fraunces',serif;color:var(--azul-profundo);font-size:24px">B/M Santa Lucía</h2>
+      <p style="color:var(--texto-suave);font-size:13px;margin-top:4px">Plan de Mantenimiento</p>
+    </div>
+    <form id="login-form" onsubmit="return iniciarSesion(event)">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Email</label>
+        <input type="email" id="login-email" required style="width:100%;padding:11px 13px;border:1px solid var(--gris-2);border-radius:7px;font-size:14px;font-family:inherit">
+      </div>
+      <div style="margin-bottom:18px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Contraseña</label>
+        <input type="password" id="login-pass" required style="width:100%;padding:11px 13px;border:1px solid var(--gris-2);border-radius:7px;font-size:14px;font-family:inherit">
+      </div>
+      <button type="submit" id="login-btn" style="width:100%;background:var(--azul-profundo);color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Entrar</button>
+      <div id="login-error" style="margin-top:14px;color:var(--rojo);font-size:13px;text-align:center;display:none"></div>
+    </form>
+  </div>
+</div>
+
+<header class="top">
+  <div class="header-inner" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div>
+      <h1>⚓ B/M Santa Lucía <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
+      <p class="sub">Gestión integral del mantenimiento de a bordo</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+      <span id="header-user" style="opacity:0.85"></span>
+      <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:7px 13px;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;font-weight:500">Salir</button>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner">
+    <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab" data-tab="tareas">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
+    <button class="tab" data-tab="carga">⏱️ Cargar Horas</button>
+    <button class="tab" data-tab="stock">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
+    <button class="tab" data-tab="herramientas">🔧 Herramientas</button>
+    <button class="tab" data-tab="historial">📜 Historial</button>
+  </div>
+</nav>
+
+<main>
+  <!-- DASHBOARD -->
+  <section class="section active" id="sec-dashboard">
+    <div id="banner-alerta"></div>
+
+    <div class="stats">
+      <div class="stat-card vencido" data-filter="VENCIDO" onclick="irATareas('VENCIDO')">
+        <div class="num" id="n-vencido">0</div>
+        <div class="label">Vencidos</div>
+      </div>
+      <div class="stat-card proximo" data-filter="PROXIMO" onclick="irATareas('PROXIMO')">
+        <div class="num" id="n-proximo">0</div>
+        <div class="label">Próximos</div>
+      </div>
+      <div class="stat-card ok" data-filter="OK" onclick="irATareas('OK')">
+        <div class="num" id="n-ok">0</div>
+        <div class="label">Al día</div>
+      </div>
+      <div class="stat-card todos" data-filter="TODOS" onclick="irATareas('TODOS')">
+        <div class="num" id="n-todos">0</div>
+        <div class="label">Total tareas</div>
+      </div>
+    </div>
+
+    <h2 class="panel-titulo">Más urgentes</h2>
+    <div class="task-list" id="dash-urgentes"></div>
+  </section>
+
+  <!-- TAREAS -->
+  <section class="section" id="sec-tareas">
+    <h2 class="panel-titulo">Todas las tareas</h2>
+    <div class="acciones-globales">
+      <button class="btn btn-acento" onclick="exportarExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="buscador" placeholder="🔎 Buscar equipo o tarea...">
+      <select id="filtro-equipo"><option value="">Todos los equipos</option></select>
+      <select id="filtro-prioridad">
+        <option value="">Toda prioridad</option>
+        <option value="ALTA">Alta</option>
+        <option value="MEDIA">Media</option>
+        <option value="BAJA">Baja</option>
+      </select>
+      <select id="filtro-estado">
+        <option value="TODOS">Todos los estados</option>
+        <option value="VENCIDO">🔴 Vencidos</option>
+        <option value="PROXIMO">🟡 Próximos</option>
+        <option value="OK">🟢 Al día</option>
+        <option value="SIN_DATO">⚪ Sin datos</option>
+      </select>
+    </div>
+    <div class="task-list" id="lista"></div>
+  </section>
+
+  <!-- CARGA MENSUAL -->
+  <section class="section" id="sec-carga">
+    <h2 class="panel-titulo">Cargar horas del mes</h2>
+    <div class="carga-form">
+      <h3>Actualización mensual de horas por equipo</h3>
+      <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
+        Cargá las horas actuales de cada equipo principal. La app va a recalcular automáticamente todos los próximos vencimientos.
+      </p>
+      <div id="carga-equipos"></div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-sec" onclick="resetCarga()">Limpiar</button>
+        <button class="btn" onclick="guardarCarga()">💾 Guardar horas</button>
+      </div>
+    </div>
+
+    <div class="carga-form">
+      <h3>📅 Chequeos por fecha</h3>
+      <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
+        Tareas que se manejan por fecha (chequeos mensuales, engrases, inspecciones). <strong>Marcá las que hiciste hoy</strong> y tocá Aplicar.
+      </p>
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div>
+          <label>Fecha de realización</label>
+          <input type="date" id="fch-fecha">
+        </div>
+        <div>
+          <label>Realizado por</label>
+          <input type="text" id="fch-quien" value="Maquinista">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <label style="font-size:13px;color:var(--texto-suave);font-weight:500">Filtrar:</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('VENCIDOS')">Solo vencidos</button>
+          <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('TODOS')">Todos</button>
+          <button type="button" class="btn btn-pequeno btn-sec" onclick="toggleTodosChequeos()">Marcar/desmarcar</button>
+        </div>
+      </div>
+      <div id="chequeos-fecha"></div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn" onclick="aplicarChequeos()">✓ Aplicar marcados</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STOCK -->
+  <section class="section" id="sec-stock">
+    <div id="banner-stock"></div>
+    <h2 class="panel-titulo">Stock de repuestos</h2>
+    <div class="acciones-globales">
+      <button class="btn" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
+      <button class="btn btn-acento" onclick="exportarStockExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="stock-buscador" placeholder="🔎 Buscar repuesto...">
+      <select id="stock-filtro-cat"><option value="">Todas las categorías</option></select>
+      <select id="stock-filtro-estado">
+        <option value="TODOS">Todos</option>
+        <option value="BAJO">⚠️ Bajo stock</option>
+        <option value="OK">✅ Stock OK</option>
+      </select>
+    </div>
+    <div id="stock-lista"></div>
+  </section>
+
+  <!-- HERRAMIENTAS -->
+  <section class="section" id="sec-herramientas">
+    <h2 class="panel-titulo">Inventario de herramientas</h2>
+    <div class="acciones-globales">
+      <button class="btn" onclick="abrirModalHerr()">➕ Agregar herramienta</button>
+      <button class="btn btn-acento" onclick="exportarHerrExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="herr-buscador" placeholder="🔎 Buscar herramienta...">
+      <select id="herr-filtro-ubic"><option value="">Todas las ubicaciones</option></select>
+      <select id="herr-filtro-marca"><option value="">Todas las marcas</option></select>
+    </div>
+    <div id="herr-lista"></div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="section" id="sec-historial">
+    <h2 class="panel-titulo">Historial de mantenimientos</h2>
+    <div class="toolbar">
+      <input type="text" id="hist-buscador" placeholder="🔎 Buscar en historial...">
+      <select id="hist-filtro-equipo"><option value="">Todos los equipos</option></select>
+    </div>
+    <div id="historial-lista"></div>
+  </section>
+</main>
+
+<!-- MODAL: registrar mantenimiento -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2>Registrar mantenimiento</h2>
+    <div class="modal-sub" id="modal-info"></div>
+    <div class="field">
+      <label>Fecha realizado</label>
+      <input type="date" id="m-fecha">
+    </div>
+    <div class="field">
+      <label>Horas del equipo al hacerlo</label>
+      <input type="number" id="m-hrs" placeholder="ej: 50545">
+    </div>
+    <div class="field">
+      <label>Realizado por</label>
+      <input type="text" id="m-quien" placeholder="ej: Maquinista">
+    </div>
+    <div class="field">
+      <label>Notas / observaciones</label>
+      <textarea id="m-notas" rows="2" placeholder="Algo a destacar..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick="guardarMant()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: agregar/editar repuesto -->
+<div class="modal-bg" id="modal-rep">
+  <div class="modal">
+    <h2 id="modal-rep-titulo">Agregar repuesto</h2>
+    <div class="modal-sub">Cargá los datos del repuesto</div>
+    <div class="field">
+      <label>Nombre *</label>
+      <input type="text" id="r-nombre" placeholder="ej: Filtro de aceite Donaldson">
+    </div>
+    <div class="field">
+      <label>Código (opcional)</label>
+      <input type="text" id="r-codigo" placeholder="ej: P55-2451">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Categoría</label>
+        <input type="text" id="r-categoria" list="lista-categorias" placeholder="Filtros / Motor Principal...">
+        <datalist id="lista-categorias"></datalist>
+      </div>
+      <div>
+        <label>Subcategoría <span style="font-weight:400;color:var(--texto-suave);text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <input type="text" id="r-subcategoria" placeholder="Aceite / Aire / Combustible...">
+      </div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Cantidad</label><input type="number" id="r-cantidad" min="0" step="0.01" value="0"></div>
+      <div><label>Mínimo</label><input type="number" id="r-minimo" min="0" step="0.01" value="0"></div>
+      <div><label>Unidad</label>
+        <select id="r-unidad">
+          <option value="unidad">unidad</option>
+          <option value="litros">litros</option>
+          <option value="metros">metros</option>
+          <option value="kg">kg</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Proveedor / Ubicación (opcional)</label>
+      <input type="text" id="r-proveedor" placeholder="ej: Donaldson UY">
+    </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="r-notas" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="r-borrar" onclick="borrarRepuesto()" style="margin-right:auto;display:none;background:#fde0df;color:var(--rojo)">🗑 Borrar</button>
+      <button class="btn btn-sec" onclick="cerrarModalRep()">Cancelar</button>
+      <button class="btn" onclick="guardarRepuesto()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ajustar stock (entrada/salida) -->
+<div class="modal-bg" id="modal-mov">
+  <div class="modal">
+    <h2 id="modal-mov-titulo">Ajustar stock</h2>
+    <div class="modal-sub" id="modal-mov-sub"></div>
+    <div class="field">
+      <label>Tipo de movimiento</label>
+      <select id="mov-tipo">
+        <option value="entrada">📥 Entrada (sumar al stock)</option>
+        <option value="salida">📤 Salida (restar del stock)</option>
+        <option value="ajuste">⚙️ Ajuste (poner cantidad exacta)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Cantidad</label>
+      <input type="number" id="mov-cantidad" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label>Motivo / nota</label>
+      <input type="text" id="mov-motivo" placeholder="ej: Compra a Donaldson, llegó hoy">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalMov()">Cancelar</button>
+      <button class="btn" onclick="guardarMovimiento()">✓ Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: confirmar tareas realizadas tras cargar horas -->
+<div class="modal-bg" id="modal-confirm">
+  <div class="modal" style="max-width:640px">
+    <h2>Tareas que podrían estar realizadas</h2>
+    <div class="modal-sub" id="confirm-sub">Con las horas que cargaste, estas tareas se vencen o vencieron. <strong>Marcá las que realmente hiciste.</strong></div>
+    <div class="field">
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Quién realizó (general)</span>
+        <button type="button" class="btn btn-pequeno btn-sec" onclick="toggleTodos()">Marcar/desmarcar todas</button>
+      </label>
+      <input type="text" id="confirm-quien" placeholder="ej: Maquinista" value="Maquinista">
+    </div>
+    <div id="confirm-tareas"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarConfirm()">Solo guardar horas</button>
+      <button class="btn" onclick="aplicarConfirm()">✓ Aplicar selección</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: agregar/editar herramienta -->
+<div class="modal-bg" id="modal-herr">
+  <div class="modal">
+    <h2 id="modal-herr-titulo">Agregar herramienta</h2>
+    <div class="modal-sub">Datos de la herramienta</div>
+    <div class="field">
+      <label>Nombre *</label>
+      <input type="text" id="h-nombre" placeholder="ej: Llave de boca 17 mm">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Marca</label>
+        <input type="text" id="h-marca" list="lista-marcas-herr" placeholder="ej: Bahco">
+        <datalist id="lista-marcas-herr"></datalist>
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input type="number" id="h-cantidad" min="0" step="1" value="1">
+      </div>
+    </div>
+    <div class="field">
+      <label>Ubicación</label>
+      <input type="text" id="h-ubicacion" list="lista-ubic-herr" placeholder="ej: Maquinas, Lavadero">
+      <datalist id="lista-ubic-herr"></datalist>
+    </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="h-notas" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="h-borrar" onclick="borrarHerr()" style="margin-right:auto;display:none;background:#fde0df;color:var(--rojo)">🗑 Borrar</button>
+      <button class="btn btn-sec" onclick="cerrarModalHerr()">Cancelar</button>
+      <button class="btn" onclick="guardarHerr()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ CONFIGURACIÓN SUPABASE ============
+const SUPABASE_URL = 'https://zfoetyauhauztkkltjaz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v46DhQgi48QpamiqYzMfwQ_7wrKKLc0';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============ ESTADO GLOBAL ============
+let tareas = [];
+let historial = [];
+let repuestos = [];
+let herramientas = [];
+let tareaRepuestos = [];
+let tareaActual = null;
+let repuestoActual = null;
+let herrActual = null;
+let movRepuestoActual = null;
+let filtroEstadoTab = 'TODOS';
+
+// ============ UTILIDADES ============
+function escape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(msg, error = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (error ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+function diasEntre(fechaStr) {
+  if (!fechaStr) return null;
+  const f = new Date(fechaStr + 'T00:00:00');
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  return Math.round((f - hoy) / (1000*60*60*24));
+}
+function fmtFecha(f) {
+  if (!f) return '—';
+  return new Date(f + 'T00:00:00').toLocaleDateString('es-UY', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function periodicidadAMeses(p) {
+  if (!p) return null;
+  const s = p.toLowerCase().trim();
+  if (s === 'mensual') return 1;
+  if (s === '3 meses') return 3;
+  if (s === '6 meses') return 6;
+  if (s === 'anual') return 12;
+  return null;
+}
+
+function calcularEstado(t) {
+  if (t.unidad === 'hrs' && t.proxima_hrs != null && t.hrs_totales != null) {
+    const dif = Number(t.proxima_hrs) - Number(t.hrs_totales);
+    if (dif <= 0) return { estado: 'VENCIDO', valor: dif, mostrar: dif, unidad: 'hrs' };
+    if (dif <= 100) return { estado: 'PROXIMO', valor: dif, mostrar: dif, unidad: 'hrs' };
+    return { estado: 'OK', valor: dif, mostrar: dif, unidad: 'hrs' };
+  }
+  if (t.unidad === 'fecha' && t.proxima_fecha) {
+    const d = diasEntre(t.proxima_fecha);
+    if (d <= 0) return { estado: 'VENCIDO', valor: d, mostrar: d, unidad: 'días' };
+    if (d <= 30) return { estado: 'PROXIMO', valor: d, mostrar: d, unidad: 'días' };
+    return { estado: 'OK', valor: d, mostrar: d, unidad: 'días' };
+  }
+  return { estado: 'SIN_DATO', valor: null, mostrar: '—', unidad: '' };
+}
+
+// ============ CARGA INICIAL ============
+async function cargarTodo() {
+  try {
+    const [{data: tt, error: e1}, {data: hh, error: e2}, {data: rr, error: e3}, {data: tr, error: e4}, {data: he, error: e5}] = await Promise.all([
+      sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
+      sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
+      sb.from('mant_repuestos').select('*').order('nombre'),
+      sb.from('mant_tarea_repuestos').select('*'),
+      sb.from('mant_herramientas').select('*').order('nombre')
+    ]);
+    if (e1) throw e1;
+    if (e2) throw e2;
+    if (e3) throw e3;
+    if (e4) throw e4;
+    if (e5) throw e5;
+    tareas = tt || [];
+    historial = hh || [];
+    repuestos = rr || [];
+    tareaRepuestos = tr || [];
+    herramientas = he || [];
+    renderTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error cargando datos: ' + err.message, true);
+  }
+}
+
+function renderTodo() {
+  llenarFiltros();
+  renderDashboard();
+  renderLista();
+  renderCarga();
+  renderHistorial();
+  renderStock();
+  renderHerramientas();
+}
+
+// ============ FILTROS ============
+function llenarFiltros() {
+  const equipos = [...new Set(tareas.map(t => t.equipo))].sort();
+  const selT = document.getElementById('filtro-equipo');
+  const selH = document.getElementById('hist-filtro-equipo');
+  selT.innerHTML = '<option value="">Todos los equipos</option>' + equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join('');
+  selH.innerHTML = '<option value="">Todos los equipos</option>' + equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join('');
+}
+
+// ============ DASHBOARD ============
+function renderDashboard() {
+  const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
+  tareas.forEach(t => stats[calcularEstado(t).estado]++);
+
+  document.getElementById('n-vencido').textContent = stats.VENCIDO;
+  document.getElementById('n-proximo').textContent = stats.PROXIMO;
+  document.getElementById('n-ok').textContent = stats.OK;
+  document.getElementById('n-todos').textContent = tareas.length;
+
+  const badge = document.getElementById('badge-vencidos');
+  if (stats.VENCIDO > 0) {
+    badge.textContent = stats.VENCIDO;
+    badge.style.display = 'inline-block';
+  } else { badge.style.display = 'none'; }
+
+  // Banner
+  const banner = document.getElementById('banner-alerta');
+  if (stats.VENCIDO > 0) {
+    banner.innerHTML = `
+      <div class="alert-banner">
+        <div class="icon">🚨</div>
+        <div class="text">
+          <strong>${stats.VENCIDO} mantenimiento${stats.VENCIDO>1?'s':''} vencido${stats.VENCIDO>1?'s':''}</strong>
+          <p>Hay tareas que ya pasaron su fecha o cantidad de horas. Revisá la lista de urgentes abajo.</p>
+        </div>
+      </div>`;
+  } else if (stats.PROXIMO > 0) {
+    banner.innerHTML = `
+      <div class="alert-banner" style="border-left-color:var(--ambar)">
+        <div class="icon">⚠️</div>
+        <div class="text">
+          <strong>${stats.PROXIMO} mantenimiento${stats.PROXIMO>1?'s':''} próximo${stats.PROXIMO>1?'s':''}</strong>
+          <p>Atención: hay tareas que vencen pronto.</p>
+        </div>
+      </div>`;
+  } else {
+    banner.innerHTML = `
+      <div class="alert-banner ok">
+        <div class="icon">✅</div>
+        <div class="text">
+          <strong>Todo bajo control</strong>
+          <p>No hay mantenimientos vencidos ni próximos a vencer.</p>
+        </div>
+      </div>`;
+  }
+
+  // Top 5 urgentes
+  const urgentes = tareas
+    .map(t => ({ ...t, _est: calcularEstado(t) }))
+    .filter(t => t._est.estado === 'VENCIDO' || t._est.estado === 'PROXIMO')
+    .sort((a, b) => {
+      const ord = { VENCIDO: 0, PROXIMO: 1 };
+      if (ord[a._est.estado] !== ord[b._est.estado]) return ord[a._est.estado] - ord[b._est.estado];
+      return (a._est.valor ?? 0) - (b._est.valor ?? 0);
+    })
+    .slice(0, 5);
+
+  const div = document.getElementById('dash-urgentes');
+  if (urgentes.length === 0) {
+    div.innerHTML = '<div class="empty"><div class="big">🎉</div>No hay tareas urgentes</div>';
+  } else {
+    div.innerHTML = urgentes.map(renderTaskCard).join('');
+  }
+}
+
+function irATareas(estado) {
+  filtroEstadoTab = estado;
+  document.getElementById('filtro-estado').value = estado;
+  cambiarTab('tareas');
+  renderLista();
+}
+
+// ============ LISTA DE TAREAS ============
+function renderTaskCard(t) {
+  const est = t._est || calcularEstado(t);
+  const cls = est.estado.toLowerCase();
+  const iconos = { VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢', SIN_DATO: '⚪' };
+  const obs = t.observaciones && t.observaciones !== 'Sin novedad' ? `<div class="obs">⚠️ ${escape(t.observaciones)}</div>` : '';
+  return `
+    <div class="task-card ${cls}">
+      <div class="estado-icon">${iconos[est.estado]}</div>
+      <div class="task-info">
+        <div class="equipo">${escape(t.equipo)}</div>
+        <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
+        <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
+        ${obs}
+      </div>
+      <div class="proxima-box">
+        <div class="valor">${est.mostrar}</div>
+        <div class="unidad">${est.unidad}</div>
+      </div>
+      <button class="btn" onclick="abrirModal(${t.id})">✓ Registrar</button>
+    </div>`;
+}
+
+function renderLista() {
+  const buscar = (document.getElementById('buscador').value || '').toLowerCase();
+  const eq = document.getElementById('filtro-equipo').value;
+  const pri = document.getElementById('filtro-prioridad').value;
+  const est = document.getElementById('filtro-estado').value;
+
+  let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
+    if (est !== 'TODOS' && t._est.estado !== est) return false;
+    if (eq && t.equipo !== eq) return false;
+    if (pri && t.prioridad !== pri) return false;
+    if (buscar && !(t.equipo.toLowerCase().includes(buscar) || t.tarea.toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+
+  const ordEst = { VENCIDO: 0, PROXIMO: 1, OK: 2, SIN_DATO: 3 };
+  const ordPri = { ALTA: 0, MEDIA: 1, BAJA: 2 };
+  filtradas.sort((a, b) => {
+    if (ordEst[a._est.estado] !== ordEst[b._est.estado]) return ordEst[a._est.estado] - ordEst[b._est.estado];
+    return (ordPri[a.prioridad] ?? 9) - (ordPri[b.prioridad] ?? 9);
+  });
+
+  const div = document.getElementById('lista');
+  if (!filtradas.length) {
+    div.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay tareas con esos filtros</div>';
+  } else {
+    div.innerHTML = filtradas.map(renderTaskCard).join('');
+  }
+}
+
+// ============ MODAL ============
+function abrirModal(id) {
+  tareaActual = tareas.find(t => t.id === id);
+  if (!tareaActual) return;
+  document.getElementById('modal-info').innerHTML = `<strong>${escape(tareaActual.equipo)}</strong> — ${escape(tareaActual.tarea)}`;
+  document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('m-hrs').value = tareaActual.hrs_totales || '';
+  document.getElementById('m-quien').value = tareaActual.realizado_por || 'Maquinista';
+  document.getElementById('m-notas').value = '';
+  document.getElementById('modal').classList.add('show');
+}
+
+function cerrarModal() {
+  document.getElementById('modal').classList.remove('show');
+  tareaActual = null;
+}
+
+async function guardarMant() {
+  if (!tareaActual) return;
+  const fecha = document.getElementById('m-fecha').value;
+  const hrs = parseFloat(document.getElementById('m-hrs').value);
+  const quien = document.getElementById('m-quien').value;
+  const notas = document.getElementById('m-notas').value;
+
+  if (!fecha) { toast('Falta la fecha', true); return; }
+
+  const update = {
+    fecha_ult: fecha,
+    realizado_por: quien
+  };
+  if (notas) update.observaciones = notas;
+
+  if (!isNaN(hrs)) {
+    update.ult_hrs = hrs;
+    update.hrs_totales = Math.max(Number(tareaActual.hrs_totales || 0), hrs);
+    const per = parseFloat(tareaActual.periodicidad);
+    if (!isNaN(per)) {
+      update.proxima_hrs = hrs + per;
+      update.unidad = 'hrs';
+    }
+  }
+  // Recalcular fecha si aplica
+  const meses = periodicidadAMeses(tareaActual.periodicidad);
+  if (meses) {
+    const f = new Date(fecha + 'T00:00:00');
+    f.setMonth(f.getMonth() + meses);
+    update.proxima_fecha = f.toISOString().split('T')[0];
+    if (tareaActual.unidad !== 'hrs') update.unidad = 'fecha';
+  }
+
+  try {
+    const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tareaActual.id);
+    if (e1) throw e1;
+    const { error: e2 } = await sb.from('mant_historial').insert({
+      tarea_id: tareaActual.id,
+      fecha_realizado: fecha,
+      hrs_equipo: isNaN(hrs) ? null : hrs,
+      realizado_por: quien || null,
+      notas: notas || null
+    });
+    if (e2) throw e2;
+    toast('✓ Mantenimiento registrado');
+    cerrarModal();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// ============ CARGA MENSUAL DE HORAS ============
+function renderCarga() {
+  const equipos = [...new Set(tareas.filter(t => t.unidad === 'hrs').map(t => t.equipo))].sort();
+  const div = document.getElementById('carga-equipos');
+  div.innerHTML = equipos.map(eq => {
+    const hrs_actuales = Math.max(...tareas.filter(t => t.equipo === eq).map(t => Number(t.hrs_totales || 0)));
+    return `
+      <div class="equipo-row">
+        <div><label>${escape(eq)}</label><div style="font-size:12px;color:var(--texto-suave)">Última: ${hrs_actuales} hrs</div></div>
+        <div>
+          <label>Horas hoy</label>
+          <input type="number" data-equipo="${escape(eq)}" data-actual="${hrs_actuales}" placeholder="${hrs_actuales}">
+        </div>
+        <div>
+          <label>Fecha</label>
+          <input type="date" data-fecha-equipo="${escape(eq)}" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+      </div>`;
+  }).join('');
+
+  // Inicializar fecha y renderizar chequeos
+  const inputF = document.getElementById('fch-fecha');
+  if (inputF && !inputF.value) inputF.value = new Date().toISOString().split('T')[0];
+  renderChequeosFecha();
+}
+
+let _filtroChequeos = 'TODOS';
+function filtroChequeos(modo) {
+  _filtroChequeos = modo;
+  renderChequeosFecha();
+}
+
+function renderChequeosFecha() {
+  const div = document.getElementById('chequeos-fecha');
+  if (!div) return;
+
+  // Tareas por fecha (no por horas)
+  let lista = tareas.filter(t => t.unidad === 'fecha').map(t => {
+    const dias = t.proxima_fecha ? diasEntre(t.proxima_fecha) : null;
+    let estado = 'SIN_DATO';
+    if (dias != null) {
+      if (dias <= 0) estado = 'VENCIDO';
+      else if (dias <= 30) estado = 'PROXIMO';
+      else estado = 'OK';
+    }
+    return { ...t, _dias: dias, _estado: estado };
+  });
+
+  if (_filtroChequeos === 'VENCIDOS') {
+    lista = lista.filter(t => t._estado === 'VENCIDO' || t._estado === 'PROXIMO' || t._estado === 'SIN_DATO');
+  }
+
+  // Ordenar: vencidos primero, próximos, OK, sin dato
+  const ord = { VENCIDO: 0, PROXIMO: 1, SIN_DATO: 2, OK: 3 };
+  lista.sort((a, b) => {
+    if (ord[a._estado] !== ord[b._estado]) return ord[a._estado] - ord[b._estado];
+    return (a._dias ?? 99999) - (b._dias ?? 99999);
+  });
+
+  if (!lista.length) {
+    div.innerHTML = '<div class="empty"><div class="big">📅</div>No hay tareas por fecha</div>';
+    return;
+  }
+
+  div.innerHTML = lista.map(t => {
+    let estadoTxt = '';
+    let cls = '';
+    if (t._estado === 'VENCIDO') { estadoTxt = `Pasó ${Math.abs(t._dias)} d`; cls = 'vencido'; }
+    else if (t._estado === 'PROXIMO') { estadoTxt = `En ${t._dias} d`; cls = 'proximo'; }
+    else if (t._estado === 'OK') { estadoTxt = `En ${t._dias} d`; cls = ''; }
+    else { estadoTxt = 'Sin fecha'; cls = ''; }
+
+    return `
+      <label class="confirm-item">
+        <input type="checkbox" data-fch-tarea-id="${t.id}">
+        <div class="ci-info">
+          <div class="equipo">${escape(t.equipo)}</div>
+          <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
+          <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Próxima: ${fmtFecha(t.proxima_fecha)}</div>
+        </div>
+        ${estadoTxt ? `<span class="ci-estado ${cls}">${estadoTxt}</span>` : ''}
+      </label>`;
+  }).join('');
+}
+
+function toggleTodosChequeos() {
+  const checks = document.querySelectorAll('[data-fch-tarea-id]');
+  const todasMarcadas = Array.from(checks).every(c => c.checked);
+  checks.forEach(c => c.checked = !todasMarcadas);
+}
+
+async function aplicarChequeos() {
+  const checks = document.querySelectorAll('[data-fch-tarea-id]:checked');
+  if (!checks.length) { toast('No hay tareas marcadas'); return; }
+
+  const fecha = document.getElementById('fch-fecha').value;
+  const quien = document.getElementById('fch-quien').value.trim() || 'Maquinista';
+  if (!fecha) { toast('Falta la fecha', true); return; }
+
+  const ids = Array.from(checks).map(c => parseInt(c.dataset.fchTareaId));
+  if (!confirm(`Vas a marcar ${ids.length} tarea${ids.length>1?'s':''} como realizada${ids.length>1?'s':''} el ${fecha}.\n\n¿Confirmás?`)) return;
+
+  try {
+    let aplicadas = 0;
+    for (const id of ids) {
+      const t = tareas.find(x => x.id === id);
+      if (!t) continue;
+
+      const meses = periodicidadAMeses(t.periodicidad);
+      const update = { fecha_ult: fecha, realizado_por: quien };
+      if (meses) {
+        const f = new Date(fecha + 'T00:00:00');
+        f.setMonth(f.getMonth() + meses);
+        update.proxima_fecha = f.toISOString().split('T')[0];
+      }
+
+      const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', id);
+      if (e1) throw e1;
+
+      const { error: e2 } = await sb.from('mant_historial').insert({
+        tarea_id: id,
+        fecha_realizado: fecha,
+        hrs_equipo: null,
+        realizado_por: quien,
+        notas: 'Registrado desde chequeos por fecha (lote)'
+      });
+      if (e2) throw e2;
+      aplicadas++;
+    }
+    toast(`✓ ${aplicadas} tarea${aplicadas>1?'s':''} registrada${aplicadas>1?'s':''}`);
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function resetCarga() {
+  document.querySelectorAll('[data-equipo]').forEach(i => i.value = '');
+}
+
+// Variable global para guardar las horas pendientes de aplicar
+let cargaPendiente = null;
+
+async function guardarCarga() {
+  const inputs = document.querySelectorAll('[data-equipo]');
+  const horasNuevas = {};  // {equipo: nuevas_horas}
+
+  for (const inp of inputs) {
+    const v = parseFloat(inp.value);
+    if (isNaN(v)) continue;
+    const eq = inp.dataset.equipo;
+    const actual = parseFloat(inp.dataset.actual);
+    if (v <= actual) continue;
+    horasNuevas[eq] = v;
+  }
+
+  if (Object.keys(horasNuevas).length === 0) {
+    toast('No hay cambios para guardar');
+    return;
+  }
+
+  // Detectar qué tareas quedarían vencidas o próximas con las horas nuevas
+  const tareasAfectadas = [];
+  for (const t of tareas) {
+    if (t.unidad !== 'hrs') continue;
+    if (t.proxima_hrs == null) continue;
+    if (!(t.equipo in horasNuevas)) continue;
+
+    const hrsNuevas = horasNuevas[t.equipo];
+    const dif = Number(t.proxima_hrs) - hrsNuevas;
+    // Si quedaba al día y ahora se vence o se pasa
+    if (dif <= 100) {
+      tareasAfectadas.push({
+        ...t,
+        hrs_nuevas: hrsNuevas,
+        diferencia: dif,
+        afectado: dif <= 0 ? 'VENCIDO' : 'PROXIMO'
+      });
+    }
+  }
+
+  // Guardar pendiente para usar después del modal
+  cargaPendiente = { horasNuevas, tareasAfectadas };
+
+  if (tareasAfectadas.length === 0) {
+    // No hay tareas afectadas, aplicar directo
+    await aplicarSoloHoras();
+  } else {
+    // Mostrar modal con checklist
+    abrirConfirm();
+  }
+}
+
+function abrirConfirm() {
+  const { tareasAfectadas } = cargaPendiente;
+  document.getElementById('confirm-sub').innerHTML = `Con las horas que cargaste, <strong>${tareasAfectadas.length} tarea${tareasAfectadas.length>1?'s':''}</strong> se vence${tareasAfectadas.length>1?'n':''} o vencieron. Marcá las que realmente hiciste.`;
+
+  // Ordenar: vencidas primero
+  tareasAfectadas.sort((a, b) => a.diferencia - b.diferencia);
+
+  document.getElementById('confirm-tareas').innerHTML = tareasAfectadas.map((t, i) => {
+    const dif = t.diferencia;
+    const estado = t.afectado === 'VENCIDO' ? `Pasó ${Math.abs(dif)} hrs` : `Falta ${dif} hrs`;
+    const cls = t.afectado.toLowerCase();
+    return `
+      <label class="confirm-item">
+        <input type="checkbox" data-tarea-id="${t.id}" data-hrs="${t.hrs_nuevas}">
+        <div class="ci-info">
+          <div class="equipo">${escape(t.equipo)}</div>
+          <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad)} hrs</div>
+          <div class="meta">Vencía a las ${t.proxima_hrs} hrs · Última: ${fmtFecha(t.fecha_ult)}</div>
+        </div>
+        <span class="ci-estado ${cls}">${estado}</span>
+      </label>
+    `;
+  }).join('');
+
+  document.getElementById('confirm-quien').value = 'Maquinista';
+  document.getElementById('modal-confirm').classList.add('show');
+}
+
+function cerrarConfirm() {
+  // El usuario eligió "Solo guardar horas" o canceló
+  document.getElementById('modal-confirm').classList.remove('show');
+  if (cargaPendiente) {
+    aplicarSoloHoras();
+  }
+}
+
+function toggleTodos() {
+  const checks = document.querySelectorAll('#confirm-tareas input[type="checkbox"]');
+  const todasMarcadas = Array.from(checks).every(c => c.checked);
+  checks.forEach(c => c.checked = !todasMarcadas);
+}
+
+async function aplicarSoloHoras() {
+  if (!cargaPendiente) return;
+  const { horasNuevas } = cargaPendiente;
+  try {
+    for (const [equipo, hrs] of Object.entries(horasNuevas)) {
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      if (error) throw error;
+    }
+    const n = Object.keys(horasNuevas).length;
+    toast(`✓ Actualizadas horas de ${n} equipo${n>1?'s':''}`);
+    cargaPendiente = null;
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function aplicarConfirm() {
+  if (!cargaPendiente) return;
+  const { horasNuevas, tareasAfectadas } = cargaPendiente;
+  const quien = document.getElementById('confirm-quien').value.trim() || 'Maquinista';
+  const fechaHoy = new Date().toISOString().split('T')[0];
+
+  // 1) Identificar las tareas marcadas como realizadas
+  const checks = document.querySelectorAll('#confirm-tareas input[type="checkbox"]:checked');
+  const tareasRealizadas = Array.from(checks).map(c => ({
+    id: parseInt(c.dataset.tareaId),
+    hrs: parseFloat(c.dataset.hrs)
+  }));
+
+  try {
+    // 2) Actualizar horas totales de todos los equipos
+    for (const [equipo, hrs] of Object.entries(horasNuevas)) {
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      if (error) throw error;
+    }
+
+    // 3) Para cada tarea marcada como realizada, actualizarla y crear historial
+    for (const tr of tareasRealizadas) {
+      const tarea = tareas.find(t => t.id === tr.id);
+      if (!tarea) continue;
+      const per = parseFloat(tarea.periodicidad);
+      const update = {
+        ult_hrs: tr.hrs,
+        fecha_ult: fechaHoy,
+        realizado_por: quien,
+        hrs_totales: tr.hrs
+      };
+      if (!isNaN(per)) {
+        update.proxima_hrs = tr.hrs + per;
+      }
+      const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tr.id);
+      if (e1) throw e1;
+
+      const { error: e2 } = await sb.from('mant_historial').insert({
+        tarea_id: tr.id,
+        fecha_realizado: fechaHoy,
+        hrs_equipo: tr.hrs,
+        realizado_por: quien,
+        notas: 'Registrado desde carga mensual de horas'
+      });
+      if (e2) throw e2;
+    }
+
+    const nEq = Object.keys(horasNuevas).length;
+    const nT = tareasRealizadas.length;
+    if (nT > 0) {
+      toast(`✓ ${nEq} equipo${nEq>1?'s':''} actualizado${nEq>1?'s':''}, ${nT} tarea${nT>1?'s':''} registrada${nT>1?'s':''}`);
+    } else {
+      toast(`✓ Horas actualizadas (${nEq} equipo${nEq>1?'s':''})`);
+    }
+    cargaPendiente = null;
+    document.getElementById('modal-confirm').classList.remove('show');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// ============ HISTORIAL ============
+function renderHistorial() {
+  const buscar = (document.getElementById('hist-buscador').value || '').toLowerCase();
+  const eq = document.getElementById('hist-filtro-equipo').value;
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
+
+  let filtrado = historial.filter(h => {
+    const t = idMap[h.tarea_id];
+    if (!t) return false;
+    if (eq && t.equipo !== eq) return false;
+    if (buscar && !(t.equipo.toLowerCase().includes(buscar) || t.tarea.toLowerCase().includes(buscar) || (h.notas || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+
+  const div = document.getElementById('historial-lista');
+  if (!filtrado.length) {
+    div.innerHTML = '<div class="empty"><div class="big">📜</div>Aún no hay registros de mantenimientos.<br><small>A medida que registres mantenimientos, van a aparecer acá.</small></div>';
+    return;
+  }
+  div.innerHTML = filtrado.map(h => {
+    const t = idMap[h.tarea_id];
+    const f = new Date(h.fecha_realizado + 'T00:00:00');
+    return `
+      <div class="hist-item">
+        <div class="hist-fecha">
+          <div class="dia">${f.getDate()}</div>
+          <div class="mes">${meses[f.getMonth()]} ${f.getFullYear()}</div>
+        </div>
+        <div class="hist-info">
+          <div class="equipo">${escape(t.equipo)}</div>
+          <div class="tarea">${escape(t.tarea)}</div>
+          <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
+          ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
+        </div>
+        <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
+      </div>`;
+  }).join('');
+}
+
+// ============ STOCK / REPUESTOS ============
+function estadoRepuesto(r) {
+  if (Number(r.cantidad) <= 0) return 'CERO';
+  if (Number(r.cantidad) <= Number(r.minimo)) return 'BAJO';
+  return 'OK';
+}
+
+function renderStock() {
+  // Llenar filtro categorías y datalist
+  const cats = [...new Set(repuestos.map(r => r.categoria).filter(Boolean))].sort();
+  const selCat = document.getElementById('stock-filtro-cat');
+  const dl = document.getElementById('lista-categorias');
+  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  dl.innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
+
+  // Badge bajo stock en tab
+  const bajos = repuestos.filter(r => estadoRepuesto(r) !== 'OK').length;
+  const badge = document.getElementById('badge-stock');
+  if (bajos > 0) {
+    badge.textContent = bajos;
+    badge.style.display = 'inline-block';
+    badge.style.background = repuestos.some(r => estadoRepuesto(r) === 'CERO') ? 'var(--rojo)' : 'var(--ambar)';
+  } else { badge.style.display = 'none'; }
+
+  // Banner
+  const bannerDiv = document.getElementById('banner-stock');
+  if (repuestos.length === 0) {
+    bannerDiv.innerHTML = '';
+  } else if (bajos > 0) {
+    bannerDiv.innerHTML = `
+      <div class="alert-banner" style="border-left-color:var(--ambar)">
+        <div class="icon">📦</div>
+        <div class="text">
+          <strong>${bajos} repuesto${bajos>1?'s':''} bajo el mínimo</strong>
+          <p>Hay repuestos que necesitan reposición. Revisalos abajo.</p>
+        </div>
+      </div>`;
+  } else {
+    bannerDiv.innerHTML = `
+      <div class="alert-banner ok">
+        <div class="icon">✅</div>
+        <div class="text"><strong>Stock al día</strong><p>Todos los repuestos por encima del mínimo.</p></div>
+      </div>`;
+  }
+
+  // Lista filtrada
+  const buscar = (document.getElementById('stock-buscador').value || '').toLowerCase();
+  const cat = document.getElementById('stock-filtro-cat').value;
+  const est = document.getElementById('stock-filtro-estado').value;
+
+  let filtrados = repuestos.filter(r => {
+    const e = estadoRepuesto(r);
+    if (est === 'BAJO' && e === 'OK') return false;
+    if (est === 'OK' && e !== 'OK') return false;
+    if (cat && r.categoria !== cat) return false;
+    if (buscar && !((r.nombre || '').toLowerCase().includes(buscar) || (r.codigo || '').toLowerCase().includes(buscar) || (r.categoria || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+
+  const div = document.getElementById('stock-lista');
+  if (!filtrados.length) {
+    if (repuestos.length === 0) {
+      div.innerHTML = '<div class="empty"><div class="big">📦</div>Aún no hay repuestos cargados.<br><small>Tocá "➕ Agregar repuesto" para empezar.</small></div>';
+    } else {
+      div.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay repuestos con esos filtros</div>';
+    }
+    return;
+  }
+
+  // Agrupar por categoría
+  const grupos = {};
+  filtrados.forEach(r => {
+    const c = r.categoria || 'Sin categoría';
+    if (!grupos[c]) grupos[c] = [];
+    grupos[c].push(r);
+  });
+
+  // Iconos por categoría
+  const iconosCat = {
+    'Filtros': '🧪',
+    'Motor Principal': '⚙️',
+    'Motogenerador': '🔌',
+    'Compresor': '💨',
+    'Sin categoría': '📦'
+  };
+
+  // Orden global: vencidos → bajos → OK; dentro de cada uno por nombre
+  const ordEst = { CERO: 0, BAJO: 1, OK: 2 };
+  const orderItems = (a, b) => {
+    const ea = estadoRepuesto(a), eb = estadoRepuesto(b);
+    if (ordEst[ea] !== ordEst[eb]) return ordEst[ea] - ordEst[eb];
+    return a.nombre.localeCompare(b.nombre);
+  };
+
+  let html = `<p style="font-size:13px;color:var(--texto-suave);margin-bottom:12px">${filtrados.length} repuesto${filtrados.length>1?'s':''} en ${Object.keys(grupos).length} categoría${Object.keys(grupos).length>1?'s':''}</p>`;
+
+  for (const c of Object.keys(grupos).sort()) {
+    const items = grupos[c];
+    const icon = iconosCat[c] || '📦';
+    const bajosEnGrupo = items.filter(r => estadoRepuesto(r) !== 'OK').length;
+    const subBadge = bajosEnGrupo > 0 ? `<span style="background:var(--ambar);color:white;font-size:11px;padding:2px 7px;border-radius:10px;margin-left:8px">${bajosEnGrupo} bajos</span>` : '';
+
+    html += `<h3 style="font-family:'Fraunces',serif;font-size:17px;color:var(--azul-profundo);margin:22px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gris-2);display:flex;align-items:center;gap:8px">
+      ${icon} ${escape(c)}
+      <span style="font-size:13px;color:var(--texto-suave);font-weight:400">(${items.length})</span>
+      ${subBadge}
+    </h3>`;
+
+    // Si hay subcategorías dentro, agrupar también por sub
+    const subs = {};
+    items.forEach(r => {
+      const sub = r.subcategoria || '';
+      if (!subs[sub]) subs[sub] = [];
+      subs[sub].push(r);
+    });
+
+    const subKeys = Object.keys(subs).sort();
+    const tieneSubs = subKeys.length > 1 || (subKeys.length === 1 && subKeys[0] !== '');
+
+    if (tieneSubs) {
+      for (const sub of subKeys) {
+        if (sub) {
+          html += `<h4 style="font-size:14px;color:var(--texto-suave);margin:14px 0 8px 0;padding-left:10px;border-left:3px solid var(--acento);font-weight:600">${escape(sub)} <span style="font-weight:400;font-size:12px">(${subs[sub].length})</span></h4>`;
+        }
+        subs[sub].sort(orderItems);
+        html += '<div class="stock-list">' + subs[sub].map(renderRepuestoCard).join('') + '</div>';
+      }
+    } else {
+      items.sort(orderItems);
+      html += '<div class="stock-list">' + items.map(renderRepuestoCard).join('') + '</div>';
+    }
+  }
+
+  div.innerHTML = html;
+}
+
+function renderRepuestoCard(r) {
+  const e = estadoRepuesto(r);
+  const cls = e === 'CERO' ? 'cero' : e === 'BAJO' ? 'bajo' : '';
+  return `
+    <div class="stock-card ${cls}">
+      <div class="stock-info">
+        <div class="nombre">${escape(r.nombre)}</div>
+        ${r.codigo ? `<div class="cod">${escape(r.codigo)}</div>` : ''}
+        ${r.proveedor ? `<span class="cat">${escape(r.proveedor)}</span>` : ''}
+      </div>
+      <div class="stock-cant ${cls}">
+        <div class="num">${r.cantidad}</div>
+        <div class="min">de ${r.minimo} mín · ${r.unidad}</div>
+      </div>
+      <button class="btn btn-pequeno" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
+      <button class="btn btn-pequeno btn-sec" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
+    </div>`;
+}
+
+function abrirModalRepuesto(id) {
+  repuestoActual = id ? repuestos.find(r => r.id === id) : null;
+  document.getElementById('modal-rep-titulo').textContent = repuestoActual ? 'Editar repuesto' : 'Agregar repuesto';
+  document.getElementById('r-nombre').value = repuestoActual?.nombre || '';
+  document.getElementById('r-codigo').value = repuestoActual?.codigo || '';
+  document.getElementById('r-categoria').value = repuestoActual?.categoria || '';
+  document.getElementById('r-subcategoria').value = repuestoActual?.subcategoria || '';
+  document.getElementById('r-cantidad').value = repuestoActual?.cantidad ?? 0;
+  document.getElementById('r-minimo').value = repuestoActual?.minimo ?? 0;
+  document.getElementById('r-unidad').value = repuestoActual?.unidad || 'unidad';
+  document.getElementById('r-proveedor').value = repuestoActual?.proveedor || '';
+  document.getElementById('r-notas').value = repuestoActual?.notas || '';
+  document.getElementById('r-borrar').style.display = repuestoActual ? 'inline-flex' : 'none';
+  document.getElementById('modal-rep').classList.add('show');
+}
+
+function cerrarModalRep() {
+  document.getElementById('modal-rep').classList.remove('show');
+  repuestoActual = null;
+}
+
+async function guardarRepuesto() {
+  const nombre = document.getElementById('r-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre', true); return; }
+  const data = {
+    nombre,
+    codigo: document.getElementById('r-codigo').value.trim() || null,
+    categoria: document.getElementById('r-categoria').value.trim() || null,
+    subcategoria: document.getElementById('r-subcategoria').value.trim() || null,
+    cantidad: parseFloat(document.getElementById('r-cantidad').value) || 0,
+    minimo: parseFloat(document.getElementById('r-minimo').value) || 0,
+    unidad: document.getElementById('r-unidad').value,
+    proveedor: document.getElementById('r-proveedor').value.trim() || null,
+    notas: document.getElementById('r-notas').value.trim() || null,
+  };
+  try {
+    if (repuestoActual) {
+      const { error } = await sb.from('mant_repuestos').update(data).eq('id', repuestoActual.id);
+      if (error) throw error;
+      toast('✓ Repuesto actualizado');
+    } else {
+      const { error } = await sb.from('mant_repuestos').insert(data);
+      if (error) throw error;
+      toast('✓ Repuesto agregado');
+    }
+    cerrarModalRep();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function borrarRepuesto() {
+  if (!repuestoActual) return;
+  if (!confirm(`¿Borrar "${repuestoActual.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const { error } = await sb.from('mant_repuestos').delete().eq('id', repuestoActual.id);
+    if (error) throw error;
+    toast('✓ Repuesto borrado');
+    cerrarModalRep();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function abrirModalMov(id) {
+  movRepuestoActual = repuestos.find(r => r.id === id);
+  if (!movRepuestoActual) return;
+  document.getElementById('modal-mov-sub').innerHTML = `<strong>${escape(movRepuestoActual.nombre)}</strong> · stock actual: ${movRepuestoActual.cantidad} ${movRepuestoActual.unidad}`;
+  document.getElementById('mov-tipo').value = 'entrada';
+  document.getElementById('mov-cantidad').value = '';
+  document.getElementById('mov-motivo').value = '';
+  document.getElementById('modal-mov').classList.add('show');
+}
+
+function cerrarModalMov() {
+  document.getElementById('modal-mov').classList.remove('show');
+  movRepuestoActual = null;
+}
+
+async function guardarMovimiento() {
+  if (!movRepuestoActual) return;
+  const tipo = document.getElementById('mov-tipo').value;
+  const cant = parseFloat(document.getElementById('mov-cantidad').value);
+  const motivo = document.getElementById('mov-motivo').value.trim();
+  if (isNaN(cant) || cant < 0) { toast('Cantidad inválida', true); return; }
+
+  let nuevoStock;
+  if (tipo === 'entrada') nuevoStock = Number(movRepuestoActual.cantidad) + cant;
+  else if (tipo === 'salida') nuevoStock = Math.max(0, Number(movRepuestoActual.cantidad) - cant);
+  else nuevoStock = cant;
+
+  try {
+    const { error: e1 } = await sb.from('mant_repuestos').update({ cantidad: nuevoStock }).eq('id', movRepuestoActual.id);
+    if (e1) throw e1;
+    const { error: e2 } = await sb.from('mant_movimientos').insert({
+      repuesto_id: movRepuestoActual.id,
+      tipo,
+      cantidad: cant,
+      motivo: motivo || null
+    });
+    if (e2) throw e2;
+    toast('✓ Stock actualizado');
+    cerrarModalMov();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function exportarStockExcel() {
+  if (!repuestos.length) { toast('No hay repuestos para exportar'); return; }
+  const data = repuestos.map(r => ({
+    Nombre: r.nombre,
+    Código: r.codigo,
+    Categoría: r.categoria,
+    Cantidad: r.cantidad,
+    Mínimo: r.minimo,
+    Unidad: r.unidad,
+    Estado: estadoRepuesto(r),
+    Proveedor: r.proveedor,
+    Notas: r.notas
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Stock');
+  XLSX.writeFile(wb, `Stock_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  toast('✓ Excel descargado');
+}
+
+// ============ HERRAMIENTAS ============
+function renderHerramientas() {
+  const ubics = [...new Set(herramientas.map(h => h.ubicacion).filter(Boolean))].sort();
+  const marcas = [...new Set(herramientas.map(h => h.marca).filter(Boolean))].sort();
+
+  document.getElementById('herr-filtro-ubic').innerHTML = '<option value="">Todas las ubicaciones</option>' + ubics.map(u => `<option value="${escape(u)}">${escape(u)}</option>`).join('');
+  document.getElementById('herr-filtro-marca').innerHTML = '<option value="">Todas las marcas</option>' + marcas.map(m => `<option value="${escape(m)}">${escape(m)}</option>`).join('');
+  document.getElementById('lista-ubic-herr').innerHTML = ubics.map(u => `<option value="${escape(u)}">`).join('');
+  document.getElementById('lista-marcas-herr').innerHTML = marcas.map(m => `<option value="${escape(m)}">`).join('');
+
+  const buscar = (document.getElementById('herr-buscador').value || '').toLowerCase();
+  const ub = document.getElementById('herr-filtro-ubic').value;
+  const mc = document.getElementById('herr-filtro-marca').value;
+
+  let filtradas = herramientas.filter(h => {
+    if (ub && h.ubicacion !== ub) return false;
+    if (mc && h.marca !== mc) return false;
+    if (buscar && !((h.nombre || '').toLowerCase().includes(buscar) || (h.marca || '').toLowerCase().includes(buscar) || (h.ubicacion || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+
+  // Agrupar por ubicación
+  const grupos = {};
+  filtradas.forEach(h => {
+    const key = h.ubicacion || 'Sin ubicación';
+    if (!grupos[key]) grupos[key] = [];
+    grupos[key].push(h);
+  });
+
+  const div = document.getElementById('herr-lista');
+  if (!filtradas.length) {
+    if (herramientas.length === 0) {
+      div.innerHTML = '<div class="empty"><div class="big">🔧</div>Aún no hay herramientas cargadas.<br><small>Tocá "➕ Agregar herramienta" para empezar.</small></div>';
+    } else {
+      div.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay herramientas con esos filtros</div>';
+    }
+    return;
+  }
+
+  let html = `<p style="font-size:13px;color:var(--texto-suave);margin-bottom:12px">${filtradas.length} herramienta${filtradas.length>1?'s':''} en ${Object.keys(grupos).length} ubicación${Object.keys(grupos).length>1?'es':''}</p>`;
+  for (const ubic of Object.keys(grupos).sort()) {
+    html += `<h3 style="font-family:'Fraunces',serif;font-size:16px;color:var(--azul-profundo);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--gris-2)">📍 ${escape(ubic)} <span style="font-size:13px;color:var(--texto-suave);font-weight:400">(${grupos[ubic].length})</span></h3>`;
+    html += '<div class="stock-list">' + grupos[ubic].map(h => `
+      <div class="stock-card">
+        <div class="stock-info">
+          <div class="nombre">${escape(h.nombre)}</div>
+          ${h.marca ? `<span class="cat">${escape(h.marca)}</span>` : ''}
+        </div>
+        <div class="stock-cant">
+          <div class="num">${h.cantidad}</div>
+          <div class="min">unidad${h.cantidad != 1 ? 'es' : ''}</div>
+        </div>
+        <button class="btn btn-pequeno btn-sec" onclick="abrirModalHerr(${h.id})">✎</button>
+      </div>`).join('') + '</div>';
+  }
+  div.innerHTML = html;
+}
+
+function abrirModalHerr(id) {
+  herrActual = id ? herramientas.find(h => h.id === id) : null;
+  document.getElementById('modal-herr-titulo').textContent = herrActual ? 'Editar herramienta' : 'Agregar herramienta';
+  document.getElementById('h-nombre').value = herrActual?.nombre || '';
+  document.getElementById('h-marca').value = herrActual?.marca || '';
+  document.getElementById('h-cantidad').value = herrActual?.cantidad ?? 1;
+  document.getElementById('h-ubicacion').value = herrActual?.ubicacion || '';
+  document.getElementById('h-notas').value = herrActual?.notas || '';
+  document.getElementById('h-borrar').style.display = herrActual ? 'inline-flex' : 'none';
+  document.getElementById('modal-herr').classList.add('show');
+}
+
+function cerrarModalHerr() {
+  document.getElementById('modal-herr').classList.remove('show');
+  herrActual = null;
+}
+
+async function guardarHerr() {
+  const nombre = document.getElementById('h-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre', true); return; }
+  const data = {
+    nombre,
+    marca: document.getElementById('h-marca').value.trim() || null,
+    cantidad: parseFloat(document.getElementById('h-cantidad').value) || 1,
+    ubicacion: document.getElementById('h-ubicacion').value.trim() || null,
+    notas: document.getElementById('h-notas').value.trim() || null,
+  };
+  try {
+    if (herrActual) {
+      const { error } = await sb.from('mant_herramientas').update(data).eq('id', herrActual.id);
+      if (error) throw error;
+      toast('✓ Herramienta actualizada');
+    } else {
+      const { error } = await sb.from('mant_herramientas').insert(data);
+      if (error) throw error;
+      toast('✓ Herramienta agregada');
+    }
+    cerrarModalHerr();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function borrarHerr() {
+  if (!herrActual) return;
+  if (!confirm(`¿Borrar "${herrActual.nombre}"?`)) return;
+  try {
+    const { error } = await sb.from('mant_herramientas').delete().eq('id', herrActual.id);
+    if (error) throw error;
+    toast('✓ Herramienta borrada');
+    cerrarModalHerr();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function exportarHerrExcel() {
+  if (!herramientas.length) { toast('No hay herramientas para exportar'); return; }
+  const data = herramientas.map(h => ({
+    Nombre: h.nombre,
+    Marca: h.marca,
+    Cantidad: h.cantidad,
+    Ubicación: h.ubicacion,
+    Notas: h.notas
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Herramientas');
+  XLSX.writeFile(wb, `Herramientas_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  toast('✓ Excel descargado');
+}
+
+// ============ EXPORTAR EXCEL ============
+function exportarExcel() {
+  const data = tareas.map(t => {
+    const e = calcularEstado(t);
+    return {
+      Equipo: t.equipo,
+      Tarea: t.tarea,
+      Periodicidad: t.periodicidad,
+      'Hrs totales': t.hrs_totales,
+      'Última fecha': t.fecha_ult,
+      'Próx. hrs': t.proxima_hrs,
+      'Próx. fecha': t.proxima_fecha,
+      'Falta': e.mostrar + ' ' + e.unidad,
+      Estado: e.estado,
+      Prioridad: t.prioridad,
+      'Realizado por': t.realizado_por,
+      Observaciones: t.observaciones
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
+  // Hoja historial
+  if (historial.length) {
+    const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
+    const hd = historial.map(h => ({
+      Fecha: h.fecha_realizado,
+      Equipo: idMap[h.tarea_id]?.equipo || '',
+      Tarea: idMap[h.tarea_id]?.tarea || '',
+      'Hrs equipo': h.hrs_equipo,
+      'Realizado por': h.realizado_por,
+      Notas: h.notas
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hd), 'Historial');
+  }
+  XLSX.writeFile(wb, `Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  toast('✓ Excel descargado');
+}
+
+// ============ NAVEGACIÓN TABS ============
+function cambiarTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + name));
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => cambiarTab(b.dataset.tab)));
+
+// Listeners filtros
+['buscador','filtro-equipo','filtro-prioridad','filtro-estado'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener(id === 'buscador' ? 'input' : 'change', renderLista);
+});
+['hist-buscador','hist-filtro-equipo'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderHistorial);
+});
+['stock-buscador','stock-filtro-cat','stock-filtro-estado'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderStock);
+});
+['herr-buscador','herr-filtro-ubic','herr-filtro-marca'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderHerramientas);
+});
+document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
+document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
+document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });
+document.getElementById('modal-herr').addEventListener('click', e => { if (e.target.id === 'modal-herr') cerrarModalHerr(); });
+document.getElementById('modal-confirm').addEventListener('click', e => { if (e.target.id === 'modal-confirm') cerrarConfirm(); });
+
+// ============ AUTENTICACIÓN ============
+function mostrarLogin() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.querySelector('header.top').style.display = 'none';
+  document.querySelector('nav.tabs').style.display = 'none';
+  document.querySelector('main').style.display = 'none';
+}
+
+function ocultarLogin() {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.querySelector('header.top').style.display = '';
+  document.querySelector('nav.tabs').style.display = '';
+  document.querySelector('main').style.display = '';
+}
+
+async function iniciarSesion(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const btn = document.getElementById('login-btn');
+  const errDiv = document.getElementById('login-error');
+
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+  errDiv.style.display = 'none';
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    // Login OK
+    ocultarLogin();
+    document.getElementById('header-user').textContent = data.user.email;
+    document.getElementById('login-pass').value = '';
+    await cargarTodo();
+  } catch (err) {
+    errDiv.textContent = err.message === 'Invalid login credentials'
+      ? 'Email o contraseña incorrectos'
+      : 'Error: ' + err.message;
+    errDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+  return false;
+}
+
+async function cerrarSesion() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  await sb.auth.signOut();
+  // Limpiar estado
+  tareas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
+  mostrarLogin();
+}
+
+async function chequearSesion() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    ocultarLogin();
+    document.getElementById('header-user').textContent = session.user.email;
+    await cargarTodo();
+  } else {
+    mostrarLogin();
+  }
+}
+
+// Si la sesión expira o se cierra desde otro lado
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    mostrarLogin();
+  }
+});
+
+// ARRANCAR
+chequearSesion();
+</script>
+</body>
+</html>
