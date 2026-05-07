@@ -31,6 +31,7 @@
     color: var(--texto);
     line-height: 1.5;
     min-height: 100vh;
+    overflow-x: hidden;
   }
   .display { font-family: 'Fraunces', serif; font-weight: 600; letter-spacing: -0.01em; }
 
@@ -59,8 +60,11 @@
     border-bottom: 1px solid var(--gris-2);
     position: sticky; top: 0;
     z-index: 50;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .tabs-inner { max-width: 1200px; margin: 0 auto; display: flex; padding: 0 28px; }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  .tabs-inner { max-width: 1200px; margin: 0 auto; display: flex; padding: 0 28px; min-width: max-content; }
   .tab {
     background: none;
     border: none;
@@ -440,20 +444,82 @@
   .stock-cant .min { font-size: 11px; color: var(--texto-suave); margin-top: 4px; letter-spacing: 0.02em; }
 
   @media (max-width: 700px) {
-    .stock-card { grid-template-columns: 1fr auto; }
+    /* Layout general */
+    body { font-size: 14px; }
+    main { padding: 14px 12px 50px; }
+    header.top { padding: 16px 14px; }
+    header.top h1 { font-size: 18px; line-height: 1.3; }
+    header.top .sub { font-size: 12px; }
+    .header-inner { flex-direction: column; align-items: flex-start !important; gap: 10px !important; }
+    .header-inner > div:last-child { width: 100%; justify-content: flex-end; }
+
+    /* Tabs scrollables */
+    .tabs-inner { padding: 0 12px; }
+    .tab { padding: 12px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+
+    /* Stats - 2 columnas */
+    .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .stat-card { padding: 14px 16px; }
+    .stat-card .num { font-size: 28px; }
+    .stat-card .label { font-size: 11px; letter-spacing: 0.05em; }
+
+    /* Banner alerta */
+    .alert-banner { padding: 12px 14px; gap: 10px; }
+    .alert-banner .icon { font-size: 22px; }
+    .alert-banner .text strong { font-size: 15px; }
+    .alert-banner .text p { font-size: 12px; }
+
+    /* Toolbar de filtros - apilados */
+    .toolbar { padding: 10px; gap: 6px; }
+    .toolbar input, .toolbar select { min-width: 0; flex: 1 1 100%; font-size: 14px; padding: 9px 11px; }
+
+    /* Tarjetas de tareas */
+    .task-card { grid-template-columns: auto 1fr; gap: 10px; padding: 12px 14px; }
+    .task-card .proxima-box { grid-column: 2; justify-self: start; text-align: left; min-width: 0; margin-top: 4px; }
+    .task-card .btn { grid-column: 1 / -1; justify-self: stretch; margin-top: 6px; }
+    .task-card .proxima-box .valor { font-size: 17px; }
+    .task-info .equipo { font-size: 14px; }
+    .task-info .tarea { font-size: 12.5px; }
+    .task-info .meta { font-size: 11px; }
+
+    /* Cargar horas */
+    .equipo-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 8px; }
+
+    /* Stock */
+    .stock-card { grid-template-columns: 1fr auto; gap: 10px; padding: 12px 14px; }
     .stock-card .stock-cant { grid-column: 2; }
-    .stock-card button { grid-column: 1 / -1; justify-self: start; }
+    .stock-card button { grid-column: 1 / -1; justify-self: stretch; margin-top: 4px; }
+    .stock-info .nombre { font-size: 13.5px; word-break: break-word; }
+    .stock-cant .num { font-size: 18px; }
+
+    /* Acciones globales */
+    .acciones-globales { gap: 6px; }
+    .acciones-globales .btn { flex: 1; justify-content: center; padding: 9px 10px; font-size: 12.5px; }
+
+    /* Títulos de sección */
+    .panel-titulo { font-size: 18px; }
+
+    /* Modales */
+    .modal { padding: 20px; max-height: 88vh; }
+    .modal h2 { font-size: 18px; }
+    .modal .field { margin-bottom: 12px; }
+    .modal-actions { flex-wrap: wrap; }
+    .modal-actions .btn { flex: 1 1 auto; }
+
+    /* Confirm items */
+    .confirm-item { grid-template-columns: auto 1fr; padding: 10px; gap: 8px; }
+    .confirm-item .ci-estado { grid-column: 2; justify-self: start; margin-top: 2px; }
+
+    /* Historial */
+    .hist-item { grid-template-columns: auto 1fr; gap: 10px; padding: 10px 12px; }
+    .hist-item .hist-hrs { grid-column: 2; justify-self: start; font-size: 13px; }
   }
 
-  @media (max-width: 700px) {
-    main { padding: 16px; }
-    header.top { padding: 18px 16px; }
-    .tabs-inner { padding: 0 16px; }
-    .tab { padding: 12px 12px; font-size: 13px; }
-    .task-card { grid-template-columns: auto 1fr; }
-    .task-card .proxima-box, .task-card .btn { grid-column: 2; justify-self: start; text-align: left; }
-    .equipo-row { grid-template-columns: 1fr; }
-    .stat-card .num { font-size: 32px; }
+  @media (max-width: 380px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat-card .num { font-size: 24px; }
+    header.top h1 { font-size: 16px; }
+    .panel-titulo { font-size: 16px; }
   }
 </style>
 </head>
