@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --azul-profundo: #0c2340;
@@ -521,6 +522,213 @@
     header.top h1 { font-size: 16px; }
     .panel-titulo { font-size: 16px; }
   }
+
+  /* ===== MI BARCO ===== */
+  .barco-hero {
+    background: linear-gradient(135deg, var(--azul-profundo) 0%, var(--azul-medio) 100%);
+    color: white;
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .barco-hero::after {
+    content: '⚓';
+    position: absolute;
+    right: -20px; bottom: -30px;
+    font-size: 200px;
+    opacity: 0.06;
+  }
+  .barco-hero h2 { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 700; }
+  .barco-hero .tipo { color: var(--acento); font-size: 14px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .barco-hero .subtitle { opacity: 0.85; font-size: 14px; margin-top: 6px; }
+
+  .ficha-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .ficha-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px 20px;
+    border: 1px solid var(--gris-2);
+  }
+  .ficha-card h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    color: var(--azul-profundo);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--acento);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ficha-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--gris-2);
+    font-size: 13.5px;
+  }
+  .ficha-row:last-child { border-bottom: none; }
+  .ficha-row .key { color: var(--texto-suave); font-weight: 500; }
+  .ficha-row .val { font-weight: 600; color: var(--texto); text-align: right; }
+
+  /* ===== EQUIPOS ===== */
+  .equipos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .equipo-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--gris-2);
+    border-top: 4px solid var(--azul-profundo);
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .equipo-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); border-top-color: var(--acento); }
+  .equipo-card.con-vencidos { border-top-color: var(--rojo); }
+  .equipo-card.con-proximos { border-top-color: var(--ambar); }
+  .equipo-card .icon { font-size: 22px; }
+  .equipo-card .nombre { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--azul-profundo); line-height: 1.2; }
+  .equipo-card .fab { font-size: 12.5px; color: var(--texto-suave); }
+  .equipo-card .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; }
+  .equipo-card .mini-badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 5px;
+    font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .mini-badge.vencido { background: #fde0df; color: var(--rojo); }
+  .mini-badge.proximo { background: #fdf0d3; color: #a8651a; }
+  .mini-badge.ok { background: #dbf0e3; color: var(--verde); }
+  .mini-badge.neutral { background: var(--gris-1); color: var(--texto-suave); }
+
+  /* ===== FICHA EQUIPO ===== */
+  .ficha-equipo-back {
+    background: none; border: none; cursor: pointer;
+    color: var(--azul-profundo); font: inherit; font-weight: 600;
+    padding: 6px 12px; margin-bottom: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .ficha-equipo-back:hover { background: var(--gris-1); }
+
+  .ficha-equipo-hero {
+    background: white;
+    border-radius: 14px;
+    padding: 24px 26px;
+    border: 1px solid var(--gris-2);
+    border-left: 6px solid var(--acento);
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .ficha-equipo-hero h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    color: var(--azul-profundo);
+    margin-bottom: 4px;
+  }
+  .ficha-equipo-hero .meta-line {
+    color: var(--texto-suave);
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .ficha-equipo-hero .meta-line strong { color: var(--azul-profundo); font-weight: 600; }
+  .ficha-equipo-hero .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ficha-equipo-hero .pill {
+    background: var(--gris-1);
+    color: var(--texto-suave);
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+  .ficha-equipo-hero .pill.estado-op { background: #dbf0e3; color: var(--verde); }
+  .ficha-equipo-hero .pill.estado-rep { background: #fdf0d3; color: #a8651a; }
+  .ficha-equipo-hero .pill.estado-out { background: #fde0df; color: var(--rojo); }
+  .ficha-equipo-hero .editar {
+    position: absolute; top: 18px; right: 18px;
+  }
+
+  .ficha-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .ficha-stat {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid var(--gris-2);
+    text-align: center;
+  }
+  .ficha-stat .v { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; line-height: 1; }
+  .ficha-stat.vencido .v { color: var(--rojo); }
+  .ficha-stat.proximo .v { color: var(--ambar); }
+  .ficha-stat.ok .v { color: var(--verde); }
+  .ficha-stat.neutral .v { color: var(--azul-profundo); }
+  .ficha-stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texto-suave); margin-top: 6px; font-weight: 600; }
+
+  .datos-tecnicos-box {
+    background: white;
+    border-radius: 12px;
+    padding: 18px 22px;
+    border: 1px solid var(--gris-2);
+    margin-bottom: 18px;
+    white-space: pre-wrap;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--texto);
+  }
+  .datos-tecnicos-box.vacio {
+    color: var(--texto-suave);
+    font-style: italic;
+    text-align: center;
+    padding: 30px 20px;
+  }
+
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .chart-box {
+    background: white;
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--gris-2);
+  }
+  .chart-box h4 {
+    font-family: 'Fraunces', serif;
+    font-size: 14px;
+    color: var(--azul-profundo);
+    margin-bottom: 10px;
+  }
+  .chart-box canvas { max-height: 220px; }
+
+  .equipo-clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .equipo-clickable:hover { color: var(--acento); text-decoration: underline; }
+
+  @media (max-width: 700px) {
+    .charts-row { grid-template-columns: 1fr; }
+    .ficha-equipo-hero { padding: 18px 16px; }
+    .ficha-equipo-hero h2 { font-size: 20px; }
+    .ficha-equipo-hero .editar { position: static; margin-top: 10px; display: block; width: 100%; }
+    .barco-hero { padding: 20px 18px; }
+    .barco-hero h2 { font-size: 24px; }
+    .equipos-grid { grid-template-columns: 1fr; }
+    .ficha-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -564,6 +772,8 @@
 <nav class="tabs">
   <div class="tabs-inner">
     <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab" data-tab="barco">⚓ Mi Barco</button>
+    <button class="tab" data-tab="equipos">🚢 Equipos</button>
     <button class="tab" data-tab="tareas">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="carga">⏱️ Cargar Horas</button>
     <button class="tab" data-tab="stock">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
@@ -598,6 +808,34 @@
 
     <h2 class="panel-titulo">Más urgentes</h2>
     <div class="task-list" id="dash-urgentes"></div>
+  </section>
+
+  <!-- MI BARCO -->
+  <section class="section" id="sec-barco">
+    <div id="barco-contenido"></div>
+  </section>
+
+  <!-- EQUIPOS -->
+  <section class="section" id="sec-equipos">
+    <div id="equipos-vista-grilla">
+      <h2 class="panel-titulo">Equipos del barco</h2>
+      <div class="toolbar">
+        <input type="text" id="eq-buscador" placeholder="🔎 Buscar equipo o fabricante...">
+        <select id="eq-filtro-cat"><option value="">Todas las categorías</option></select>
+        <select id="eq-filtro-estado">
+          <option value="TODOS">Todos los estados</option>
+          <option value="VENCIDOS">🔴 Con tareas vencidas</option>
+          <option value="PROXIMOS">🟡 Con tareas próximas</option>
+          <option value="OK">🟢 Al día</option>
+        </select>
+      </div>
+      <div id="equipos-grilla"></div>
+    </div>
+
+    <div id="equipos-vista-ficha" style="display:none">
+      <button class="ficha-equipo-back" onclick="volverAEquipos()">← Volver a equipos</button>
+      <div id="ficha-equipo-contenido"></div>
+    </div>
   </section>
 
   <!-- TAREAS -->
@@ -825,6 +1063,156 @@
   </div>
 </div>
 
+<!-- MODAL: editar ficha del buque -->
+<div class="modal-bg" id="modal-buque">
+  <div class="modal" style="max-width:700px">
+    <h2>Editar ficha del buque</h2>
+    <div class="modal-sub">Datos generales del Santa Lucía</div>
+
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Nombre</label><input type="text" id="bq-nombre"></div>
+      <div><label>Tipo</label><input type="text" id="bq-tipo" placeholder="Remolcador"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Construcción</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Astillero</label><input type="text" id="bq-astillero"></div>
+      <div><label>País origen</label><input type="text" id="bq-pais"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Año constr.</label><input type="number" id="bq-anio"></div>
+      <div><label>Botadura</label><input type="text" id="bq-botadura" placeholder="Octubre 1985"></div>
+      <div><label>Bandera</label><input type="text" id="bq-bandera"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+      <div><label>Casco N°</label><input type="text" id="bq-casco"></div>
+      <div><label>Registro</label><input type="text" id="bq-registro"></div>
+      <div><label>Matrícula</label><input type="text" id="bq-matricula"></div>
+      <div><label>Señal dist.</label><input type="text" id="bq-senal"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Dimensiones</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Eslora oficial (m)</label><input type="number" step="0.01" id="bq-eslora"></div>
+      <div><label>Eslora total (m)</label><input type="number" step="0.01" id="bq-eslora-tot"></div>
+      <div><label>Eslora ZDL (m)</label><input type="number" step="0.001" id="bq-eslora-zdl"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+      <div><label>Manga (m)</label><input type="number" step="0.01" id="bq-manga"></div>
+      <div><label>Puntal (m)</label><input type="number" step="0.01" id="bq-puntal"></div>
+      <div><label>Calado mín (m)</label><input type="number" step="0.01" id="bq-calado-min"></div>
+      <div><label>Calado máx (m)</label><input type="number" step="0.01" id="bq-calado-max"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Capacidades / Performance</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Capacidad DW (t)</label><input type="number" step="0.01" id="bq-dw"></div>
+      <div><label>Velocidad (nudos)</label><input type="number" step="0.1" id="bq-vel"></div>
+      <div><label>Sobre estacas (t)</label><input type="number" step="0.1" id="bq-estacas"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Tonelaje total (t)</label><input type="number" step="0.01" id="bq-tonelaje"></div>
+      <div><label>Desplazamiento (tm)</label><input type="number" step="0.1" id="bq-despl"></div>
+      <div><label>Rango (millas)</label><input type="number" step="0.1" id="bq-rango"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>TRB</label><input type="number" step="0.01" id="bq-trb"></div>
+      <div><label>TRN</label><input type="number" step="0.01" id="bq-trn"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Otros</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Material casco</label><input type="text" id="bq-material"></div>
+      <div><label>Tipo navegación</label><input type="text" id="bq-naveg"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Clase buque</label><input type="text" id="bq-clase-b"></div>
+      <div><label>Clase máquina</label><input type="text" id="bq-clase-m"></div>
+    </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="bq-notas" rows="2"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalBuque()">Cancelar</button>
+      <button class="btn" onclick="guardarBuque()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: editar ficha de equipo -->
+<div class="modal-bg" id="modal-equipo">
+  <div class="modal" style="max-width:640px">
+    <h2 id="modal-equipo-titulo">Editar ficha del equipo</h2>
+    <div class="modal-sub">Datos técnicos del equipo</div>
+
+    <div class="field"><label>Nombre *</label><input type="text" id="eq-nombre"></div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Categoría</label><input type="text" id="eq-categoria" list="lista-cat-eq" placeholder="Motor, Bomba, etc."></div>
+      <div><label>Cantidad</label><input type="number" id="eq-cantidad" min="1" value="1"></div>
+    </div>
+    <datalist id="lista-cat-eq"></datalist>
+    <div class="field"><label>Ubicación a bordo</label><input type="text" id="eq-ubicacion" placeholder="Sala de máquinas, Pañol..."></div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Fabricante</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Fabricante</label><input type="text" id="eq-fabricante"></div>
+      <div><label>Modelo</label><input type="text" id="eq-modelo"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px">
+      <div><label>N° de serie</label><input type="text" id="eq-serie"></div>
+      <div><label>Año fabr.</label><input type="number" id="eq-anio-fab"></div>
+      <div><label>Año instal.</label><input type="number" id="eq-anio-ins"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Operación</h3>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>Potencia (kW)</label><input type="number" step="0.01" id="eq-pot-kw"></div>
+      <div><label>Potencia (HP)</label><input type="number" step="0.01" id="eq-pot-hp"></div>
+      <div><label>Consumo (L/h)</label><input type="number" step="0.01" id="eq-consumo"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><label>RPM nominal</label><input type="number" id="eq-rpm"></div>
+      <div><label>Voltaje</label><input type="text" id="eq-voltaje"></div>
+      <div><label>Amperaje</label><input type="text" id="eq-amperaje"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Combustible</label><input type="text" id="eq-combustible" placeholder="Diésel, Eléctrico..."></div>
+      <div><label>Refrigeración</label><input type="text" id="eq-refrig" placeholder="Aire, Agua"></div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Tipo de aceite</label><input type="text" id="eq-aceite-tipo" placeholder="SAE 30"></div>
+      <div><label>Capacidad aceite (L)</label><input type="number" step="0.01" id="eq-aceite-cap"></div>
+    </div>
+
+    <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Detalles técnicos adicionales</h3>
+    <div class="field">
+      <label>Datos técnicos (texto libre)</label>
+      <textarea id="eq-datos-tec" rows="6" placeholder="• Característica 1&#10;• Característica 2&#10;..."></textarea>
+    </div>
+
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Estado</label>
+        <select id="eq-estado">
+          <option value="Operativo">Operativo</option>
+          <option value="En reparación">En reparación</option>
+          <option value="Fuera de servicio">Fuera de servicio</option>
+        </select>
+      </div>
+      <div><label>Proveedor local</label><input type="text" id="eq-proveedor"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="eq-notas-tx" rows="2"></textarea></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="eq-borrar-btn" onclick="borrarEquipo()" style="margin-right:auto;display:none;background:#fde0df;color:var(--rojo)">🗑 Borrar</button>
+      <button class="btn btn-sec" onclick="cerrarModalEquipo()">Cancelar</button>
+      <button class="btn" onclick="guardarEquipo()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: confirmar tareas realizadas tras cargar horas -->
 <div class="modal-bg" id="modal-confirm">
   <div class="modal" style="max-width:640px">
@@ -896,10 +1284,15 @@ let historial = [];
 let repuestos = [];
 let herramientas = [];
 let tareaRepuestos = [];
+let buque = null;          // datos del barco (1 fila)
+let equipos = [];          // fichas de equipos
 let tareaActual = null;
 let repuestoActual = null;
 let herrActual = null;
 let movRepuestoActual = null;
+let equipoActualFicha = null;  // equipo en la ficha abierta
+let chartHoras = null;     // instancia chart.js
+let chartMant = null;      // instancia chart.js
 let filtroEstadoTab = 'TODOS';
 
 // ============ UTILIDADES ============
@@ -951,23 +1344,37 @@ function calcularEstado(t) {
 // ============ CARGA INICIAL ============
 async function cargarTodo() {
   try {
-    const [{data: tt, error: e1}, {data: hh, error: e2}, {data: rr, error: e3}, {data: tr, error: e4}, {data: he, error: e5}] = await Promise.all([
+    const [
+      {data: tt, error: e1},
+      {data: hh, error: e2},
+      {data: rr, error: e3},
+      {data: tr, error: e4},
+      {data: he, error: e5},
+      {data: bq, error: e6},
+      {data: eq, error: e7}
+    ] = await Promise.all([
       sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
       sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
       sb.from('mant_repuestos').select('*').order('nombre'),
       sb.from('mant_tarea_repuestos').select('*'),
-      sb.from('mant_herramientas').select('*').order('nombre')
+      sb.from('mant_herramientas').select('*').order('nombre'),
+      sb.from('mant_buque').select('*').limit(1),
+      sb.from('mant_equipos').select('*').eq('activo', true).order('nombre')
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
     if (e3) throw e3;
     if (e4) throw e4;
     if (e5) throw e5;
+    if (e6) throw e6;
+    if (e7) throw e7;
     tareas = tt || [];
     historial = hh || [];
     repuestos = rr || [];
     tareaRepuestos = tr || [];
     herramientas = he || [];
+    buque = (bq && bq[0]) || null;
+    equipos = eq || [];
     renderTodo();
   } catch (err) {
     console.error(err);
@@ -983,6 +1390,8 @@ function renderTodo() {
   renderHistorial();
   renderStock();
   renderHerramientas();
+  renderBarco();
+  renderEquipos();
 }
 
 // ============ FILTROS ============
@@ -1073,11 +1482,15 @@ function renderTaskCard(t) {
   const cls = est.estado.toLowerCase();
   const iconos = { VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢', SIN_DATO: '⚪' };
   const obs = t.observaciones && t.observaciones !== 'Sin novedad' ? `<div class="obs">⚠️ ${escape(t.observaciones)}</div>` : '';
+  // Si la tarea tiene equipo_id, hacer el nombre clickeable
+  const equipoHtml = t.equipo_id
+    ? `<span class="equipo-clickable" onclick="event.stopPropagation();abrirFichaEquipo(${t.equipo_id})" title="Ver ficha del equipo">${escape(t.equipo)}</span>`
+    : escape(t.equipo);
   return `
     <div class="task-card ${cls}">
       <div class="estado-icon">${iconos[est.estado]}</div>
       <div class="task-info">
-        <div class="equipo">${escape(t.equipo)}</div>
+        <div class="equipo">${equipoHtml}</div>
         <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
         ${obs}
@@ -2023,13 +2436,648 @@ document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () =>
 ['herr-buscador','herr-filtro-ubic','herr-filtro-marca'].forEach(id => {
   document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderHerramientas);
 });
+['eq-buscador','eq-filtro-cat','eq-filtro-estado'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderEquipos);
+});
 document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
 document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });
 document.getElementById('modal-herr').addEventListener('click', e => { if (e.target.id === 'modal-herr') cerrarModalHerr(); });
 document.getElementById('modal-confirm').addEventListener('click', e => { if (e.target.id === 'modal-confirm') cerrarConfirm(); });
+document.getElementById('modal-buque').addEventListener('click', e => { if (e.target.id === 'modal-buque') cerrarModalBuque(); });
+document.getElementById('modal-equipo').addEventListener('click', e => { if (e.target.id === 'modal-equipo') cerrarModalEquipo(); });
 
-// ============ AUTENTICACIÓN ============
+// ============ MI BARCO ============
+function renderBarco() {
+  const div = document.getElementById('barco-contenido');
+  if (!buque) {
+    div.innerHTML = '<div class="empty"><div class="big">⚓</div>No hay datos del buque cargados.<br><small>Parece que falta correr el SQL inicial.</small></div>';
+    return;
+  }
+  const v = (x, suf = '') => x != null && x !== '' ? `${x}${suf}` : '—';
+
+  div.innerHTML = `
+    <div class="barco-hero">
+      <div class="tipo">${escape(buque.tipo || 'Buque')}</div>
+      <h2>${escape(buque.nombre)}</h2>
+      <div class="subtitle">${buque.astillero ? escape(buque.astillero) : ''}${buque.pais_origen ? ' · ' + escape(buque.pais_origen) : ''}${buque.anio_construccion ? ' · ' + buque.anio_construccion : ''}</div>
+      <div style="margin-top:14px"><button class="btn btn-acento" onclick="abrirModalBuque()">✎ Editar ficha</button></div>
+    </div>
+
+    <div class="ficha-grid">
+      <div class="ficha-card">
+        <h3>📋 Identificación</h3>
+        <div class="ficha-row"><span class="key">Casco N°</span><span class="val">${v(buque.casco_nro)}</span></div>
+        <div class="ficha-row"><span class="key">Registro</span><span class="val">${v(buque.registro_nro)}</span></div>
+        <div class="ficha-row"><span class="key">Matrícula</span><span class="val">${v(buque.matricula)}</span></div>
+        <div class="ficha-row"><span class="key">Señal distintiva</span><span class="val">${v(buque.senal_distintiva)}</span></div>
+        <div class="ficha-row"><span class="key">Bandera</span><span class="val">${v(buque.bandera)}</span></div>
+      </div>
+
+      <div class="ficha-card">
+        <h3>🏗 Construcción</h3>
+        <div class="ficha-row"><span class="key">Astillero</span><span class="val">${v(buque.astillero)}</span></div>
+        <div class="ficha-row"><span class="key">Origen</span><span class="val">${v(buque.pais_origen)}</span></div>
+        <div class="ficha-row"><span class="key">Año</span><span class="val">${v(buque.anio_construccion)}</span></div>
+        <div class="ficha-row"><span class="key">Botadura</span><span class="val">${v(buque.fecha_botadura)}</span></div>
+        <div class="ficha-row"><span class="key">Material</span><span class="val">${v(buque.material_casco)}</span></div>
+      </div>
+
+      <div class="ficha-card">
+        <h3>📐 Dimensiones</h3>
+        <div class="ficha-row"><span class="key">Eslora oficial</span><span class="val">${v(buque.eslora_m, ' m')}</span></div>
+        <div class="ficha-row"><span class="key">Eslora total</span><span class="val">${v(buque.eslora_total_m, ' m')}</span></div>
+        <div class="ficha-row"><span class="key">Eslora ZDL</span><span class="val">${v(buque.eslora_zdl_m, ' m')}</span></div>
+        <div class="ficha-row"><span class="key">Manga</span><span class="val">${v(buque.manga_m, ' m')}</span></div>
+        <div class="ficha-row"><span class="key">Puntal</span><span class="val">${v(buque.puntal_m, ' m')}</span></div>
+        <div class="ficha-row"><span class="key">Calado</span><span class="val">${buque.calado_min_m && buque.calado_max_m ? buque.calado_min_m + ' / ' + buque.calado_max_m + ' m' : v(buque.calado_min_m, ' m')}</span></div>
+      </div>
+
+      <div class="ficha-card">
+        <h3>⚡ Performance</h3>
+        <div class="ficha-row"><span class="key">Velocidad</span><span class="val">${v(buque.velocidad_nudos, ' nudos')}</span></div>
+        <div class="ficha-row"><span class="key">Sobre estacas</span><span class="val">${v(buque.sobre_estacas_t, ' t')}</span></div>
+        <div class="ficha-row"><span class="key">Capacidad DW</span><span class="val">${v(buque.capacidad_dw_t, ' t')}</span></div>
+        <div class="ficha-row"><span class="key">Tonelaje total</span><span class="val">${v(buque.tonelaje_total_t, ' t')}</span></div>
+        <div class="ficha-row"><span class="key">Desplazamiento</span><span class="val">${v(buque.desplazamiento_tm, ' tm')}</span></div>
+        <div class="ficha-row"><span class="key">Rango de acción</span><span class="val">${v(buque.rango_accion_millas, ' millas')}</span></div>
+      </div>
+
+      <div class="ficha-card">
+        <h3>🛂 Tonelajes</h3>
+        <div class="ficha-row"><span class="key">TRB</span><span class="val">${v(buque.trb)}</span></div>
+        <div class="ficha-row"><span class="key">TRN</span><span class="val">${v(buque.trn)}</span></div>
+      </div>
+
+      <div class="ficha-card">
+        <h3>🛡 Clasificación</h3>
+        <div class="ficha-row"><span class="key">Tipo navegación</span><span class="val">${v(buque.tipo_navegacion)}</span></div>
+        <div class="ficha-row"><span class="key">Clase buque</span><span class="val">${v(buque.clase_buque)}</span></div>
+        <div class="ficha-row"><span class="key">Clase máquina</span><span class="val">${v(buque.clase_maquina)}</span></div>
+      </div>
+    </div>
+
+    ${buque.notas ? `<div class="ficha-card"><h3>📝 Notas</h3><div style="white-space:pre-wrap;font-size:13.5px;line-height:1.6">${escape(buque.notas)}</div></div>` : ''}
+  `;
+}
+
+function abrirModalBuque() {
+  if (!buque) return;
+  const set = (id, val) => document.getElementById(id).value = val ?? '';
+  set('bq-nombre', buque.nombre);
+  set('bq-tipo', buque.tipo);
+  set('bq-astillero', buque.astillero);
+  set('bq-pais', buque.pais_origen);
+  set('bq-anio', buque.anio_construccion);
+  set('bq-botadura', buque.fecha_botadura);
+  set('bq-bandera', buque.bandera);
+  set('bq-casco', buque.casco_nro);
+  set('bq-registro', buque.registro_nro);
+  set('bq-matricula', buque.matricula);
+  set('bq-senal', buque.senal_distintiva);
+  set('bq-eslora', buque.eslora_m);
+  set('bq-eslora-tot', buque.eslora_total_m);
+  set('bq-eslora-zdl', buque.eslora_zdl_m);
+  set('bq-manga', buque.manga_m);
+  set('bq-puntal', buque.puntal_m);
+  set('bq-calado-min', buque.calado_min_m);
+  set('bq-calado-max', buque.calado_max_m);
+  set('bq-dw', buque.capacidad_dw_t);
+  set('bq-vel', buque.velocidad_nudos);
+  set('bq-estacas', buque.sobre_estacas_t);
+  set('bq-tonelaje', buque.tonelaje_total_t);
+  set('bq-despl', buque.desplazamiento_tm);
+  set('bq-rango', buque.rango_accion_millas);
+  set('bq-trb', buque.trb);
+  set('bq-trn', buque.trn);
+  set('bq-material', buque.material_casco);
+  set('bq-naveg', buque.tipo_navegacion);
+  set('bq-clase-b', buque.clase_buque);
+  set('bq-clase-m', buque.clase_maquina);
+  set('bq-notas', buque.notas);
+  document.getElementById('modal-buque').classList.add('show');
+}
+
+function cerrarModalBuque() {
+  document.getElementById('modal-buque').classList.remove('show');
+}
+
+async function guardarBuque() {
+  const num = id => {
+    const v = parseFloat(document.getElementById(id).value);
+    return isNaN(v) ? null : v;
+  };
+  const txt = id => document.getElementById(id).value.trim() || null;
+  const data = {
+    nombre: txt('bq-nombre') || 'B/M Santa Lucía',
+    tipo: txt('bq-tipo'),
+    astillero: txt('bq-astillero'),
+    pais_origen: txt('bq-pais'),
+    anio_construccion: parseInt(document.getElementById('bq-anio').value) || null,
+    fecha_botadura: txt('bq-botadura'),
+    bandera: txt('bq-bandera'),
+    casco_nro: txt('bq-casco'),
+    registro_nro: txt('bq-registro'),
+    matricula: txt('bq-matricula'),
+    senal_distintiva: txt('bq-senal'),
+    eslora_m: num('bq-eslora'),
+    eslora_total_m: num('bq-eslora-tot'),
+    eslora_zdl_m: num('bq-eslora-zdl'),
+    manga_m: num('bq-manga'),
+    puntal_m: num('bq-puntal'),
+    calado_min_m: num('bq-calado-min'),
+    calado_max_m: num('bq-calado-max'),
+    capacidad_dw_t: num('bq-dw'),
+    velocidad_nudos: num('bq-vel'),
+    sobre_estacas_t: num('bq-estacas'),
+    tonelaje_total_t: num('bq-tonelaje'),
+    desplazamiento_tm: num('bq-despl'),
+    rango_accion_millas: num('bq-rango'),
+    trb: num('bq-trb'),
+    trn: num('bq-trn'),
+    material_casco: txt('bq-material'),
+    tipo_navegacion: txt('bq-naveg'),
+    clase_buque: txt('bq-clase-b'),
+    clase_maquina: txt('bq-clase-m'),
+    notas: txt('bq-notas'),
+  };
+  try {
+    const { error } = await sb.from('mant_buque').update(data).eq('id', buque.id);
+    if (error) throw error;
+    toast('✓ Ficha del buque actualizada');
+    cerrarModalBuque();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// ============ EQUIPOS - GRILLA ============
+function renderEquipos() {
+  // Filtros
+  const cats = [...new Set(equipos.map(e => e.categoria).filter(Boolean))].sort();
+  const selCat = document.getElementById('eq-filtro-cat');
+  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  document.getElementById('lista-cat-eq').innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
+
+  const buscar = (document.getElementById('eq-buscador').value || '').toLowerCase();
+  const cat = document.getElementById('eq-filtro-cat').value;
+  const est = document.getElementById('eq-filtro-estado').value;
+
+  // Calcular estado de cada equipo (basado en sus tareas)
+  const equiposConStats = equipos.map(eq => {
+    const tareasEq = tareas.filter(t => t.equipo_id === eq.id);
+    const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
+    tareasEq.forEach(t => stats[calcularEstado(t).estado]++);
+    let estado = 'OK';
+    if (stats.VENCIDO > 0) estado = 'VENCIDOS';
+    else if (stats.PROXIMO > 0) estado = 'PROXIMOS';
+    else if (tareasEq.length === 0) estado = 'SIN_TAREAS';
+    return { ...eq, _stats: stats, _estado: estado, _totalTareas: tareasEq.length };
+  });
+
+  // Filtrar
+  let filtrados = equiposConStats.filter(eq => {
+    if (cat && eq.categoria !== cat) return false;
+    if (est === 'VENCIDOS' && eq._estado !== 'VENCIDOS') return false;
+    if (est === 'PROXIMOS' && eq._estado !== 'PROXIMOS') return false;
+    if (est === 'OK' && eq._estado !== 'OK') return false;
+    if (buscar) {
+      const txt = ((eq.nombre || '') + ' ' + (eq.fabricante || '') + ' ' + (eq.modelo || '')).toLowerCase();
+      if (!txt.includes(buscar)) return false;
+    }
+    return true;
+  });
+
+  // Ordenar: vencidos → próximos → ok
+  const ord = { VENCIDOS: 0, PROXIMOS: 1, OK: 2, SIN_TAREAS: 3 };
+  filtrados.sort((a, b) => {
+    if (ord[a._estado] !== ord[b._estado]) return ord[a._estado] - ord[b._estado];
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  const cont = document.getElementById('equipos-grilla');
+  if (!filtrados.length) {
+    cont.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay equipos con esos filtros</div>';
+    return;
+  }
+
+  // Iconos por categoría
+  const iconCat = (c) => {
+    const m = (c || '').toLowerCase();
+    if (m.includes('motor principal')) return '⚙️';
+    if (m.includes('motor')) return '🔧';
+    if (m.includes('generador')) return '🔌';
+    if (m.includes('bomba')) return '💧';
+    if (m.includes('caldera')) return '🔥';
+    if (m.includes('compresor')) return '💨';
+    if (m.includes('caja')) return '⚙️';
+    if (m.includes('separador')) return '🌀';
+    if (m.includes('propul')) return '🧭';
+    if (m.includes('hidráulic')) return '🛠';
+    if (m.includes('eléctric')) return '⚡';
+    if (m.includes('aire')) return '❄️';
+    if (m.includes('seguridad')) return '🚨';
+    if (m.includes('grúa')) return '🏗';
+    if (m.includes('guinche')) return '⚓';
+    return '📦';
+  };
+
+  let html = `<p style="font-size:13px;color:var(--texto-suave);margin-bottom:12px">${filtrados.length} equipo${filtrados.length>1?'s':''}</p><div class="equipos-grid">`;
+  for (const eq of filtrados) {
+    const cls = eq._estado === 'VENCIDOS' ? 'con-vencidos' : eq._estado === 'PROXIMOS' ? 'con-proximos' : '';
+    const fabModel = [eq.fabricante, eq.modelo].filter(Boolean).join(' · ') || (eq.categoria || '');
+    let badges = '';
+    if (eq._stats.VENCIDO > 0) badges += `<span class="mini-badge vencido">🔴 ${eq._stats.VENCIDO} vencida${eq._stats.VENCIDO>1?'s':''}</span>`;
+    if (eq._stats.PROXIMO > 0) badges += `<span class="mini-badge proximo">🟡 ${eq._stats.PROXIMO} próxima${eq._stats.PROXIMO>1?'s':''}</span>`;
+    if (eq._stats.VENCIDO === 0 && eq._stats.PROXIMO === 0 && eq._totalTareas > 0) badges += `<span class="mini-badge ok">🟢 Al día</span>`;
+    if (eq._totalTareas === 0) badges += `<span class="mini-badge neutral">Sin tareas</span>`;
+
+    html += `
+      <div class="equipo-card ${cls}" onclick="abrirFichaEquipo(${eq.id})">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="icon">${iconCat(eq.categoria)}</span>
+          <div style="flex:1;min-width:0">
+            <div class="nombre">${escape(eq.nombre)}</div>
+            <div class="fab">${escape(fabModel)}</div>
+          </div>
+        </div>
+        <div class="badges">${badges}</div>
+      </div>`;
+  }
+  html += '</div>';
+  cont.innerHTML = html;
+}
+
+// ============ FICHA INDIVIDUAL DEL EQUIPO ============
+function abrirFichaEquipo(id) {
+  const eq = equipos.find(e => e.id === id);
+  if (!eq) { toast('Equipo no encontrado', true); return; }
+  equipoActualFicha = eq;
+
+  // Cambiar a tab equipos si no estamos
+  cambiarTab('equipos');
+
+  // Mostrar vista ficha
+  document.getElementById('equipos-vista-grilla').style.display = 'none';
+  document.getElementById('equipos-vista-ficha').style.display = 'block';
+
+  renderFichaEquipo();
+  // Scroll arriba
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function volverAEquipos() {
+  equipoActualFicha = null;
+  document.getElementById('equipos-vista-grilla').style.display = 'block';
+  document.getElementById('equipos-vista-ficha').style.display = 'none';
+  // Destruir gráficos para liberar memoria
+  if (chartHoras) { chartHoras.destroy(); chartHoras = null; }
+  if (chartMant) { chartMant.destroy(); chartMant = null; }
+}
+
+function renderFichaEquipo() {
+  if (!equipoActualFicha) return;
+  const eq = equipoActualFicha;
+  const tareasEq = tareas.filter(t => t.equipo_id === eq.id);
+  const histEq = historial.filter(h => {
+    const t = tareas.find(tt => tt.id === h.tarea_id);
+    return t && t.equipo_id === eq.id;
+  });
+
+  // Estados
+  const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
+  tareasEq.forEach(t => stats[calcularEstado(t).estado]++);
+
+  // Horas actuales (máximo de las tareas que usan horas)
+  const hrsActual = Math.max(0, ...tareasEq.filter(t => t.unidad === 'hrs').map(t => Number(t.hrs_totales || 0)));
+
+  // Pills
+  const fabPills = [];
+  if (eq.fabricante) fabPills.push(`<span class="pill">🏭 ${escape(eq.fabricante)}</span>`);
+  if (eq.modelo) fabPills.push(`<span class="pill">📋 ${escape(eq.modelo)}</span>`);
+  if (eq.numero_serie) fabPills.push(`<span class="pill">🔖 Serie ${escape(eq.numero_serie)}</span>`);
+  if (eq.anio_fab) fabPills.push(`<span class="pill">📅 ${eq.anio_fab}</span>`);
+  if (eq.ubicacion_abordo) fabPills.push(`<span class="pill">📍 ${escape(eq.ubicacion_abordo)}</span>`);
+  if (eq.cantidad > 1) fabPills.push(`<span class="pill">×${eq.cantidad}</span>`);
+
+  // Estado del equipo
+  const estPillCls = eq.estado === 'Operativo' ? 'estado-op' : eq.estado === 'En reparación' ? 'estado-rep' : 'estado-out';
+
+  // Datos técnicos rápidos (arriba como stats)
+  const quickStats = [];
+  if (eq.potencia_kw) quickStats.push({v: eq.potencia_kw + ' kW', l: 'Potencia'});
+  if (eq.potencia_hp) quickStats.push({v: eq.potencia_hp + ' HP', l: 'HP'});
+  if (eq.consumo_lh) quickStats.push({v: eq.consumo_lh + ' L/h', l: 'Consumo'});
+  if (eq.rpm_nominal) quickStats.push({v: eq.rpm_nominal, l: 'RPM'});
+  if (eq.voltaje) quickStats.push({v: eq.voltaje, l: 'Voltaje'});
+  if (hrsActual > 0) quickStats.push({v: Math.round(hrsActual).toLocaleString('es-UY'), l: 'Horas actuales'});
+
+  // Build HTML
+  const cont = document.getElementById('ficha-equipo-contenido');
+  cont.innerHTML = `
+    <div class="ficha-equipo-hero">
+      <h2>${escape(eq.nombre)}</h2>
+      <div class="meta-line">
+        ${eq.categoria ? `<strong>${escape(eq.categoria)}</strong>` : ''}
+        ${eq.fabricante ? ` · ${escape(eq.fabricante)}` : ''}
+        ${eq.modelo ? ` ${escape(eq.modelo)}` : ''}
+      </div>
+      <div class="pills">
+        ${fabPills.join('')}
+        <span class="pill ${estPillCls}">${escape(eq.estado || 'Operativo')}</span>
+      </div>
+      <button class="btn btn-acento editar" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
+    </div>
+
+    ${quickStats.length ? `
+      <div class="ficha-stats">
+        ${quickStats.map(s => `<div class="ficha-stat neutral"><div class="v">${escape(s.v)}</div><div class="l">${escape(s.l)}</div></div>`).join('')}
+      </div>` : ''}
+
+    <div class="ficha-stats">
+      <div class="ficha-stat vencido"><div class="v">${stats.VENCIDO}</div><div class="l">Vencidas</div></div>
+      <div class="ficha-stat proximo"><div class="v">${stats.PROXIMO}</div><div class="l">Próximas</div></div>
+      <div class="ficha-stat ok"><div class="v">${stats.OK}</div><div class="l">Al día</div></div>
+      <div class="ficha-stat neutral"><div class="v">${tareasEq.length}</div><div class="l">Total tareas</div></div>
+      <div class="ficha-stat neutral"><div class="v">${histEq.length}</div><div class="l">Mantenim. hechos</div></div>
+    </div>
+
+    ${eq.datos_tecnicos
+      ? `<h3 class="panel-titulo" style="margin-top:6px">📋 Datos técnicos</h3><div class="datos-tecnicos-box">${escape(eq.datos_tecnicos)}</div>`
+      : `<div class="datos-tecnicos-box vacio">Sin datos técnicos cargados. Tocá <strong>Editar ficha</strong> para agregarlos.</div>`}
+
+    ${(histEq.length > 0 || tareasEq.some(t => t.unidad === 'hrs')) ? `
+      <h3 class="panel-titulo">📊 Gráficos</h3>
+      <div class="charts-row">
+        <div class="chart-box">
+          <h4>Horas acumuladas en el tiempo</h4>
+          <canvas id="chart-horas"></canvas>
+        </div>
+        <div class="chart-box">
+          <h4>Mantenimientos por mes</h4>
+          <canvas id="chart-mant"></canvas>
+        </div>
+      </div>
+    ` : ''}
+
+    <h3 class="panel-titulo">🔧 Próximas tareas (${tareasEq.length})</h3>
+    <div class="task-list" id="ficha-tareas-list"></div>
+
+    <h3 class="panel-titulo" style="margin-top:24px">📜 Historial (${histEq.length})</h3>
+    <div id="ficha-historial-list"></div>
+  `;
+
+  // Render lista de tareas del equipo
+  const listaT = document.getElementById('ficha-tareas-list');
+  if (tareasEq.length === 0) {
+    listaT.innerHTML = '<div class="empty">No hay tareas asociadas a este equipo</div>';
+  } else {
+    const ordTareas = tareasEq.map(t => ({...t, _est: calcularEstado(t)}));
+    const ordEst = { VENCIDO: 0, PROXIMO: 1, OK: 2, SIN_DATO: 3 };
+    ordTareas.sort((a, b) => ordEst[a._est.estado] - ordEst[b._est.estado]);
+    listaT.innerHTML = ordTareas.map(renderTaskCard).join('');
+  }
+
+  // Render historial del equipo
+  const listaH = document.getElementById('ficha-historial-list');
+  if (histEq.length === 0) {
+    listaH.innerHTML = '<div class="empty">Aún no hay registros para este equipo</div>';
+  } else {
+    const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
+    listaH.innerHTML = histEq.map(h => {
+      const t = idMap[h.tarea_id];
+      const f = new Date(h.fecha_realizado + 'T00:00:00');
+      return `
+        <div class="hist-item">
+          <div class="hist-fecha">
+            <div class="dia">${f.getDate()}</div>
+            <div class="mes">${meses[f.getMonth()]} ${f.getFullYear()}</div>
+          </div>
+          <div class="hist-info">
+            <div class="tarea">${escape(t ? t.tarea : '—')}</div>
+            <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
+            ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
+          </div>
+          <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // Renderizar gráficos
+  setTimeout(() => renderGraficosEquipo(eq, tareasEq, histEq), 50);
+}
+
+function renderGraficosEquipo(eq, tareasEq, histEq) {
+  // Destruir gráficos previos
+  if (chartHoras) { chartHoras.destroy(); chartHoras = null; }
+  if (chartMant) { chartMant.destroy(); chartMant = null; }
+
+  // Gráfico 1: horas acumuladas en el tiempo
+  const cvsH = document.getElementById('chart-horas');
+  if (cvsH) {
+    // Datos: del historial, los registros con hrs_equipo
+    const datos = histEq.filter(h => h.hrs_equipo != null && h.fecha_realizado)
+      .map(h => ({ x: h.fecha_realizado, y: Number(h.hrs_equipo) }))
+      .sort((a, b) => a.x.localeCompare(b.x));
+
+    if (datos.length > 0) {
+      chartHoras = new Chart(cvsH, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Horas equipo',
+            data: datos,
+            borderColor: '#0c2340',
+            backgroundColor: 'rgba(212, 164, 74, 0.15)',
+            fill: true,
+            tension: 0.25,
+            pointBackgroundColor: '#d4a44a',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'category', ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+            y: { beginAtZero: false, ticks: { callback: v => v.toLocaleString('es-UY') } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    } else {
+      cvsH.parentElement.innerHTML = '<h4>Horas acumuladas en el tiempo</h4><div style="text-align:center;padding:30px;color:var(--texto-suave);font-size:13px">Aún no hay suficientes registros con horas para graficar</div>';
+    }
+  }
+
+  // Gráfico 2: mantenimientos por mes (últimos 12 meses)
+  const cvsM = document.getElementById('chart-mant');
+  if (cvsM) {
+    const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const hoy = new Date();
+    const labels = [];
+    const valores = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      labels.push(meses[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2));
+      const cuenta = histEq.filter(h => (h.fecha_realizado || '').startsWith(ym)).length;
+      valores.push(cuenta);
+    }
+
+    if (valores.some(v => v > 0)) {
+      chartMant = new Chart(cvsM, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Mantenimientos',
+            data: valores,
+            backgroundColor: '#1e3a5f',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+            y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    } else {
+      cvsM.parentElement.innerHTML = '<h4>Mantenimientos por mes</h4><div style="text-align:center;padding:30px;color:var(--texto-suave);font-size:13px">Aún no hay registros recientes</div>';
+    }
+  }
+}
+
+// ============ MODAL EDITAR EQUIPO ============
+function abrirModalEquipo(id) {
+  const eq = id ? equipos.find(e => e.id === id) : null;
+  equipoActualFicha = eq || equipoActualFicha;
+  const target = id ? equipos.find(e => e.id === id) : null;
+  // Si pasan id, editamos ese equipo. Sino, creamos uno nuevo.
+  document.getElementById('modal-equipo-titulo').textContent = target ? 'Editar ficha del equipo' : 'Nuevo equipo';
+  const set = (id, val) => document.getElementById(id).value = val ?? '';
+  set('eq-nombre', target?.nombre);
+  set('eq-categoria', target?.categoria);
+  set('eq-cantidad', target?.cantidad ?? 1);
+  set('eq-ubicacion', target?.ubicacion_abordo);
+  set('eq-fabricante', target?.fabricante);
+  set('eq-modelo', target?.modelo);
+  set('eq-serie', target?.numero_serie);
+  set('eq-anio-fab', target?.anio_fab);
+  set('eq-anio-ins', target?.anio_instalacion);
+  set('eq-pot-kw', target?.potencia_kw);
+  set('eq-pot-hp', target?.potencia_hp);
+  set('eq-consumo', target?.consumo_lh);
+  set('eq-rpm', target?.rpm_nominal);
+  set('eq-voltaje', target?.voltaje);
+  set('eq-amperaje', target?.amperaje);
+  set('eq-combustible', target?.combustible);
+  set('eq-refrig', target?.tipo_refrigeracion);
+  set('eq-aceite-tipo', target?.aceite_tipo);
+  set('eq-aceite-cap', target?.capacidad_aceite_l);
+  set('eq-datos-tec', target?.datos_tecnicos);
+  document.getElementById('eq-estado').value = target?.estado || 'Operativo';
+  set('eq-proveedor', target?.proveedor_local);
+  set('eq-notas-tx', target?.notas);
+  document.getElementById('eq-borrar-btn').style.display = target ? 'inline-flex' : 'none';
+  // Guardamos el id para saber si update o insert
+  document.getElementById('modal-equipo').dataset.editId = target ? target.id : '';
+  document.getElementById('modal-equipo').classList.add('show');
+}
+
+function cerrarModalEquipo() {
+  document.getElementById('modal-equipo').classList.remove('show');
+}
+
+async function guardarEquipo() {
+  const nombre = document.getElementById('eq-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre', true); return; }
+  const num = id => {
+    const v = parseFloat(document.getElementById(id).value);
+    return isNaN(v) ? null : v;
+  };
+  const txt = id => document.getElementById(id).value.trim() || null;
+  const data = {
+    nombre,
+    categoria: txt('eq-categoria'),
+    cantidad: parseInt(document.getElementById('eq-cantidad').value) || 1,
+    ubicacion_abordo: txt('eq-ubicacion'),
+    fabricante: txt('eq-fabricante'),
+    modelo: txt('eq-modelo'),
+    numero_serie: txt('eq-serie'),
+    anio_fab: parseInt(document.getElementById('eq-anio-fab').value) || null,
+    anio_instalacion: parseInt(document.getElementById('eq-anio-ins').value) || null,
+    potencia_kw: num('eq-pot-kw'),
+    potencia_hp: num('eq-pot-hp'),
+    consumo_lh: num('eq-consumo'),
+    rpm_nominal: parseInt(document.getElementById('eq-rpm').value) || null,
+    voltaje: txt('eq-voltaje'),
+    amperaje: txt('eq-amperaje'),
+    combustible: txt('eq-combustible'),
+    tipo_refrigeracion: txt('eq-refrig'),
+    aceite_tipo: txt('eq-aceite-tipo'),
+    capacidad_aceite_l: num('eq-aceite-cap'),
+    datos_tecnicos: txt('eq-datos-tec'),
+    estado: document.getElementById('eq-estado').value,
+    proveedor_local: txt('eq-proveedor'),
+    notas: txt('eq-notas-tx'),
+  };
+  const editId = document.getElementById('modal-equipo').dataset.editId;
+  try {
+    if (editId) {
+      const { error } = await sb.from('mant_equipos').update(data).eq('id', parseInt(editId));
+      if (error) throw error;
+      toast('✓ Equipo actualizado');
+    } else {
+      const { error } = await sb.from('mant_equipos').insert(data);
+      if (error) throw error;
+      toast('✓ Equipo creado');
+    }
+    cerrarModalEquipo();
+    await cargarTodo();
+    // Refrescar la ficha si estamos viéndola
+    if (equipoActualFicha && editId) {
+      equipoActualFicha = equipos.find(e => e.id === parseInt(editId));
+      if (equipoActualFicha) renderFichaEquipo();
+    }
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function borrarEquipo() {
+  const editId = document.getElementById('modal-equipo').dataset.editId;
+  if (!editId) return;
+  const eq = equipos.find(e => e.id === parseInt(editId));
+  if (!eq) return;
+  // Verificar si tiene tareas vinculadas
+  const tareasVinc = tareas.filter(t => t.equipo_id === eq.id).length;
+  if (tareasVinc > 0) {
+    if (!confirm(`Este equipo tiene ${tareasVinc} tarea${tareasVinc>1?'s':''} vinculada${tareasVinc>1?'s':''}.\n\nSi lo borrás, las tareas quedan sin equipo (pero NO se borran).\n\n¿Confirmás?`)) return;
+  } else {
+    if (!confirm(`¿Borrar el equipo "${eq.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+  }
+  try {
+    // En vez de DELETE, marcamos activo = false para no perder historial
+    const { error } = await sb.from('mant_equipos').update({ activo: false }).eq('id', eq.id);
+    if (error) throw error;
+    toast('✓ Equipo eliminado');
+    cerrarModalEquipo();
+    volverAEquipos();
+    await cargarTodo();
+  } catch (err) {
+    toast('Error: ' + err.message, true);
+  }
+}
+
+
 function mostrarLogin() {
   document.getElementById('login-overlay').style.display = 'flex';
   document.querySelector('header.top').style.display = 'none';
@@ -2080,6 +3128,7 @@ async function cerrarSesion() {
   await sb.auth.signOut();
   // Limpiar estado
   tareas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
+  buque = null; equipos = [];
   mostrarLogin();
 }
 
