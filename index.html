@@ -1416,11 +1416,11 @@ function fmtFecha(f) {
 }
 function periodicidadAMeses(p) {
   if (!p) return null;
-  const s = p.toLowerCase().trim();
+  const s = p.toLowerCase().trim().replace(/\s+/g, ' ');
   if (s === 'mensual') return 1;
-  if (s === '3 meses') return 3;
-  if (s === '6 meses') return 6;
   if (s === 'anual') return 12;
+  const m = s.match(/^(\d+)\s*mes(es)?$/);
+  if (m) return parseInt(m[1], 10);
   return null;
 }
 
