@@ -2492,15 +2492,22 @@ function aplicarMinimoABloque() {
 async function guardarMinimosEditados() {
   const ids = Object.keys(minimosEditados);
   if (!ids.length) { toast('No hay cambios para guardar'); return; }
-  const rows = ids.map(id => ({ id: Number(id), minimo: minimosEditados[id] }));
   try {
-    const { error } = await sb.from('mant_repuestos').upsert(rows, { onConflict: 'id' });
-    if (error) throw error;
-    toast(`✓ ${rows.length} mínimo${rows.length > 1 ? 's' : ''} actualizado${rows.length > 1 ? 's' : ''}`);
-    modoEditarMinimos = false;
-    minimosEditados = {};
-    document.getElementById('btn-editar-minimos').style.display = '';
-    document.getElementById('minimos-bar').style.display = 'none';
+    const resultados = await Promise.all(ids.map(id =>
+      sb.from('mant_repuestos').update({ minimo: minimosEditados[id] }).eq('id', Number(id))
+    ));
+    const fallidos = resultados.filter(r => r.error);
+    const exitosos = resultados.length - fallidos.length;
+    if (fallidos.length) {
+      console.error(fallidos.map(f => f.error));
+      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${fallidos[0].error.message}`, true);
+    } else {
+      toast(`✓ ${exitosos} mínimo${exitosos > 1 ? 's' : ''} actualizado${exitosos > 1 ? 's' : ''}`);
+      modoEditarMinimos = false;
+      minimosEditados = {};
+      document.getElementById('btn-editar-minimos').style.display = '';
+      document.getElementById('minimos-bar').style.display = 'none';
+    }
     await cargarTodo();
   } catch (err) {
     console.error(err);
