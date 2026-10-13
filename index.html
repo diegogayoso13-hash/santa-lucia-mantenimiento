@@ -175,6 +175,25 @@
   .toolbar input:focus, .toolbar select:focus {
     outline: none; border-color: var(--azul-profundo); background: white;
   }
+  .toolbar .toolbar-check {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  }
+  .toolbar .toolbar-check input { flex: none; min-width: 0; padding: 0; width: 16px; height: 16px; }
+
+  /* EQUIPOS CRÍTICOS */
+  .badge-critico {
+    display: inline-block;
+    background: var(--rojo);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
 
   /* TARJETAS DE TAREAS */
   .task-list { display: flex; flex-direction: column; gap: 8px; }
@@ -869,6 +888,7 @@
         <option value="OK">🟢 Al día</option>
         <option value="SIN_DATO">⚪ Sin datos</option>
       </select>
+      <label class="toolbar-check"><input type="checkbox" id="filtro-critico"> ⚠️ Solo críticos</label>
     </div>
     <div class="task-list" id="lista"></div>
   </section>
@@ -1251,6 +1271,12 @@
       </div>
       <div><label>Proveedor local</label><input type="text" id="eq-proveedor"></div>
     </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="eq-critico" style="width:auto">
+        ⚠️ Equipo crítico <span style="font-weight:normal;color:var(--texto-suave)">(su falla genera riesgo de seguridad)</span>
+      </label>
+    </div>
     <div class="field"><label>Notas</label><textarea id="eq-notas-tx" rows="2"></textarea></div>
 
     <div class="modal-actions">
@@ -1583,13 +1609,27 @@ function renderDashboard() {
       </div>`;
   }
 
-  // Top 5 urgentes
+  // Aviso aparte de críticas vencidas (arriba del banner general)
+  const nCriticasVencidas = tareas.filter(t => esTareaCritica(t) && calcularEstado(t).estado === 'VENCIDO').length;
+  if (nCriticasVencidas > 0) {
+    banner.innerHTML = `
+      <div class="alert-banner" style="background:#fde0df">
+        <div class="icon">⚠️</div>
+        <div class="text">
+          <strong>${nCriticasVencidas} tarea${nCriticasVencidas>1?'s':''} crítica${nCriticasVencidas>1?'s':''} vencida${nCriticasVencidas>1?'s':''}</strong>
+          <p>Equipos cuya falla genera riesgo de seguridad. Atenderlas primero.</p>
+        </div>
+      </div>` + banner.innerHTML;
+  }
+
+  // Top 5 urgentes (dentro de cada estado, las críticas primero)
   const urgentes = tareas
-    .map(t => ({ ...t, _est: calcularEstado(t) }))
+    .map(t => ({ ...t, _est: calcularEstado(t), _critica: esTareaCritica(t) }))
     .filter(t => t._est.estado === 'VENCIDO' || t._est.estado === 'PROXIMO')
     .sort((a, b) => {
       const ord = { VENCIDO: 0, PROXIMO: 1 };
       if (ord[a._est.estado] !== ord[b._est.estado]) return ord[a._est.estado] - ord[b._est.estado];
+      if (a._critica !== b._critica) return a._critica ? -1 : 1;
       return (a._est.valor ?? 0) - (b._est.valor ?? 0);
     })
     .slice(0, 5);
@@ -1610,6 +1650,13 @@ function irATareas(estado) {
 }
 
 // ============ LISTA DE TAREAS ============
+// Una tarea es crítica si su equipo (por equipo_id) está marcado como crítico
+function esTareaCritica(t) {
+  if (!t.equipo_id) return false;
+  const eq = equipos.find(e => e.id === t.equipo_id);
+  return !!eq?.critico;
+}
+
 function renderTaskCard(t) {
   const est = t._est || calcularEstado(t);
   const cls = est.estado.toLowerCase();
@@ -1619,11 +1666,12 @@ function renderTaskCard(t) {
   const equipoHtml = t.equipo_id
     ? `<span class="equipo-clickable" onclick="event.stopPropagation();abrirFichaEquipo(${t.equipo_id})" title="Ver ficha del equipo">${escape(t.equipo)}</span>`
     : escape(t.equipo);
+  const criticoHtml = esTareaCritica(t) ? '<span class="badge-critico" title="Equipo crítico: su falla genera riesgo de seguridad">⚠️ CRÍTICO</span>' : '';
   return `
     <div class="task-card ${cls}">
       <div class="estado-icon">${iconos[est.estado]}</div>
       <div class="task-info">
-        <div class="equipo">${equipoHtml}</div>
+        <div class="equipo">${equipoHtml}${criticoHtml}</div>
         <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
         ${obs}
@@ -1641,9 +1689,11 @@ function renderLista() {
   const eq = document.getElementById('filtro-equipo').value;
   const pri = document.getElementById('filtro-prioridad').value;
   const est = document.getElementById('filtro-estado').value;
+  const soloCriticos = document.getElementById('filtro-critico').checked;
 
   let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
     if (est !== 'TODOS' && t._est.estado !== est) return false;
+    if (soloCriticos && !esTareaCritica(t)) return false;
     if (eq && t.equipo !== eq) return false;
     if (pri && t.prioridad !== pri) return false;
     if (buscar && !(t.equipo.toLowerCase().includes(buscar) || t.tarea.toLowerCase().includes(buscar))) return false;
@@ -2843,7 +2893,7 @@ function cambiarTab(name) {
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => cambiarTab(b.dataset.tab)));
 
 // Listeners filtros
-['buscador','filtro-equipo','filtro-prioridad','filtro-estado'].forEach(id => {
+['buscador','filtro-equipo','filtro-prioridad','filtro-estado','filtro-critico'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener(id === 'buscador' ? 'input' : 'change', renderLista);
 });
@@ -3407,6 +3457,7 @@ function abrirModalEquipo(id) {
   document.getElementById('eq-estado').value = target?.estado || 'Operativo';
   set('eq-proveedor', target?.proveedor_local);
   set('eq-notas-tx', target?.notas);
+  document.getElementById('eq-critico').checked = !!target?.critico;
   document.getElementById('eq-borrar-btn').style.display = target ? 'inline-flex' : 'none';
   // Guardamos el id para saber si update o insert
   document.getElementById('modal-equipo').dataset.editId = target ? target.id : '';
@@ -3449,6 +3500,7 @@ async function guardarEquipo() {
     estado: document.getElementById('eq-estado').value,
     proveedor_local: txt('eq-proveedor'),
     notas: txt('eq-notas-tx'),
+    critico: document.getElementById('eq-critico').checked,
   };
   const editId = document.getElementById('modal-equipo').dataset.editId;
   try {
