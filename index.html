@@ -131,6 +131,8 @@
   .stat-card.proximo::after { background: var(--ambar); }
   .stat-card.ok::after { background: var(--verde); }
   .stat-card.todos::after { background: var(--azul-profundo); }
+  .stat-card.deficiencias::after { background: #8e44ad; }
+  .stat-card.deficiencias .num { color: #8e44ad; }
   .stat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
   .stat-card.active { box-shadow: 0 0 0 2px var(--acento); }
   .stat-card .num {
@@ -214,6 +216,9 @@
   .task-card.proximo { border-left-color: var(--ambar); background: #fffaf2; }
   .task-card.ok { border-left-color: var(--verde); }
   .task-card.sin_dato { border-left-color: var(--gris-3); opacity: 0.78; }
+  .task-card.cerrada { border-left-color: var(--verde); opacity: 0.85; }
+  .cerrada .estado-icon { background: #dbf0e3; }
+  .def-acciones { display: flex; flex-direction: column; gap: 6px; }
 
   .estado-icon {
     width: 36px; height: 36px;
@@ -498,6 +503,7 @@
 
     /* Stats - 2 columnas */
     .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .stat-card.deficiencias { grid-column: span 2; }
     .stat-card { padding: 14px 16px; }
     .stat-card .num { font-size: 28px; }
     .stat-card .label { font-size: 11px; letter-spacing: 0.05em; }
@@ -813,6 +819,7 @@
     <button class="tab" data-tab="barco">⚓ Mi Barco</button>
     <button class="tab" data-tab="equipos">🚢 Equipos</button>
     <button class="tab" data-tab="tareas">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
+    <button class="tab" data-tab="deficiencias">⚠️ Deficiencias <span id="badge-deficiencias" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="carga">⏱️ Cargar Horas</button>
     <button class="tab" data-tab="stock">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="herramientas">🔧 Herramientas</button>
@@ -842,6 +849,10 @@
       <div class="stat-card todos" data-filter="TODOS" onclick="irATareas('TODOS')">
         <div class="num" id="n-todos">0</div>
         <div class="label">Total tareas</div>
+      </div>
+      <div class="stat-card deficiencias" onclick="irADeficiencias()">
+        <div class="num" id="n-deficiencias">0</div>
+        <div class="label">Deficiencias abiertas</div>
       </div>
     </div>
 
@@ -992,6 +1003,24 @@
       </select>
     </div>
     <div id="stock-lista"></div>
+  </section>
+
+  <!-- DEFICIENCIAS -->
+  <section class="section" id="sec-deficiencias">
+    <h2 class="panel-titulo">Registro de deficiencias</h2>
+    <div class="acciones-globales">
+      <button class="btn" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
+      <button class="btn btn-acento" onclick="exportarDefExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="def-buscador" placeholder="🔎 Buscar equipo, número o descripción...">
+      <select id="def-filtro-estado">
+        <option value="abierta">Abiertas</option>
+        <option value="cerrada">Cerradas</option>
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="task-list" id="def-lista"></div>
   </section>
 
   <!-- HERRAMIENTAS -->
@@ -1327,6 +1356,66 @@
   </div>
 </div>
 
+<!-- MODAL: nueva/editar deficiencia -->
+<div class="modal-bg" id="modal-def">
+  <div class="modal">
+    <h2 id="modal-def-titulo">Nueva deficiencia</h2>
+    <div class="modal-sub" id="modal-def-sub">Avería o falla detectada fuera del mantenimiento planificado</div>
+    <div class="field">
+      <label>Equipo *</label>
+      <select id="d-equipo" onchange="defEquipoCambiado()"></select>
+    </div>
+    <div class="field">
+      <label>Descripción *</label>
+      <textarea id="d-descripcion" rows="3" placeholder="ej: Pérdida de aceite por junta de tapa de balancines"></textarea>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Fecha detectada *</label>
+        <input type="date" id="d-fecha" onchange="defRecalcularLimite()">
+      </div>
+      <div>
+        <label>Detectada por</label>
+        <input type="text" id="d-quien">
+      </div>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="d-critica" style="width:auto" onchange="defRecalcularLimite()">
+        ⚠️ Crítica <span style="font-weight:normal;color:var(--texto-suave)">(límite 7 días; si no, 60 días)</span>
+      </label>
+    </div>
+    <div class="field">
+      <label>Fecha límite *</label>
+      <input type="date" id="d-limite">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalDef()">Cancelar</button>
+      <button class="btn" onclick="guardarDef()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: cerrar deficiencia -->
+<div class="modal-bg" id="modal-def-cerrar">
+  <div class="modal">
+    <h2>Cerrar deficiencia</h2>
+    <div class="modal-sub" id="modal-def-cerrar-info"></div>
+    <div class="field">
+      <label>Fecha de cierre *</label>
+      <input type="date" id="dc-fecha">
+    </div>
+    <div class="field">
+      <label>Acción realizada *</label>
+      <textarea id="dc-accion" rows="3" placeholder="ej: Se reemplazó la junta y se verificó sin pérdidas"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalDefCerrar()">Cancelar</button>
+      <button class="btn" onclick="guardarCierreDef()">✓ Cerrar deficiencia</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: agregar/editar herramienta -->
 <div class="modal-bg" id="modal-herr">
   <div class="modal">
@@ -1461,6 +1550,8 @@ let herramientas = [];
 let tareaRepuestos = [];
 let buque = null;          // datos del barco (1 fila)
 let equipos = [];          // fichas de equipos
+let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
+let defActual = null;      // deficiencia en edición o cierre
 let tareaActual = null;
 let repuestoActual = null;
 let herrActual = null;
@@ -1530,7 +1621,8 @@ async function cargarTodo() {
       {data: he, error: e5},
       {data: bq, error: e6},
       {data: eq, error: e7},
-      {data: lh, error: e8}
+      {data: lh, error: e8},
+      {data: df, error: e9}
     ] = await Promise.all([
       sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
       sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
@@ -1539,7 +1631,8 @@ async function cargarTodo() {
       sb.from('mant_herramientas').select('*').order('nombre'),
       sb.from('mant_buque').select('*').limit(1),
       sb.from('mant_equipos').select('*').eq('activo', true).order('nombre'),
-      sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false })
+      sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }),
+      sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero')
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
@@ -1549,6 +1642,7 @@ async function cargarTodo() {
     if (e6) throw e6;
     if (e7) throw e7;
     if (e8) throw e8;
+    if (e9) throw e9;
     tareas = tt || [];
     historial = hh || [];
     repuestos = rr || [];
@@ -1557,6 +1651,7 @@ async function cargarTodo() {
     buque = (bq && bq[0]) || null;
     equipos = eq || [];
     lecturas = lh || [];
+    deficiencias = df || [];
     renderTodo();
   } catch (err) {
     console.error(err);
@@ -1575,6 +1670,7 @@ function renderTodo() {
   renderBarco();
   renderEquipos();
   renderHoras();
+  renderDeficiencias();
 }
 
 // ============ FILTROS ============
@@ -1642,6 +1738,25 @@ function renderDashboard() {
         <div class="text">
           <strong>${nCriticasVencidas} tarea${nCriticasVencidas>1?'s':''} crítica${nCriticasVencidas>1?'s':''} vencida${nCriticasVencidas>1?'s':''}</strong>
           <p>Equipos cuya falla genera riesgo de seguridad. Atenderlas primero.</p>
+        </div>
+      </div>` + banner.innerHTML;
+  }
+
+  // Deficiencias abiertas: contador + aviso si hay vencidas o críticas
+  const defAbiertas = deficiencias.filter(d => d.estado === 'abierta');
+  document.getElementById('n-deficiencias').textContent = defAbiertas.length;
+  const nDefVencidas = defAbiertas.filter(defVencida).length;
+  const nDefCriticas = defAbiertas.filter(d => d.critica).length;
+  if (nDefVencidas > 0 || nDefCriticas > 0) {
+    const partes = [];
+    if (nDefVencidas > 0) partes.push(`${nDefVencidas} deficiencia${nDefVencidas>1?'s':''} vencida${nDefVencidas>1?'s':''}`);
+    if (nDefCriticas > 0) partes.push(`${nDefCriticas} crítica${nDefCriticas>1?'s':''} abierta${nDefCriticas>1?'s':''}`);
+    banner.innerHTML = `
+      <div class="alert-banner" style="background:#fde0df;cursor:pointer" onclick="irADeficiencias()">
+        <div class="icon">⚠️</div>
+        <div class="text">
+          <strong>${partes.join(' · ')}</strong>
+          <p>Averías fuera del plan pendientes de resolver. Tocá para ver el registro de deficiencias.</p>
         </div>
       </div>` + banner.innerHTML;
   }
@@ -2920,6 +3035,269 @@ function exportarHerrExcel() {
   toast('✓ Excel descargado');
 }
 
+// ============ DEFICIENCIAS ============
+const DIAS_LIMITE_DEF = { critica: 7, normal: 60 };
+
+// Fecha de hoy en hora local (YYYY-MM-DD)
+function hoyLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function sumarDias(fechaStr, n) {
+  const f = new Date(fechaStr + 'T00:00:00Z');
+  f.setUTCDate(f.getUTCDate() + n);
+  return f.toISOString().split('T')[0];
+}
+function numeroDef(d) {
+  return `${d.anio}-${String(d.numero).padStart(3, '0')}`;
+}
+function nombreEquipoDef(d) {
+  return d.equipo?.nombre || equipos.find(e => e.id === d.equipo_id)?.nombre || '(equipo sin nombre)';
+}
+// Vencida = abierta y con fecha límite anterior a hoy (el día límite todavía no cuenta)
+function defVencida(d) {
+  return d.estado === 'abierta' && d.fecha_limite < hoyLocalISO();
+}
+
+function irADeficiencias() {
+  document.getElementById('def-filtro-estado').value = 'abierta';
+  cambiarTab('deficiencias');
+  renderDeficiencias();
+}
+
+function renderDeficiencias() {
+  const abiertas = deficiencias.filter(d => d.estado === 'abierta').length;
+  const badge = document.getElementById('badge-deficiencias');
+  badge.textContent = abiertas;
+  badge.style.display = abiertas > 0 ? 'inline-block' : 'none';
+
+  const buscar = (document.getElementById('def-buscador').value || '').toLowerCase();
+  const est = document.getElementById('def-filtro-estado').value;
+
+  const filtradas = deficiencias.filter(d => {
+    if (est && d.estado !== est) return false;
+    if (buscar && !(numeroDef(d).includes(buscar) ||
+                    nombreEquipoDef(d).toLowerCase().includes(buscar) ||
+                    (d.descripcion || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+
+  // Abiertas primero (críticas arriba, luego por fecha límite); cerradas de la más reciente a la más vieja
+  filtradas.sort((a, b) => {
+    if (a.estado !== b.estado) return a.estado === 'abierta' ? -1 : 1;
+    if (a.estado === 'abierta') {
+      if (a.critica !== b.critica) return a.critica ? -1 : 1;
+      return a.fecha_limite.localeCompare(b.fecha_limite);
+    }
+    return (b.fecha_cierre || '').localeCompare(a.fecha_cierre || '') || b.id - a.id;
+  });
+
+  const div = document.getElementById('def-lista');
+  if (!filtradas.length) {
+    div.innerHTML = deficiencias.length
+      ? '<div class="empty"><div class="big">🔍</div>No hay deficiencias con esos filtros</div>'
+      : '<div class="empty"><div class="big">✅</div>No hay deficiencias registradas</div>';
+    return;
+  }
+  div.innerHTML = filtradas.map(renderDefCard).join('');
+}
+
+function renderDefCard(d) {
+  const abierta = d.estado === 'abierta';
+  const vencida = defVencida(d);
+  const dias = diasEntre(d.fecha_limite);
+  const cls = !abierta ? 'cerrada' : vencida ? 'vencido' : (d.critica || dias <= 7) ? 'proximo' : 'ok';
+  const icono = !abierta ? '✅' : vencida ? '🔴' : '🟡';
+  const criticaHtml = d.critica ? '<span class="badge-critico">⚠️ CRÍTICA</span>' : '';
+  const eqNombre = escape(nombreEquipoDef(d));
+  const equipoHtml = equipos.some(e => e.id === d.equipo_id)
+    ? `<span class="equipo-clickable" onclick="event.stopPropagation();abrirFichaEquipo(${d.equipo_id})" title="Ver ficha del equipo">${eqNombre}</span>`
+    : eqNombre;
+
+  let valor, unidad;
+  if (!abierta) { valor = fmtFecha(d.fecha_cierre); unidad = 'cerrada'; }
+  else if (vencida) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencida`; }
+  else if (dias === 0) { valor = 'Hoy'; unidad = 'vence'; }
+  else { valor = dias; unidad = `día${dias!==1?'s':''} restantes`; }
+
+  const cierreHtml = !abierta
+    ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
+  const acciones = abierta
+    ? `<div class="def-acciones">
+         <button class="btn" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
+         <button class="btn btn-sec btn-pequeno" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
+       </div>`
+    : '<div></div>';
+
+  return `
+    <div class="task-card ${cls}">
+      <div class="estado-icon">${icono}</div>
+      <div class="task-info">
+        <div class="equipo"><span class="badge-tipo">${numeroDef(d)}</span>${equipoHtml}${criticaHtml}</div>
+        <div class="tarea">${escape(d.descripcion)}</div>
+        <div class="meta">Detectada: ${fmtFecha(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''} · Límite: ${fmtFecha(d.fecha_limite)}</div>
+        ${cierreHtml}
+      </div>
+      <div class="proxima-box">
+        <div class="valor">${valor}</div>
+        <div class="unidad">${unidad}</div>
+      </div>
+      ${acciones}
+    </div>`;
+}
+
+function abrirModalDef(id) {
+  defActual = id ? deficiencias.find(d => d.id === id) : null;
+  const sel = document.getElementById('d-equipo');
+  let opciones = equipos.map(e => `<option value="${e.id}">${escape(e.nombre)}${e.critico ? ' ⚠️' : ''}</option>`).join('');
+  // Si el equipo de la deficiencia ya no está activo, igual lo mostramos para no perderlo al editar
+  if (defActual && !equipos.some(e => e.id === defActual.equipo_id)) {
+    opciones = `<option value="${defActual.equipo_id}">${escape(nombreEquipoDef(defActual))}</option>` + opciones;
+  }
+  sel.innerHTML = '<option value="">— Elegí un equipo —</option>' + opciones;
+
+  const fecha = document.getElementById('d-fecha');
+  if (defActual) {
+    document.getElementById('modal-def-titulo').textContent = 'Editar deficiencia ' + numeroDef(defActual);
+    document.getElementById('modal-def-sub').textContent = 'La fecha detectada no se puede cambiar porque define el número de la deficiencia.';
+    sel.value = defActual.equipo_id;
+    document.getElementById('d-descripcion').value = defActual.descripcion || '';
+    fecha.value = defActual.fecha_detectada;
+    fecha.disabled = true;
+    document.getElementById('d-quien').value = defActual.detectada_por || '';
+    document.getElementById('d-critica').checked = !!defActual.critica;
+    document.getElementById('d-limite').value = defActual.fecha_limite;
+  } else {
+    document.getElementById('modal-def-titulo').textContent = 'Nueva deficiencia';
+    document.getElementById('modal-def-sub').textContent = 'Avería o falla detectada fuera del mantenimiento planificado';
+    sel.value = '';
+    document.getElementById('d-descripcion').value = '';
+    fecha.value = hoyLocalISO();
+    fecha.disabled = false;
+    document.getElementById('d-quien').value = 'Maquinista';
+    document.getElementById('d-critica').checked = false;
+    defRecalcularLimite();
+  }
+  document.getElementById('modal-def').classList.add('show');
+}
+
+function cerrarModalDef() {
+  document.getElementById('modal-def').classList.remove('show');
+  defActual = null;
+}
+
+// Al elegir equipo se propone "crítica" según la ficha del equipo
+function defEquipoCambiado() {
+  const eq = equipos.find(e => e.id === parseInt(document.getElementById('d-equipo').value));
+  document.getElementById('d-critica').checked = !!eq?.critico;
+  defRecalcularLimite();
+}
+
+// Fecha límite automática: 7 días si es crítica, 60 si no (editable a mano después)
+function defRecalcularLimite() {
+  const fecha = document.getElementById('d-fecha').value;
+  if (!fecha) return;
+  const critica = document.getElementById('d-critica').checked;
+  document.getElementById('d-limite').value = sumarDias(fecha, critica ? DIAS_LIMITE_DEF.critica : DIAS_LIMITE_DEF.normal);
+}
+
+async function guardarDef() {
+  const equipoId = parseInt(document.getElementById('d-equipo').value);
+  const descripcion = document.getElementById('d-descripcion').value.trim();
+  const fecha = document.getElementById('d-fecha').value;
+  const limite = document.getElementById('d-limite').value;
+
+  if (!equipoId) { toast('Falta el equipo', true); return; }
+  if (!descripcion) { toast('Falta la descripción', true); return; }
+  if (!fecha) { toast('Falta la fecha detectada', true); return; }
+  if (!limite) { toast('Falta la fecha límite', true); return; }
+  if (limite < fecha) { toast('La fecha límite no puede ser anterior a la detectada', true); return; }
+
+  const data = {
+    equipo_id: equipoId,
+    descripcion,
+    detectada_por: document.getElementById('d-quien').value.trim() || null,
+    critica: document.getElementById('d-critica').checked,
+    fecha_limite: limite
+  };
+
+  try {
+    if (defActual) {
+      const { error } = await sb.from('mant_deficiencias').update(data).eq('id', defActual.id);
+      if (error) throw error;
+      toast('✓ Deficiencia actualizada');
+    } else {
+      data.fecha_detectada = fecha;
+      // anio y numero los asigna la base (trigger mant_deficiencias_numerar)
+      const { data: nueva, error } = await sb.from('mant_deficiencias').insert(data).select().single();
+      if (error) throw error;
+      toast(`✓ Deficiencia ${numeroDef(nueva)} registrada`);
+    }
+    cerrarModalDef();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function abrirModalDefCerrar(id) {
+  defActual = deficiencias.find(d => d.id === id);
+  if (!defActual) return;
+  document.getElementById('modal-def-cerrar-info').innerHTML =
+    `<strong>${numeroDef(defActual)} · ${escape(nombreEquipoDef(defActual))}</strong> — ${escape(defActual.descripcion)}`;
+  document.getElementById('dc-fecha').value = hoyLocalISO();
+  document.getElementById('dc-accion').value = '';
+  document.getElementById('modal-def-cerrar').classList.add('show');
+}
+
+function cerrarModalDefCerrar() {
+  document.getElementById('modal-def-cerrar').classList.remove('show');
+  defActual = null;
+}
+
+async function guardarCierreDef() {
+  if (!defActual) return;
+  const fecha = document.getElementById('dc-fecha').value;
+  const accion = document.getElementById('dc-accion').value.trim();
+  if (!fecha) { toast('Falta la fecha de cierre', true); return; }
+  if (!accion) { toast('Falta la acción realizada', true); return; }
+  if (fecha < defActual.fecha_detectada) { toast('La fecha de cierre no puede ser anterior a la detectada', true); return; }
+  try {
+    const { error } = await sb.from('mant_deficiencias')
+      .update({ estado: 'cerrada', fecha_cierre: fecha, accion_realizada: accion })
+      .eq('id', defActual.id);
+    if (error) throw error;
+    toast(`✓ Deficiencia ${numeroDef(defActual)} cerrada`);
+    cerrarModalDefCerrar();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function exportarDefExcel() {
+  if (!deficiencias.length) { toast('No hay deficiencias para exportar'); return; }
+  const data = deficiencias.map(d => ({
+    'N°': numeroDef(d),
+    Equipo: nombreEquipoDef(d),
+    Descripción: d.descripcion,
+    'Fecha detectada': d.fecha_detectada,
+    'Detectada por': d.detectada_por,
+    Crítica: d.critica ? 'Sí' : 'No',
+    'Fecha límite': d.fecha_limite,
+    Estado: d.estado === 'abierta' ? 'Abierta' : 'Cerrada',
+    Vencida: defVencida(d) ? 'Sí' : 'No',
+    'Fecha de cierre': d.fecha_cierre,
+    'Acción realizada': d.accion_realizada
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Deficiencias');
+  XLSX.writeFile(wb, `Deficiencias_Santa_Lucia_${hoyLocalISO()}.xlsx`);
+  toast('✓ Excel descargado');
+}
+
 // ============ EXPORTAR EXCEL ============
 function exportarExcel() {
   const data = tareas.map(t => {
@@ -2984,6 +3362,11 @@ llenarSelectoresTipoTrabajo();
 ['eq-buscador','eq-filtro-cat','eq-filtro-estado'].forEach(id => {
   document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderEquipos);
 });
+['def-buscador','def-filtro-estado'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderDeficiencias);
+});
+document.getElementById('modal-def').addEventListener('click', e => { if (e.target.id === 'modal-def') cerrarModalDef(); });
+document.getElementById('modal-def-cerrar').addEventListener('click', e => { if (e.target.id === 'modal-def-cerrar') cerrarModalDefCerrar(); });
 document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
 document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });
