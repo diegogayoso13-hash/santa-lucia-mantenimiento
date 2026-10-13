@@ -22,7 +22,7 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 
 ### Data flow
 
-- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`). Only active rows are loaded for `mant_tareas` (`activa = true`) and `mant_equipos` (`activo = true`) — equipment is soft-deleted, never hard-deleted.
+- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`). Only active rows are loaded for `mant_tareas` (`activa = true`), `mant_equipos` and `mant_certificados` (`activo = true`) — equipment and certificates are soft-deleted, never hard-deleted.
 - `renderTodo()` re-renders every section from those in-memory arrays. There's no reactive framework: after any mutation (save/delete), code calls `cargarTodo()` again (or manually patches the array + calls the relevant `renderX()`), not a diffing re-render.
 - Tab switching (`cambiarTab`) just toggles `.active` on `<section>` elements — all tabs are already in the DOM, nothing is lazy-loaded.
 
@@ -60,6 +60,15 @@ Don't confuse it with `#nt-tipo` in the "Agregar tarea" modal, which is the hour
 - **UI:** open first (critical first, then by deadline), closed by most recent close date; tab badge with the open count; Dashboard stat card "Deficiencias abiertas" plus a banner when any are overdue or critical; separate Excel export (`exportarDefExcel()`).
 - Loaded with an embed so names survive equipment soft-deletes: `select('*, equipo:mant_equipos(nombre)')`; use `nombreEquipoDef(d)` to display it.
 
+### Certificados tab
+
+`mant_certificados` tracks the vessel's certificates and their expiry (section `============ CERTIFICADOS ============`):
+
+- **Status:** `estadoCert(c)` → `VENCIDO` if `fecha_vencimiento` is before today (the expiry day itself is still valid), `PROXIMO` if within `dias_aviso` days (default 30, `DIAS_AVISO_CERT`), else `OK`. Derived, never stored.
+- **Categories:** `categoria` is check-constrained (`mant_certificados_categoria_check`) and mirrored in the JS constant `CATEGORIAS_CERT` — **adding one means updating both**. `departamento` is `'Cubierta'` or `'Máquinas'`.
+- **Renewal:** always through the RPC `mant_certificados_renovar(p_id, p_fecha_renovacion, p_vencimiento_nuevo, p_notas)` (`sb.rpc`), which inserts the `mant_certificados_historial` row and updates `fecha_vencimiento` in one transaction, taking `vencimiento_anterior` from the stored row and rejecting a new expiry that isn't later. It's `security invoker`, so RLS applies. Editing `fecha_vencimiento` directly in the edit modal is for corrections and leaves no history.
+- **UI:** list sorted by expiry, filters by department/category, tab badge with vencidos + por vencer; the edit modal lists the renewal history and has "Dar de baja" (`activo = false`, no hard delete); clickable Dashboard banner; `exportarCertExcel()` writes two sheets (Certificados, Renovaciones). History is loaded with `select('*, certificado:mant_certificados(nombre)')` so names survive soft-deletes.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -70,15 +79,17 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 ## Database schema
 
-`docs/esquema.sql` documents all ten `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-13 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
+`docs/esquema.sql` documents all twelve `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-13 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
 
 - `mant_buque` — single row of vessel particulars.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
 - `mant_lecturas_horas` — `equipo` (text name), `fecha`, `horas_mes`, `hrs_total`.
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.
+- `mant_certificados` — `nombre`, `categoria`, `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
+- `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable). `unidad` also allows `'ninguna'`.
 
-Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`.
+Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`, and Auth's leaked password protection is disabled.
 
 ## Conventions
 

@@ -219,6 +219,10 @@
   .task-card.cerrada { border-left-color: var(--verde); opacity: 0.85; }
   .cerrada .estado-icon { background: #dbf0e3; }
   .def-acciones { display: flex; flex-direction: column; gap: 6px; }
+  .cert-historial { margin: 6px 0 4px; max-height: 180px; overflow-y: auto; border: 1px solid var(--gris-2); border-radius: 8px; }
+  .cert-historial .fila { padding: 8px 10px; font-size: 12.5px; border-bottom: 1px solid var(--gris-2); }
+  .cert-historial .fila:last-child { border-bottom: none; }
+  .cert-historial .fila .notas { color: var(--texto-suave); margin-top: 2px; }
 
   .estado-icon {
     width: 36px; height: 36px;
@@ -522,6 +526,8 @@
     .task-card { grid-template-columns: auto 1fr; gap: 10px; padding: 12px 14px; }
     .task-card .proxima-box { grid-column: 2; justify-self: start; text-align: left; min-width: 0; margin-top: 4px; }
     .task-card .btn { grid-column: 1 / -1; justify-self: stretch; margin-top: 6px; }
+    .task-card .def-acciones { grid-column: 1 / -1; flex-direction: row; }
+    .task-card .def-acciones .btn { flex: 1; margin-top: 0; }
     .task-card .proxima-box .valor { font-size: 17px; }
     .task-info .equipo { font-size: 14px; }
     .task-info .tarea { font-size: 12.5px; }
@@ -820,6 +826,7 @@
     <button class="tab" data-tab="equipos">🚢 Equipos</button>
     <button class="tab" data-tab="tareas">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="deficiencias">⚠️ Deficiencias <span id="badge-deficiencias" class="badge" style="display:none">0</span></button>
+    <button class="tab" data-tab="certificados">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="carga">⏱️ Cargar Horas</button>
     <button class="tab" data-tab="stock">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
     <button class="tab" data-tab="herramientas">🔧 Herramientas</button>
@@ -1021,6 +1028,25 @@
       </select>
     </div>
     <div class="task-list" id="def-lista"></div>
+  </section>
+
+  <!-- CERTIFICADOS -->
+  <section class="section" id="sec-certificados">
+    <h2 class="panel-titulo">Certificados del barco</h2>
+    <div class="acciones-globales">
+      <button class="btn" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn btn-acento" onclick="exportarCertExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="cert-buscador" placeholder="🔎 Buscar certificado...">
+      <select id="cert-filtro-depto">
+        <option value="">Todos los departamentos</option>
+        <option value="Cubierta">Cubierta</option>
+        <option value="Máquinas">Máquinas</option>
+      </select>
+      <select id="cert-filtro-cat"></select>
+    </div>
+    <div class="task-list" id="cert-lista"></div>
   </section>
 
   <!-- HERRAMIENTAS -->
@@ -1416,6 +1442,80 @@
   </div>
 </div>
 
+<!-- MODAL: agregar/editar certificado -->
+<div class="modal-bg" id="modal-cert">
+  <div class="modal">
+    <h2 id="modal-cert-titulo">Agregar certificado</h2>
+    <div class="modal-sub">Datos del certificado y su vencimiento</div>
+    <div class="field">
+      <label>Nombre *</label>
+      <input type="text" id="c-nombre" placeholder="ej: Certificado de navegabilidad">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Categoría *</label>
+        <select id="c-categoria"></select>
+      </div>
+      <div>
+        <label>Departamento *</label>
+        <select id="c-departamento">
+          <option value="Cubierta">Cubierta</option>
+          <option value="Máquinas">Máquinas</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Fecha de vencimiento *</label>
+        <input type="date" id="c-vencimiento">
+      </div>
+      <div>
+        <label>Días de aviso *</label>
+        <input type="number" id="c-dias-aviso" min="0" step="1">
+      </div>
+    </div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="c-observaciones" rows="2"></textarea>
+    </div>
+    <div id="c-historial-box" style="display:none">
+      <label style="font-weight:600;font-size:13px">Historial de renovaciones</label>
+      <div id="c-historial" class="cert-historial"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="c-btn-baja" onclick="darDeBajaCert()" style="margin-right:auto;color:var(--rojo)">🗑️ Dar de baja</button>
+      <button class="btn btn-sec" onclick="cerrarModalCert()">Cancelar</button>
+      <button class="btn" onclick="guardarCert()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: renovar certificado -->
+<div class="modal-bg" id="modal-cert-renovar">
+  <div class="modal">
+    <h2>Renovar certificado</h2>
+    <div class="modal-sub" id="modal-cert-renovar-info"></div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Fecha de renovación *</label>
+        <input type="date" id="cr-fecha">
+      </div>
+      <div>
+        <label>Nuevo vencimiento *</label>
+        <input type="date" id="cr-vencimiento">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="cr-notas" rows="2" placeholder="ej: Inspección realizada por la Prefectura"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalCertRenovar()">Cancelar</button>
+      <button class="btn" onclick="guardarRenovacionCert()">✓ Renovar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: agregar/editar herramienta -->
 <div class="modal-bg" id="modal-herr">
   <div class="modal">
@@ -1552,6 +1652,9 @@ let buque = null;          // datos del barco (1 fila)
 let equipos = [];          // fichas de equipos
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
 let defActual = null;      // deficiencia en edición o cierre
+let certificados = [];     // certificados del barco (solo activos)
+let certHistorial = [];    // renovaciones de certificados
+let certActual = null;     // certificado en edición o renovación
 let tareaActual = null;
 let repuestoActual = null;
 let herrActual = null;
@@ -1622,7 +1725,9 @@ async function cargarTodo() {
       {data: bq, error: e6},
       {data: eq, error: e7},
       {data: lh, error: e8},
-      {data: df, error: e9}
+      {data: df, error: e9},
+      {data: ce, error: e10},
+      {data: ch, error: e11}
     ] = await Promise.all([
       sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
       sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
@@ -1632,7 +1737,9 @@ async function cargarTodo() {
       sb.from('mant_buque').select('*').limit(1),
       sb.from('mant_equipos').select('*').eq('activo', true).order('nombre'),
       sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }),
-      sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero')
+      sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero'),
+      sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento'),
+      sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
@@ -1643,6 +1750,8 @@ async function cargarTodo() {
     if (e7) throw e7;
     if (e8) throw e8;
     if (e9) throw e9;
+    if (e10) throw e10;
+    if (e11) throw e11;
     tareas = tt || [];
     historial = hh || [];
     repuestos = rr || [];
@@ -1652,6 +1761,8 @@ async function cargarTodo() {
     equipos = eq || [];
     lecturas = lh || [];
     deficiencias = df || [];
+    certificados = ce || [];
+    certHistorial = ch || [];
     renderTodo();
   } catch (err) {
     console.error(err);
@@ -1671,6 +1782,7 @@ function renderTodo() {
   renderEquipos();
   renderHoras();
   renderDeficiencias();
+  renderCertificados();
 }
 
 // ============ FILTROS ============
@@ -1757,6 +1869,23 @@ function renderDashboard() {
         <div class="text">
           <strong>${partes.join(' · ')}</strong>
           <p>Averías fuera del plan pendientes de resolver. Tocá para ver el registro de deficiencias.</p>
+        </div>
+      </div>` + banner.innerHTML;
+  }
+
+  // Certificados vencidos o por vencer
+  const nCertVencidos = certificados.filter(c => estadoCert(c) === 'VENCIDO').length;
+  const nCertPorVencer = certificados.filter(c => estadoCert(c) === 'PROXIMO').length;
+  if (nCertVencidos > 0 || nCertPorVencer > 0) {
+    const partes = [];
+    if (nCertVencidos > 0) partes.push(`${nCertVencidos} certificado${nCertVencidos>1?'s':''} vencido${nCertVencidos>1?'s':''}`);
+    if (nCertPorVencer > 0) partes.push(`${nCertPorVencer} por vencer`);
+    banner.innerHTML = `
+      <div class="alert-banner" style="${nCertVencidos > 0 ? 'background:#fde0df;' : 'border-left-color:var(--ambar);'}cursor:pointer" onclick="cambiarTab('certificados')">
+        <div class="icon">📋</div>
+        <div class="text">
+          <strong>${partes.join(' · ')}</strong>
+          <p>Certificados del barco que necesitan renovación. Tocá para ver la lista.</p>
         </div>
       </div>` + banner.innerHTML;
   }
@@ -3298,6 +3427,279 @@ function exportarDefExcel() {
   toast('✓ Excel descargado');
 }
 
+// ============ CERTIFICADOS ============
+// Las mismas opciones están en el check mant_certificados_categoria_check: si agregás una, actualizá los dos.
+const CATEGORIAS_CERT = ['Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros'];
+const DIAS_AVISO_CERT = 30;
+
+// VENCIDO si la fecha ya pasó (el día del vencimiento todavía es vigente),
+// PROXIMO si faltan dias_aviso días o menos, OK en otro caso
+function estadoCert(c) {
+  if (c.fecha_vencimiento < hoyLocalISO()) return 'VENCIDO';
+  if (diasEntre(c.fecha_vencimiento) <= c.dias_aviso) return 'PROXIMO';
+  return 'OK';
+}
+function renovacionesCert(id) {
+  return certHistorial.filter(h => h.certificado_id === id);  // ya vienen de la más reciente a la más vieja
+}
+
+function llenarSelectoresCategoriaCert() {
+  const opciones = CATEGORIAS_CERT.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  document.getElementById('cert-filtro-cat').innerHTML = '<option value="">Todas las categorías</option>' + opciones;
+  document.getElementById('c-categoria').innerHTML = opciones;
+}
+
+// Filtros activos de la pestaña (los usan la lista y el Excel)
+function filtrosCert() {
+  return {
+    buscar: (document.getElementById('cert-buscador').value || '').trim(),
+    depto: document.getElementById('cert-filtro-depto').value,
+    cat: document.getElementById('cert-filtro-cat').value
+  };
+}
+
+// Certificados que se ven en pantalla, en el mismo orden
+function certFiltrados() {
+  const { buscar, depto, cat } = filtrosCert();
+  const texto = buscar.toLowerCase();
+  return certificados
+    .filter(c => (!depto || c.departamento === depto) &&
+                 (!cat || c.categoria === cat) &&
+                 (!texto || c.nombre.toLowerCase().includes(texto) || (c.observaciones || '').toLowerCase().includes(texto)))
+    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento) || a.nombre.localeCompare(b.nombre));
+}
+
+function renderCertificados() {
+  const nAlerta = certificados.filter(c => estadoCert(c) !== 'OK').length;
+  const badge = document.getElementById('badge-certificados');
+  badge.textContent = nAlerta;
+  badge.style.display = nAlerta > 0 ? 'inline-block' : 'none';
+
+  const filtrados = certFiltrados();
+  const div = document.getElementById('cert-lista');
+  if (!filtrados.length) {
+    div.innerHTML = certificados.length
+      ? '<div class="empty"><div class="big">🔍</div>No hay certificados con esos filtros</div>'
+      : '<div class="empty"><div class="big">📋</div>No hay certificados cargados</div>';
+    return;
+  }
+  div.innerHTML = filtrados.map(renderCertCard).join('');
+}
+
+function renderCertCard(c) {
+  const est = estadoCert(c);
+  const cls = { VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
+  const icono = { VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
+  const dias = diasEntre(c.fecha_vencimiento);
+
+  let valor, unidad;
+  if (dias < 0) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencido`; }
+  else if (dias === 0) { valor = 'Hoy'; unidad = 'vence'; }
+  else { valor = dias; unidad = `día${dias!==1?'s':''} restantes`; }
+
+  const ultima = renovacionesCert(c.id)[0];
+  const ultimaHtml = ultima ? ` · Última renovación: ${fmtFecha(ultima.fecha_renovacion)}` : '';
+  const obsHtml = c.observaciones ? `<div class="obs">${escape(c.observaciones)}</div>` : '';
+
+  return `
+    <div class="task-card ${cls}">
+      <div class="estado-icon">${icono}</div>
+      <div class="task-info">
+        <div class="equipo">${escape(c.nombre)}</div>
+        <div class="tarea"><span class="badge-tipo">${escape(c.departamento)}</span>${escape(c.categoria)}</div>
+        <div class="meta">Vence: ${fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
+        ${obsHtml}
+      </div>
+      <div class="proxima-box">
+        <div class="valor">${valor}</div>
+        <div class="unidad">${unidad}</div>
+      </div>
+      <div class="def-acciones">
+        <button class="btn" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>
+        <button class="btn btn-sec btn-pequeno" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
+      </div>
+    </div>`;
+}
+
+function abrirModalCert(id) {
+  certActual = id ? certificados.find(c => c.id === id) : null;
+  const histBox = document.getElementById('c-historial-box');
+  if (certActual) {
+    document.getElementById('modal-cert-titulo').textContent = 'Editar certificado';
+    document.getElementById('c-nombre').value = certActual.nombre;
+    document.getElementById('c-categoria').value = certActual.categoria;
+    document.getElementById('c-departamento').value = certActual.departamento;
+    document.getElementById('c-vencimiento').value = certActual.fecha_vencimiento;
+    document.getElementById('c-dias-aviso').value = certActual.dias_aviso;
+    document.getElementById('c-observaciones').value = certActual.observaciones || '';
+    document.getElementById('c-btn-baja').style.display = '';
+
+    const renov = renovacionesCert(certActual.id);
+    document.getElementById('c-historial').innerHTML = renov.length
+      ? renov.map(h => `
+          <div class="fila">
+            <strong>${fmtFecha(h.fecha_renovacion)}</strong> · vencimiento ${fmtFecha(h.vencimiento_anterior)} → ${fmtFecha(h.vencimiento_nuevo)}
+            ${h.notas ? `<div class="notas">${escape(h.notas)}</div>` : ''}
+          </div>`).join('')
+      : '<div class="fila" style="color:var(--texto-suave)">Todavía no se registraron renovaciones.</div>';
+    histBox.style.display = '';
+  } else {
+    document.getElementById('modal-cert-titulo').textContent = 'Agregar certificado';
+    document.getElementById('c-nombre').value = '';
+    document.getElementById('c-categoria').value = CATEGORIAS_CERT[0];
+    document.getElementById('c-departamento').value = 'Cubierta';
+    document.getElementById('c-vencimiento').value = '';
+    document.getElementById('c-dias-aviso').value = DIAS_AVISO_CERT;
+    document.getElementById('c-observaciones').value = '';
+    document.getElementById('c-btn-baja').style.display = 'none';
+    histBox.style.display = 'none';
+  }
+  document.getElementById('modal-cert').classList.add('show');
+}
+
+function cerrarModalCert() {
+  document.getElementById('modal-cert').classList.remove('show');
+  certActual = null;
+}
+
+async function guardarCert() {
+  const nombre = document.getElementById('c-nombre').value.trim();
+  const vencimiento = document.getElementById('c-vencimiento').value;
+  const diasTxt = document.getElementById('c-dias-aviso').value.trim();
+  const dias = Number(diasTxt);
+
+  if (!nombre) { toast('Falta el nombre', true); return; }
+  if (!vencimiento) { toast('Falta la fecha de vencimiento', true); return; }
+  if (diasTxt === '' || !Number.isInteger(dias) || dias < 0) { toast('Los días de aviso tienen que ser un número entero, 0 o más', true); return; }
+
+  const data = {
+    nombre,
+    categoria: document.getElementById('c-categoria').value,
+    departamento: document.getElementById('c-departamento').value,
+    fecha_vencimiento: vencimiento,
+    dias_aviso: dias,
+    observaciones: document.getElementById('c-observaciones').value.trim() || null
+  };
+
+  try {
+    if (certActual) {
+      const { error } = await sb.from('mant_certificados').update(data).eq('id', certActual.id);
+      if (error) throw error;
+      toast('✓ Certificado actualizado');
+    } else {
+      const { error } = await sb.from('mant_certificados').insert(data);
+      if (error) throw error;
+      toast('✓ Certificado agregado');
+    }
+    cerrarModalCert();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// Nunca se borra (se pierde el historial): se marca activo = false
+async function darDeBajaCert() {
+  if (!certActual) return;
+  if (!confirm(`¿Dar de baja "${certActual.nombre}"?\n\nDeja de aparecer en la lista y en las alertas. El historial de renovaciones se conserva en la base.`)) return;
+  try {
+    const { error } = await sb.from('mant_certificados').update({ activo: false }).eq('id', certActual.id);
+    if (error) throw error;
+    toast('✓ Certificado dado de baja');
+    cerrarModalCert();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+function abrirModalCertRenovar(id) {
+  certActual = certificados.find(c => c.id === id);
+  if (!certActual) return;
+  document.getElementById('modal-cert-renovar-info').innerHTML =
+    `<strong>${escape(certActual.nombre)}</strong> — vence actualmente el ${fmtFecha(certActual.fecha_vencimiento)}`;
+  document.getElementById('cr-fecha').value = hoyLocalISO();
+  document.getElementById('cr-vencimiento').value = '';
+  document.getElementById('cr-notas').value = '';
+  document.getElementById('modal-cert-renovar').classList.add('show');
+}
+
+function cerrarModalCertRenovar() {
+  document.getElementById('modal-cert-renovar').classList.remove('show');
+  certActual = null;
+}
+
+async function guardarRenovacionCert() {
+  if (!certActual) return;
+  const fecha = document.getElementById('cr-fecha').value;
+  const vencimiento = document.getElementById('cr-vencimiento').value;
+  if (!fecha) { toast('Falta la fecha de renovación', true); return; }
+  if (!vencimiento) { toast('Falta el nuevo vencimiento', true); return; }
+  if (vencimiento <= certActual.fecha_vencimiento) { toast('El nuevo vencimiento tiene que ser posterior al actual', true); return; }
+  try {
+    // Historial + nuevo vencimiento en una sola transacción (función mant_certificados_renovar)
+    const { error } = await sb.rpc('mant_certificados_renovar', {
+      p_id: certActual.id,
+      p_fecha_renovacion: fecha,
+      p_vencimiento_nuevo: vencimiento,
+      p_notas: document.getElementById('cr-notas').value.trim() || null
+    });
+    if (error) throw error;
+    toast(`✓ ${certActual.nombre} renovado hasta el ${fmtFecha(vencimiento)}`);
+    cerrarModalCertRenovar();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// Exporta solo lo que se ve en pantalla según los filtros activos
+function exportarCertExcel() {
+  const filtrados = certFiltrados();
+  if (!filtrados.length) {
+    toast(certificados.length ? 'No hay certificados con esos filtros para exportar' : 'No hay certificados para exportar');
+    return;
+  }
+  const nombreEstado = { VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
+  const hoja = filtrados.map(c => ({
+      Certificado: c.nombre,
+      Categoría: c.categoria,
+      Departamento: c.departamento,
+      Vencimiento: c.fecha_vencimiento,
+      'Días restantes': diasEntre(c.fecha_vencimiento),
+      Estado: nombreEstado[estadoCert(c)],
+      'Días de aviso': c.dias_aviso,
+      'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
+      Observaciones: c.observaciones
+    }));
+  // Solo las renovaciones de los certificados exportados
+  const ids = new Set(filtrados.map(c => c.id));
+  const renov = certHistorial.filter(h => ids.has(h.certificado_id)).map(h => ({
+    Certificado: h.certificado?.nombre || `(id ${h.certificado_id})`,
+    'Fecha de renovación': h.fecha_renovacion,
+    'Vencimiento anterior': h.vencimiento_anterior,
+    'Vencimiento nuevo': h.vencimiento_nuevo,
+    Notas: h.notas
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Certificados');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Certificado: 'Sin renovaciones registradas' }]), 'Renovaciones');
+  // El nombre indica los filtros: Certificados_Santa_Lucia_Cubierta_Navegabilidad_busqueda-radio_2026-10-13.xlsx
+  const { buscar, depto, cat } = filtrosCert();
+  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
+  const partes = ['Certificados_Santa_Lucia'];
+  if (depto) partes.push(limpiar(depto));
+  if (cat) partes.push(limpiar(cat));
+  const busqueda = limpiar(buscar).slice(0, 30);
+  if (busqueda) partes.push('busqueda-' + busqueda);
+  partes.push(hoyLocalISO());
+  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  toast('✓ Excel descargado');
+}
+
 // ============ EXPORTAR EXCEL ============
 function exportarExcel() {
   const data = tareas.map(t => {
@@ -3367,6 +3769,12 @@ llenarSelectoresTipoTrabajo();
 });
 document.getElementById('modal-def').addEventListener('click', e => { if (e.target.id === 'modal-def') cerrarModalDef(); });
 document.getElementById('modal-def-cerrar').addEventListener('click', e => { if (e.target.id === 'modal-def-cerrar') cerrarModalDefCerrar(); });
+llenarSelectoresCategoriaCert();
+['cert-buscador','cert-filtro-depto','cert-filtro-cat'].forEach(id => {
+  document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderCertificados);
+});
+document.getElementById('modal-cert').addEventListener('click', e => { if (e.target.id === 'modal-cert') cerrarModalCert(); });
+document.getElementById('modal-cert-renovar').addEventListener('click', e => { if (e.target.id === 'modal-cert-renovar') cerrarModalCertRenovar(); });
 document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
 document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });

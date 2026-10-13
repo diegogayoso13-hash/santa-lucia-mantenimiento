@@ -194,7 +194,36 @@ CREATE TABLE public.mant_deficiencias (
   CHECK (estado = 'abierta' OR (fecha_cierre IS NOT NULL AND accion_realizada IS NOT NULL))
 );
 
+-- =============== CERTIFICADOS ===============
+-- Certificados del barco y sus vencimientos. No se borran: se marcan activo = false.
+-- Las categorías también están en la constante CATEGORIAS_CERT de index.html.
+CREATE TABLE public.mant_certificados (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  categoria TEXT NOT NULL CONSTRAINT mant_certificados_categoria_check
+    CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros')),
+  departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),
+  fecha_vencimiento DATE NOT NULL,
+  dias_aviso INTEGER NOT NULL DEFAULT 30 CHECK (dias_aviso >= 0),
+  observaciones TEXT,
+  activo BOOLEAN NOT NULL DEFAULT true,
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  actualizado_en TIMESTAMPTZ DEFAULT now()
+);
+
+-- Una fila por renovación; la escribe la función mant_certificados_renovar
+CREATE TABLE public.mant_certificados_historial (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  certificado_id BIGINT NOT NULL REFERENCES public.mant_certificados(id),
+  fecha_renovacion DATE NOT NULL,
+  vencimiento_anterior DATE NOT NULL,
+  vencimiento_nuevo DATE NOT NULL,
+  notas TEXT,
+  creado_en TIMESTAMPTZ DEFAULT now()
+);
+
 -- =============== ÍNDICES ===============
+CREATE INDEX idx_mant_cert_hist_certificado ON public.mant_certificados_historial (certificado_id);
 CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
 CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
 CREATE INDEX idx_mant_tareas_activa ON public.mant_tareas (activa);
@@ -238,6 +267,46 @@ CREATE TRIGGER mant_herramientas_update_timestamp BEFORE UPDATE ON public.mant_h
   FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
 CREATE TRIGGER mant_repuestos_update_timestamp BEFORE UPDATE ON public.mant_repuestos
   FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+CREATE TRIGGER trg_mant_certificados_upd BEFORE UPDATE ON public.mant_certificados
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+
+-- Renovación atómica de un certificado: guarda el historial y actualiza el vencimiento en la misma
+-- transacción. El vencimiento anterior se toma de la fila guardada. SECURITY INVOKER: RLS aplica.
+CREATE OR REPLACE FUNCTION public.mant_certificados_renovar(
+  p_id BIGINT,
+  p_fecha_renovacion DATE,
+  p_vencimiento_nuevo DATE,
+  p_notas TEXT DEFAULT NULL
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_anterior DATE;
+BEGIN
+  SELECT fecha_vencimiento INTO v_anterior
+    FROM public.mant_certificados
+   WHERE id = p_id AND activo
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Certificado no encontrado';
+  END IF;
+  IF p_fecha_renovacion IS NULL OR p_vencimiento_nuevo IS NULL THEN
+    RAISE EXCEPTION 'Faltan la fecha de renovación o el nuevo vencimiento';
+  END IF;
+  IF p_vencimiento_nuevo <= v_anterior THEN
+    RAISE EXCEPTION 'El nuevo vencimiento debe ser posterior al actual (%)', v_anterior;
+  END IF;
+  INSERT INTO public.mant_certificados_historial
+    (certificado_id, fecha_renovacion, vencimiento_anterior, vencimiento_nuevo, notas)
+  VALUES (p_id, p_fecha_renovacion, v_anterior, p_vencimiento_nuevo, nullif(trim(p_notas), ''));
+  UPDATE public.mant_certificados SET fecha_vencimiento = p_vencimiento_nuevo WHERE id = p_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.mant_certificados_renovar(BIGINT, DATE, DATE, TEXT) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.mant_certificados_renovar(BIGINT, DATE, DATE, TEXT) TO authenticated;
 
 -- Numeración consecutiva de deficiencias por año (según fecha_detectada)
 CREATE OR REPLACE FUNCTION public.mant_deficiencias_numerar()
@@ -271,6 +340,8 @@ ALTER TABLE public.mant_tarea_repuestos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_herramientas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_lecturas_horas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_deficiencias ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_certificados ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_certificados_historial ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "mant_buque_owner" ON public.mant_buque
   FOR ALL TO authenticated
@@ -318,6 +389,16 @@ CREATE POLICY "mant_lecturas_horas_owner" ON public.mant_lecturas_horas
   WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
 
 CREATE POLICY "mant_deficiencias_owner" ON public.mant_deficiencias
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_certificados_owner" ON public.mant_certificados
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_certificados_historial_owner" ON public.mant_certificados_historial
   FOR ALL TO authenticated
   USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
   WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
