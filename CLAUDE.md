@@ -70,9 +70,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 ## Database schema
 
-`docs/esquema.sql` documents the original `mant_*` tables (`mant_tareas`, `mant_historial`, `mant_repuestos`, `mant_movimientos`, `mant_tarea_repuestos`, `mant_herramientas`) with RLS restricting access to one owner email via `auth.jwt() ->> 'email'`.
-
-**`docs/esquema.sql` is out of date.** The live project has changed since; check it directly via the Supabase MCP tools rather than trusting the SQL file. Not in the file:
+`docs/esquema.sql` documents all ten `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-13 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
 
 - `mant_buque` — single row of vessel particulars.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
@@ -80,7 +78,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable). `unidad` also allows `'ninguna'`.
 
-Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors.
+Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`.
 
 ## Conventions
 

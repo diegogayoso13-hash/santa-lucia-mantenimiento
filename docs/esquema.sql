@@ -1,11 +1,84 @@
 -- Esquema de la base de datos en Supabase
 -- Proyecto: B/M Santa Lucía - Plan de Mantenimiento
 -- Todas las tablas usan prefijo mant_ y tienen RLS activado
+-- Refleja la base en producción al 2026-10-13. Si hay dudas, la fuente de verdad es el proyecto en Supabase.
+
+-- =============== BUQUE (una sola fila) ===============
+CREATE TABLE public.mant_buque (
+  id SERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL DEFAULT 'B/M Santa Lucía',
+  tipo TEXT,
+  astillero TEXT,
+  pais_origen TEXT,
+  anio_construccion INTEGER,
+  fecha_botadura TEXT,
+  casco_nro TEXT,
+  registro_nro TEXT,
+  matricula TEXT,
+  senal_distintiva TEXT,
+  bandera TEXT DEFAULT 'Uruguay',
+  eslora_m NUMERIC,
+  eslora_total_m NUMERIC,
+  eslora_zdl_m NUMERIC,
+  manga_m NUMERIC,
+  puntal_m NUMERIC,
+  calado_min_m NUMERIC,
+  calado_max_m NUMERIC,
+  capacidad_dw_t NUMERIC,
+  velocidad_nudos NUMERIC,
+  sobre_estacas_t NUMERIC,
+  tonelaje_total_t NUMERIC,
+  desplazamiento_tm NUMERIC,
+  trb NUMERIC,
+  trn NUMERIC,
+  rango_accion_millas NUMERIC,
+  material_casco TEXT,
+  tipo_navegacion TEXT,
+  clase_buque TEXT,
+  clase_maquina TEXT,
+  notas TEXT,
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  actualizado_en TIMESTAMPTZ DEFAULT now()
+);
+
+-- =============== EQUIPOS (fichas) ===============
+-- Los equipos no se borran: se marcan activo = false.
+CREATE TABLE public.mant_equipos (
+  id SERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  categoria TEXT,
+  cantidad INTEGER DEFAULT 1,
+  ubicacion_abordo TEXT,
+  fabricante TEXT,
+  modelo TEXT,
+  numero_serie TEXT,
+  anio_fab INTEGER,
+  anio_instalacion INTEGER,
+  datos_tecnicos TEXT,
+  potencia_kw NUMERIC,
+  potencia_hp NUMERIC,
+  consumo_lh NUMERIC,
+  rpm_nominal INTEGER,
+  voltaje TEXT,
+  amperaje TEXT,
+  combustible TEXT,
+  tipo_refrigeracion TEXT,
+  aceite_tipo TEXT,
+  capacidad_aceite_l NUMERIC,
+  proveedor_local TEXT,
+  estado TEXT DEFAULT 'Operativo',
+  notas TEXT,
+  activo BOOLEAN DEFAULT true,
+  critico BOOLEAN NOT NULL DEFAULT false,   -- su falla genera riesgo de seguridad
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  actualizado_en TIMESTAMPTZ DEFAULT now()
+);
 
 -- =============== TAREAS DE MANTENIMIENTO ===============
 CREATE TABLE public.mant_tareas (
   id BIGSERIAL PRIMARY KEY,
-  equipo TEXT NOT NULL,
+  equipo TEXT NOT NULL,                     -- nombre del equipo (texto libre; filtros y carga de horas usan esto)
+  equipo_id INTEGER REFERENCES public.mant_equipos(id) ON DELETE SET NULL,
   tarea TEXT NOT NULL,
   periodicidad TEXT,
   unidad TEXT CHECK (unidad IN ('hrs', 'fecha', 'ninguna')) DEFAULT 'hrs',
@@ -15,6 +88,11 @@ CREATE TABLE public.mant_tareas (
   proxima_hrs NUMERIC,
   proxima_fecha DATE,
   prioridad TEXT CHECK (prioridad IN ('ALTA', 'MEDIA', 'BAJA')) DEFAULT 'MEDIA',
+  -- Tipo de trabajo del plan de mantenimiento (descripciones en TIPOS_TRABAJO en index.html):
+  -- I Inspección, IL Inspección con toma de luces, O Overhauling, OH Overhaul completo, L Limpieza,
+  -- T Chequeo/Test, R Reemplazo, A Análisis, MT Chequeo con Megger, E Engrase/Lubricación
+  tipo_trabajo TEXT CONSTRAINT mant_tareas_tipo_trabajo_check
+    CHECK (tipo_trabajo IN ('I', 'IL', 'O', 'OH', 'L', 'T', 'R', 'A', 'MT', 'E')),
   realizado_por TEXT,
   estado_op TEXT DEFAULT 'Operativo',
   observaciones TEXT,
@@ -83,20 +161,163 @@ CREATE TABLE public.mant_herramientas (
   actualizado_en TIMESTAMPTZ DEFAULT now()
 );
 
+-- =============== LECTURAS DE HORAS (histórico mensual) ===============
+-- Una fila por equipo cada vez que se guardan las horas del mes (pestaña Cargar Horas).
+-- Se identifica el equipo por NOMBRE, no por id.
+CREATE TABLE public.mant_lecturas_horas (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  equipo TEXT NOT NULL,
+  fecha DATE NOT NULL,
+  horas_mes NUMERIC,                        -- horas sumadas en el mes
+  hrs_total NUMERIC,                        -- horas acumuladas del equipo
+  creado_en TIMESTAMPTZ DEFAULT now()
+);
+
+-- =============== DEFICIENCIAS ===============
+-- Averías o fallas detectadas fuera del mantenimiento planificado.
+-- Número consecutivo por año (2026-001, 2026-002...), asignado por el trigger mant_deficiencias_numerar.
+CREATE TABLE public.mant_deficiencias (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  anio INT NOT NULL,                        -- lo completa el trigger (año de fecha_detectada)
+  numero INT NOT NULL,                      -- lo completa el trigger (último del año + 1)
+  equipo_id INT NOT NULL REFERENCES public.mant_equipos(id),
+  descripcion TEXT NOT NULL,
+  fecha_detectada DATE NOT NULL DEFAULT current_date,
+  detectada_por TEXT,
+  critica BOOLEAN NOT NULL DEFAULT false,
+  fecha_limite DATE NOT NULL,               -- la app propone +7 días si es crítica, +60 si no
+  estado TEXT NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta', 'cerrada')),
+  fecha_cierre DATE,
+  accion_realizada TEXT,
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (anio, numero),
+  CHECK (estado = 'abierta' OR (fecha_cierre IS NOT NULL AND accion_realizada IS NOT NULL))
+);
+
+-- =============== ÍNDICES ===============
+CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
+CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
+CREATE INDEX idx_mant_tareas_activa ON public.mant_tareas (activa);
+CREATE INDEX idx_mant_tareas_equipo ON public.mant_tareas (equipo);
+CREATE INDEX idx_mant_tareas_equipo_id ON public.mant_tareas (equipo_id);
+CREATE INDEX idx_mant_historial_fecha ON public.mant_historial (fecha_realizado DESC);
+CREATE INDEX idx_mant_historial_tarea ON public.mant_historial (tarea_id);
+CREATE INDEX idx_mant_repuestos_categoria ON public.mant_repuestos (categoria);
+CREATE INDEX idx_mant_repuestos_subcategoria ON public.mant_repuestos (subcategoria);
+CREATE INDEX idx_mant_mov_fecha ON public.mant_movimientos (fecha DESC);
+CREATE INDEX idx_mant_mov_repuesto ON public.mant_movimientos (repuesto_id);
+CREATE INDEX idx_mant_tarea_rep_repuesto ON public.mant_tarea_repuestos (repuesto_id);
+CREATE INDEX idx_mant_tarea_rep_tarea ON public.mant_tarea_repuestos (tarea_id);
+CREATE INDEX idx_mant_herr_ubicacion ON public.mant_herramientas (ubicacion);
+
+-- =============== FUNCIONES Y TRIGGERS ===============
+-- Fecha de última modificación (mant_tareas usa "actualizada_en"; el resto "actualizado_en")
+CREATE OR REPLACE FUNCTION public.mant_update_timestamp()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.actualizada_en = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mant_update_timestamp_masc()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.actualizado_en = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER mant_tareas_update_timestamp BEFORE UPDATE ON public.mant_tareas
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp();
+CREATE TRIGGER trg_mant_buque_upd BEFORE UPDATE ON public.mant_buque
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+CREATE TRIGGER trg_mant_equipos_upd BEFORE UPDATE ON public.mant_equipos
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+CREATE TRIGGER mant_herramientas_update_timestamp BEFORE UPDATE ON public.mant_herramientas
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+CREATE TRIGGER mant_repuestos_update_timestamp BEFORE UPDATE ON public.mant_repuestos
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+
+-- Numeración consecutiva de deficiencias por año (según fecha_detectada)
+CREATE OR REPLACE FUNCTION public.mant_deficiencias_numerar()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.anio := extract(year FROM NEW.fecha_detectada)::int;
+  PERFORM pg_advisory_xact_lock(hashtext('mant_deficiencias'), NEW.anio);
+  SELECT coalesce(max(numero), 0) + 1 INTO NEW.numero
+    FROM public.mant_deficiencias WHERE anio = NEW.anio;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER mant_deficiencias_numerar BEFORE INSERT ON public.mant_deficiencias
+  FOR EACH ROW EXECUTE FUNCTION public.mant_deficiencias_numerar();
+
 -- =============== ROW LEVEL SECURITY ===============
 -- Política: SOLO el usuario propietario (por email) puede acceder a las tablas mant_*
 -- Reemplazá 'tu-email@ejemplo.com' por tu email real de Supabase
 
+ALTER TABLE public.mant_buque ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_equipos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_tareas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_historial ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_repuestos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_movimientos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_tarea_repuestos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_herramientas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_lecturas_horas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_deficiencias ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "mant_buque_owner" ON public.mant_buque
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_equipos_owner" ON public.mant_equipos
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
 
 CREATE POLICY "mant_tareas_owner" ON public.mant_tareas
   FOR ALL TO authenticated
   USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
   WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
 
--- (Repetir el bloque CREATE POLICY para cada tabla mant_*)
+CREATE POLICY "mant_historial_owner" ON public.mant_historial
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_repuestos_owner" ON public.mant_repuestos
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_movimientos_owner" ON public.mant_movimientos
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_tarea_repuestos_owner" ON public.mant_tarea_repuestos
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_herramientas_owner" ON public.mant_herramientas
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_lecturas_horas_owner" ON public.mant_lecturas_horas
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_deficiencias_owner" ON public.mant_deficiencias
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
