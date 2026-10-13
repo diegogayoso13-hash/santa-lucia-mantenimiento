@@ -229,6 +229,18 @@
 
   .task-info .equipo { font-weight: 600; font-size: 14.5px; color: var(--azul-profundo); }
   .task-info .tarea { font-size: 13px; color: var(--texto); margin-top: 1px; }
+  .badge-tipo {
+    display: inline-block;
+    background: #e3ebf3;
+    color: var(--azul-profundo);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
   .task-info .meta { font-size: 11.5px; color: var(--texto-suave); margin-top: 4px; letter-spacing: 0.01em; }
   .task-info .obs { font-size: 11.5px; color: #a8651a; font-style: italic; margin-top: 3px; }
 
@@ -888,6 +900,7 @@
         <option value="OK">🟢 Al día</option>
         <option value="SIN_DATO">⚪ Sin datos</option>
       </select>
+      <select id="filtro-tipo-trabajo"></select>
       <label class="toolbar-check"><input type="checkbox" id="filtro-critico"> ⚠️ Solo críticos</label>
     </div>
     <div class="task-list" id="lista"></div>
@@ -1042,6 +1055,13 @@
     <div class="field">
       <label>Notas / observaciones</label>
       <textarea id="m-notas" rows="2" placeholder="Algo a destacar..."></textarea>
+    </div>
+    <div class="field">
+      <label>Tipo de trabajo</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="m-tipo-trabajo" class="sel-tipo-trabajo" style="flex:1"></select>
+        <button type="button" class="btn btn-pequeno btn-sec" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="borrarTareaActual()" style="margin-right:auto;background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
@@ -1359,6 +1379,10 @@
       <input type="text" id="nt-tarea" placeholder="ej: Cambio de filtro de aceite">
     </div>
     <div class="field">
+      <label>Tipo de trabajo</label>
+      <select id="nt-tipo-trabajo" class="sel-tipo-trabajo"></select>
+    </div>
+    <div class="field">
       <label>¿Cómo se controla?</label>
       <select id="nt-tipo" onchange="toggleTipoTarea()">
         <option value="hrs">Por horas del equipo</option>
@@ -1650,6 +1674,29 @@ function irATareas(estado) {
 }
 
 // ============ LISTA DE TAREAS ============
+// Tipos de trabajo del plan de mantenimiento (se guarda el código en mant_tareas.tipo_trabajo)
+const TIPOS_TRABAJO = {
+  I: 'Inspección',
+  IL: 'Inspección con toma de luces',
+  O: 'Overhauling',
+  OH: 'Overhaul completo',
+  L: 'Limpieza',
+  T: 'Chequeo/Test',
+  R: 'Reemplazo',
+  A: 'Análisis',
+  MT: 'Chequeo con Megger',
+  E: 'Engrase/Lubricación'
+};
+
+function llenarSelectoresTipoTrabajo() {
+  const opciones = Object.entries(TIPOS_TRABAJO).map(([cod, desc]) => `<option value="${cod}">[${cod}] ${desc}</option>`).join('');
+  document.querySelectorAll('.sel-tipo-trabajo').forEach(sel => {
+    sel.innerHTML = '<option value="">— Sin tipo —</option>' + opciones;
+  });
+  document.getElementById('filtro-tipo-trabajo').innerHTML =
+    '<option value="">Todos los tipos</option>' + opciones + '<option value="SIN_TIPO">Sin tipo</option>';
+}
+
 // Una tarea es crítica si su equipo (por equipo_id) está marcado como crítico
 function esTareaCritica(t) {
   if (!t.equipo_id) return false;
@@ -1666,13 +1713,14 @@ function renderTaskCard(t) {
   const equipoHtml = t.equipo_id
     ? `<span class="equipo-clickable" onclick="event.stopPropagation();abrirFichaEquipo(${t.equipo_id})" title="Ver ficha del equipo">${escape(t.equipo)}</span>`
     : escape(t.equipo);
+  const tipoHtml = TIPOS_TRABAJO[t.tipo_trabajo] ? `<span class="badge-tipo">[${t.tipo_trabajo}] ${TIPOS_TRABAJO[t.tipo_trabajo]}</span>` : '';
   const criticoHtml = esTareaCritica(t) ? '<span class="badge-critico" title="Equipo crítico: su falla genera riesgo de seguridad">⚠️ CRÍTICO</span>' : '';
   return `
     <div class="task-card ${cls}">
       <div class="estado-icon">${iconos[est.estado]}</div>
       <div class="task-info">
         <div class="equipo">${equipoHtml}${criticoHtml}</div>
-        <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
+        <div class="tarea">${tipoHtml}${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
         ${obs}
       </div>
@@ -1690,9 +1738,12 @@ function renderLista() {
   const pri = document.getElementById('filtro-prioridad').value;
   const est = document.getElementById('filtro-estado').value;
   const soloCriticos = document.getElementById('filtro-critico').checked;
+  const tipoTrabajo = document.getElementById('filtro-tipo-trabajo').value;
 
   let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
     if (est !== 'TODOS' && t._est.estado !== est) return false;
+    if (tipoTrabajo === 'SIN_TIPO' && t.tipo_trabajo) return false;
+    if (tipoTrabajo && tipoTrabajo !== 'SIN_TIPO' && t.tipo_trabajo !== tipoTrabajo) return false;
     if (soloCriticos && !esTareaCritica(t)) return false;
     if (eq && t.equipo !== eq) return false;
     if (pri && t.prioridad !== pri) return false;
@@ -1724,6 +1775,7 @@ function abrirModal(id) {
   document.getElementById('m-hrs').value = tareaActual.hrs_totales || '';
   document.getElementById('m-quien').value = tareaActual.realizado_por || 'Maquinista';
   document.getElementById('m-notas').value = '';
+  document.getElementById('m-tipo-trabajo').value = tareaActual.tipo_trabajo || '';
   document.getElementById('modal').classList.add('show');
 }
 
@@ -1764,7 +1816,8 @@ async function guardarMant() {
 
   const update = {
     fecha_ult: fecha,
-    realizado_por: quien
+    realizado_por: quien,
+    tipo_trabajo: document.getElementById('m-tipo-trabajo').value || null
   };
   if (notas) update.observaciones = notas;
 
@@ -1806,12 +1859,32 @@ async function guardarMant() {
   }
 }
 
+// Cambia solo el tipo de trabajo, sin registrar mantenimiento ni tocar el historial
+async function guardarSoloTipo() {
+  if (!tareaActual) return;
+  const tipo = document.getElementById('m-tipo-trabajo').value || null;
+  try {
+    const { error } = await sb.from('mant_tareas').update({ tipo_trabajo: tipo }).eq('id', tareaActual.id);
+    if (error) throw error;
+    tareaActual.tipo_trabajo = tipo;
+    const t = tareas.find(x => x.id === tareaActual.id);
+    if (t) t.tipo_trabajo = tipo;
+    renderDashboard();
+    renderLista();
+    toast('✓ Tipo de trabajo actualizado');
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
 // ============ AGREGAR TAREA NUEVA ============
 function abrirModalTarea() {
   const equipos = [...new Set(tareas.map(t => t.equipo))].sort();
   document.getElementById('lista-equipos-nt').innerHTML = equipos.map(e => `<option value="${escape(e)}">`).join('');
   document.getElementById('nt-equipo').value = '';
   document.getElementById('nt-tarea').value = '';
+  document.getElementById('nt-tipo-trabajo').value = '';
   document.getElementById('nt-tipo').value = 'hrs';
   document.getElementById('nt-cada-hrs').value = '';
   document.getElementById('nt-hrs-actual').value = '';
@@ -1850,7 +1923,8 @@ async function guardarTarea() {
     equipo, tarea, prioridad,
     realizado_por: quien,
     activa: true,
-    observaciones: notas || null
+    observaciones: notas || null,
+    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null
   };
   let hrsActual = null;
 
@@ -2893,7 +2967,8 @@ function cambiarTab(name) {
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => cambiarTab(b.dataset.tab)));
 
 // Listeners filtros
-['buscador','filtro-equipo','filtro-prioridad','filtro-estado','filtro-critico'].forEach(id => {
+llenarSelectoresTipoTrabajo();
+['buscador','filtro-equipo','filtro-prioridad','filtro-estado','filtro-critico','filtro-tipo-trabajo'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener(id === 'buscador' ? 'input' : 'change', renderLista);
 });
