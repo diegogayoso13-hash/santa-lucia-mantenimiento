@@ -22,7 +22,7 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 
 ### Data flow
 
-- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`). Only active rows are loaded for `mant_tareas` (`activa = true`), `mant_equipos` and `mant_certificados` (`activo = true`) — equipment and certificates are soft-deleted, never hard-deleted.
+- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`, `tripulantes`). Only active rows are loaded for `mant_tareas` (`activa = true`), `mant_equipos` and `mant_certificados` (`activo = true`) — equipment, certificates and crew are soft-deleted, never hard-deleted. `tripulantes` is loaded in full (including inactive), and `certificados` drops the documents of inactive crew members right after loading.
 - `renderTodo()` re-renders every section from those in-memory arrays. There's no reactive framework: after any mutation (save/delete), code calls `cargarTodo()` again (or manually patches the array + calls the relevant `renderX()`), not a diffing re-render.
 - Tab switching (`cambiarTab`) just toggles `.active` on `<section>` elements — all tabs are already in the DOM, nothing is lazy-loaded.
 
@@ -62,12 +62,24 @@ Don't confuse it with `#nt-tipo` in the "Agregar tarea" modal, which is the hour
 
 ### Certificados tab
 
-`mant_certificados` tracks the vessel's certificates and their expiry (section `============ CERTIFICADOS ============`):
+`mant_certificados` tracks both the vessel's certificates and the crew's personal documents, with their expiry (section `============ CERTIFICADOS ============`):
 
+- **Ship vs crew:** a row with `tripulante_id` (→ `mant_tripulantes`) is a personal document and must have `categoria = 'Tripulación'` (`CATEGORIA_TRIP`); without it, it's a ship certificate. The table check `mant_certificados_tripulante_check` enforces that both go together. A personal document's `departamento` always comes from its crew member: the trigger `mant_certificados_depto_tripulante` overwrites it on insert/update, and `mant_tripulantes_propagar_depto` copies a crew member's department change to all their documents.
 - **Status:** `estadoCert(c)` → `VENCIDO` if `fecha_vencimiento` is before today (the expiry day itself is still valid), `PROXIMO` if within `dias_aviso` days (default 30, `DIAS_AVISO_CERT`), else `OK`. Derived, never stored.
 - **Categories:** `categoria` is check-constrained (`mant_certificados_categoria_check`) and mirrored in the JS constant `CATEGORIAS_CERT` — **adding one means updating both**. `departamento` is `'Cubierta'` or `'Máquinas'`.
-- **Renewal:** always through the RPC `mant_certificados_renovar(p_id, p_fecha_renovacion, p_vencimiento_nuevo, p_notas)` (`sb.rpc`), which inserts the `mant_certificados_historial` row and updates `fecha_vencimiento` in one transaction, taking `vencimiento_anterior` from the stored row and rejecting a new expiry that isn't later. It's `security invoker`, so RLS applies. Editing `fecha_vencimiento` directly in the edit modal is for corrections and leaves no history.
-- **UI:** list sorted by expiry, filters by department/category, tab badge with vencidos + por vencer; the edit modal lists the renewal history and has "Dar de baja" (`activo = false`, no hard delete); clickable Dashboard banner; `exportarCertExcel()` writes two sheets (Certificados, Renovaciones). History is loaded with `select('*, certificado:mant_certificados(nombre)')` so names survive soft-deletes.
+- **Renewal:** always through the RPC `mant_certificados_renovar(p_id, p_fecha_renovacion, p_vencimiento_nuevo, p_notas)` (`sb.rpc`), which inserts the `mant_certificados_historial` row and updates `fecha_vencimiento` in one transaction, taking `vencimiento_anterior` from the stored row and rejecting a new expiry that isn't later or a renewal date in the future. The future-date check in the function uses `current_date`, which is UTC and so never rejects the local "today"; the exact local check is done in `guardarRenovacionCert()`. It's `security invoker`, so RLS applies. Editing `fecha_vencimiento` directly in the edit modal is for corrections and leaves no history.
+- **UI:**
+  - Two sub-tabs, "🚢 Barco" and "👥 Tripulación". The active one is `certSolapa` (remembered in `localStorage`, key `cert-solapa`) and is switched with `cambiarSolapaCert()`.
+  - Barco: list sorted by expiry, with filters for department and category.
+  - Tripulación: one group per active crew member (`gruposTripulacion()`). Groups with something overdue come first, then upcoming, then the rest alphabetically. Filters are department and crew member, and the search box also matches the crew member's name and cargo.
+  - `filtrosCert()`/`certFiltrados()` are shared by the list and the Excel export.
+  - Adding a personal document uses the same modal (`abrirModalCert(null, tripulanteId)`). It hides category/department and suggests names from `DOCUMENTOS_TRIP`.
+  - Tab and sub-tab badges count vencidos + por vencer.
+  - The certificate edit modal lists the renewal history. Both the certificate and crew modals have "Dar de baja" (`activo = false`, no hard delete).
+  - Inactive crew members only show up when the "Mostrar dados de baja" checkbox (`#cert-mostrar-bajas`) is ticked. They're listed last, greyed out, with no documents, and they're never exported. Their crew modal shows "Reactivar" (`reactivarTrip()`) instead of "Dar de baja". Their documents are kept in `certificadosBaja` only to count them, and come back with their history once the crew member is reactivated.
+  - The Dashboard banner opens the sub-tab with the most urgent item (`irACertificados()`).
+  - `exportarCertExcel()` exports exactly what's on screen, as two sheets (Certificados or Tripulación, plus Renovaciones). The file name carries the sub-tab and the filters.
+  - History is loaded with `select('*, certificado:mant_certificados(nombre)')` so names survive soft-deletes.
 
 ### Dates
 
@@ -79,13 +91,14 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 ## Database schema
 
-`docs/esquema.sql` documents all twelve `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-13 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
+`docs/esquema.sql` documents all thirteen `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-16 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
 
 - `mant_buque` — single row of vessel particulars.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
 - `mant_lecturas_horas` — `equipo` (text name), `fecha`, `horas_mes`, `hrs_total`.
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.
-- `mant_certificados` — `nombre`, `categoria`, `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
+- `mant_tripulantes` — `nombre`, `cargo`, `departamento` (`'Cubierta'|'Máquinas'`, inherited by their documents), `activo`.
+- `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable). `unidad` also allows `'ninguna'`.
 

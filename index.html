@@ -219,6 +219,27 @@
   .task-card.cerrada { border-left-color: var(--verde); opacity: 0.85; }
   .cerrada .estado-icon { background: #dbf0e3; }
   .def-acciones { display: flex; flex-direction: column; gap: 6px; }
+  .cert-solapas { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--gris-2); }
+  .cert-solapa {
+    background: none; border: none; font: inherit; font-size: 14px; font-weight: 500;
+    padding: 10px 16px; color: var(--texto-suave); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cert-solapa.active { color: var(--azul-profundo); border-bottom-color: var(--acento); font-weight: 600; }
+  .cert-solapa .badge { background: var(--rojo); color: white; font-size: 11px; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+  .trip-grupo { margin-bottom: 18px; }
+  .trip-cabecera {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 4px; border-bottom: 2px solid var(--gris-2); margin-bottom: 8px;
+  }
+  .trip-cabecera .nombre { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--azul-profundo); }
+  .trip-cabecera .cargo { font-size: 13px; color: var(--texto-suave); }
+  .trip-cabecera .acciones { margin-left: auto; display: flex; gap: 6px; }
+  .trip-vacio { font-size: 13px; color: var(--texto-suave); padding: 4px 4px 0; }
+  .trip-grupo.baja { opacity: 0.6; }
+  .trip-grupo.baja .nombre { text-decoration: line-through; }
+  .badge-baja { display: inline-block; background: var(--gris-3); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; }
   .cert-historial { margin: 6px 0 4px; max-height: 180px; overflow-y: auto; border: 1px solid var(--gris-2); border-radius: 8px; }
   .cert-historial .fila { padding: 8px 10px; font-size: 12.5px; border-bottom: 1px solid var(--gris-2); }
   .cert-historial .fila:last-child { border-bottom: none; }
@@ -1032,9 +1053,14 @@
 
   <!-- CERTIFICADOS -->
   <section class="section" id="sec-certificados">
-    <h2 class="panel-titulo">Certificados del barco</h2>
+    <h2 class="panel-titulo">Certificados</h2>
+    <div class="cert-solapas">
+      <button class="cert-solapa" data-solapa="barco" onclick="cambiarSolapaCert('barco')">🚢 Barco <span id="badge-cert-barco" class="badge" style="display:none">0</span></button>
+      <button class="cert-solapa" data-solapa="tripulacion" onclick="cambiarSolapaCert('tripulacion')">👥 Tripulación <span id="badge-cert-trip" class="badge" style="display:none">0</span></button>
+    </div>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
       <button class="btn btn-acento" onclick="exportarCertExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1045,6 +1071,8 @@
         <option value="Máquinas">Máquinas</option>
       </select>
       <select id="cert-filtro-cat"></select>
+      <select id="cert-filtro-trip"></select>
+      <label class="toolbar-check" id="cert-bajas-label"><input type="checkbox" id="cert-mostrar-bajas"> Mostrar dados de baja</label>
     </div>
     <div class="task-list" id="cert-lista"></div>
   </section>
@@ -1446,12 +1474,13 @@
 <div class="modal-bg" id="modal-cert">
   <div class="modal">
     <h2 id="modal-cert-titulo">Agregar certificado</h2>
-    <div class="modal-sub">Datos del certificado y su vencimiento</div>
+    <div class="modal-sub" id="modal-cert-sub">Datos del certificado y su vencimiento</div>
     <div class="field">
       <label>Nombre *</label>
       <input type="text" id="c-nombre" placeholder="ej: Certificado de navegabilidad">
+      <datalist id="c-sugerencias-trip"></datalist>
     </div>
-    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="field" id="c-campos-barco" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
         <label>Categoría *</label>
         <select id="c-categoria"></select>
@@ -1486,6 +1515,37 @@
       <button class="btn btn-sec" id="c-btn-baja" onclick="darDeBajaCert()" style="margin-right:auto;color:var(--rojo)">🗑️ Dar de baja</button>
       <button class="btn btn-sec" onclick="cerrarModalCert()">Cancelar</button>
       <button class="btn" onclick="guardarCert()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: agregar/editar tripulante -->
+<div class="modal-bg" id="modal-trip">
+  <div class="modal">
+    <h2 id="modal-trip-titulo">Agregar tripulante</h2>
+    <div class="modal-sub">Sus documentos heredan el departamento</div>
+    <div class="field">
+      <label>Nombre *</label>
+      <input type="text" id="t-nombre" placeholder="ej: Juan Pérez">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Cargo</label>
+        <input type="text" id="t-cargo" placeholder="ej: Maquinista">
+      </div>
+      <div>
+        <label>Departamento *</label>
+        <select id="t-departamento">
+          <option value="Cubierta">Cubierta</option>
+          <option value="Máquinas">Máquinas</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="t-btn-baja" onclick="darDeBajaTrip()" style="margin-right:auto;color:var(--rojo)">🗑️ Dar de baja</button>
+      <button class="btn btn-sec" id="t-btn-reactivar" onclick="reactivarTrip()" style="margin-right:auto;color:var(--verde)">↩️ Reactivar</button>
+      <button class="btn btn-sec" onclick="cerrarModalTrip()">Cancelar</button>
+      <button class="btn" onclick="guardarTrip()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -1655,6 +1715,11 @@ let defActual = null;      // deficiencia en edición o cierre
 let certificados = [];     // certificados del barco (solo activos)
 let certHistorial = [];    // renovaciones de certificados
 let certActual = null;     // certificado en edición o renovación
+let tripulantes = [];      // tripulación (incluye dados de baja, para ocultar sus documentos)
+let certificadosBaja = []; // documentos de tripulantes dados de baja (no se muestran ni cuentan en alertas)
+let tripActual = null;     // tripulante en edición
+let certTripNuevo = null;  // tripulante del documento que se está agregando (null = certificado del barco)
+let certSolapa = 'barco';  // solapa activa de Certificados: 'barco' | 'tripulacion'
 let tareaActual = null;
 let repuestoActual = null;
 let herrActual = null;
@@ -1727,7 +1792,8 @@ async function cargarTodo() {
       {data: lh, error: e8},
       {data: df, error: e9},
       {data: ce, error: e10},
-      {data: ch, error: e11}
+      {data: ch, error: e11},
+      {data: tp, error: e12}
     ] = await Promise.all([
       sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
       sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
@@ -1739,7 +1805,8 @@ async function cargarTodo() {
       sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }),
       sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero'),
       sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento'),
-      sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })
+      sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false }),
+      sb.from('mant_tripulantes').select('*').order('nombre')
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
@@ -1752,6 +1819,7 @@ async function cargarTodo() {
     if (e9) throw e9;
     if (e10) throw e10;
     if (e11) throw e11;
+    if (e12) throw e12;
     tareas = tt || [];
     historial = hh || [];
     repuestos = rr || [];
@@ -1761,7 +1829,11 @@ async function cargarTodo() {
     equipos = eq || [];
     lecturas = lh || [];
     deficiencias = df || [];
-    certificados = ce || [];
+    tripulantes = tp || [];
+    // Los documentos de tripulantes dados de baja no se muestran ni cuentan en las alertas
+    const tripActivos = new Set(tripulantes.filter(t => t.activo).map(t => t.id));
+    certificados = (ce || []).filter(c => !c.tripulante_id || tripActivos.has(c.tripulante_id));
+    certificadosBaja = (ce || []).filter(c => c.tripulante_id && !tripActivos.has(c.tripulante_id));
     certHistorial = ch || [];
     renderTodo();
   } catch (err) {
@@ -1876,16 +1948,18 @@ function renderDashboard() {
   // Certificados vencidos o por vencer
   const nCertVencidos = certificados.filter(c => estadoCert(c) === 'VENCIDO').length;
   const nCertPorVencer = certificados.filter(c => estadoCert(c) === 'PROXIMO').length;
+  const nCertTrip = certificados.filter(c => c.tripulante_id && estadoCert(c) !== 'OK').length;
   if (nCertVencidos > 0 || nCertPorVencer > 0) {
     const partes = [];
     if (nCertVencidos > 0) partes.push(`${nCertVencidos} certificado${nCertVencidos>1?'s':''} vencido${nCertVencidos>1?'s':''}`);
     if (nCertPorVencer > 0) partes.push(`${nCertPorVencer} por vencer`);
+    const tripTxt = nCertTrip > 0 ? ` (${nCertTrip} de tripulación)` : '';
     banner.innerHTML = `
-      <div class="alert-banner" style="${nCertVencidos > 0 ? 'background:#fde0df;' : 'border-left-color:var(--ambar);'}cursor:pointer" onclick="cambiarTab('certificados')">
+      <div class="alert-banner" style="${nCertVencidos > 0 ? 'background:#fde0df;' : 'border-left-color:var(--ambar);'}cursor:pointer" onclick="irACertificados()">
         <div class="icon">📋</div>
         <div class="text">
-          <strong>${partes.join(' · ')}</strong>
-          <p>Certificados del barco que necesitan renovación. Tocá para ver la lista.</p>
+          <strong>${partes.join(' · ')}${tripTxt}</strong>
+          <p>Certificados del barco o de la tripulación que necesitan renovación. Tocá para ver la lista.</p>
         </div>
       </div>` + banner.innerHTML;
   }
@@ -3429,8 +3503,13 @@ function exportarDefExcel() {
 
 // ============ CERTIFICADOS ============
 // Las mismas opciones están en el check mant_certificados_categoria_check: si agregás una, actualizá los dos.
-const CATEGORIAS_CERT = ['Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros'];
+const CATEGORIAS_CERT = ['Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros', 'Tripulación'];
+// Categoría de los documentos personales: un certificado la tiene si y solo si tiene tripulante_id (check en la base)
+const CATEGORIA_TRIP = 'Tripulación';
 const DIAS_AVISO_CERT = 30;
+// Sugerencias al agregar un documento a un tripulante (se puede escribir otro)
+const DOCUMENTOS_TRIP = ['Libreta de embarque', 'Carné de salud', 'Título/Patente', 'Curso de seguridad básica', 'Pasaporte'];
+const ORDEN_ESTADO_CERT = { VENCIDO: 0, PROXIMO: 1, OK: 2 };
 
 // VENCIDO si la fecha ya pasó (el día del vencimiento todavía es vigente),
 // PROXIMO si faltan dias_aviso días o menos, OK en otro caso
@@ -3442,48 +3521,177 @@ function estadoCert(c) {
 function renovacionesCert(id) {
   return certHistorial.filter(h => h.certificado_id === id);  // ya vienen de la más reciente a la más vieja
 }
-
-function llenarSelectoresCategoriaCert() {
-  const opciones = CATEGORIAS_CERT.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
-  document.getElementById('cert-filtro-cat').innerHTML = '<option value="">Todas las categorías</option>' + opciones;
-  document.getElementById('c-categoria').innerHTML = opciones;
+function tripulanteDe(c) {
+  return c.tripulante_id ? tripulantes.find(t => t.id === c.tripulante_id) : null;
+}
+function tripulantesActivos() {
+  return tripulantes.filter(t => t.activo);
 }
 
-// Filtros activos de la pestaña (los usan la lista y el Excel)
+function llenarSelectoresCategoriaCert() {
+  const opciones = CATEGORIAS_CERT.filter(c => c !== CATEGORIA_TRIP)
+    .map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  document.getElementById('cert-filtro-cat').innerHTML = '<option value="">Todas las categorías</option>' + opciones;
+  document.getElementById('c-categoria').innerHTML = opciones;
+  document.getElementById('c-sugerencias-trip').innerHTML = DOCUMENTOS_TRIP.map(d => `<option value="${escape(d)}">`).join('');
+}
+
+// El selector de tripulantes cambia con los datos; se rearma conservando lo elegido
+function llenarFiltroTripulantes() {
+  const sel = document.getElementById('cert-filtro-trip');
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">Todos los tripulantes</option>' +
+    tripulantesActivos().map(t => `<option value="${t.id}">${escape(t.nombre)}</option>`).join('');
+  sel.value = tripulantesActivos().some(t => String(t.id) === actual) ? actual : '';
+}
+
+// ---- Solapas Barco / Tripulación ----
+function cambiarSolapaCert(solapa) {
+  certSolapa = solapa;
+  try { localStorage.setItem('cert-solapa', solapa); } catch (e) {}
+  aplicarSolapaCert();
+  renderCertificados();
+}
+
+function aplicarSolapaCert() {
+  const trip = certSolapa === 'tripulacion';
+  document.querySelectorAll('.cert-solapa').forEach(b => b.classList.toggle('active', b.dataset.solapa === certSolapa));
+  document.getElementById('cert-btn-agregar').style.display = trip ? 'none' : '';
+  document.getElementById('cert-btn-agregar-trip').style.display = trip ? '' : 'none';
+  document.getElementById('cert-filtro-cat').style.display = trip ? 'none' : '';
+  document.getElementById('cert-filtro-trip').style.display = trip ? '' : 'none';
+  document.getElementById('cert-bajas-label').style.display = trip ? '' : 'none';
+  document.getElementById('cert-buscador').placeholder = trip ? '🔎 Buscar tripulante o documento...' : '🔎 Buscar certificado...';
+}
+
+// Desde el Dashboard: abre la solapa donde está lo más urgente
+function irACertificados() {
+  const peor = lista => Math.min(3, ...lista.map(c => ORDEN_ESTADO_CERT[estadoCert(c)]));
+  const barco = peor(certificados.filter(c => !c.tripulante_id));
+  const trip = peor(certificados.filter(c => c.tripulante_id));
+  cambiarTab('certificados');
+  cambiarSolapaCert(trip < barco ? 'tripulacion' : 'barco');
+}
+
+// Filtros activos de la solapa actual (los usan la lista y el Excel)
 function filtrosCert() {
+  const trip = certSolapa === 'tripulacion';
   return {
     buscar: (document.getElementById('cert-buscador').value || '').trim(),
     depto: document.getElementById('cert-filtro-depto').value,
-    cat: document.getElementById('cert-filtro-cat').value
+    cat: trip ? '' : document.getElementById('cert-filtro-cat').value,
+    tripId: trip ? document.getElementById('cert-filtro-trip').value : '',
+    mostrarBajas: trip && document.getElementById('cert-mostrar-bajas').checked
   };
 }
 
-// Certificados que se ven en pantalla, en el mismo orden
+// Certificados que se ven en pantalla en la solapa actual
 function certFiltrados() {
-  const { buscar, depto, cat } = filtrosCert();
+  const { buscar, depto, cat, tripId } = filtrosCert();
   const texto = buscar.toLowerCase();
+  const trip = certSolapa === 'tripulacion';
   return certificados
-    .filter(c => (!depto || c.departamento === depto) &&
-                 (!cat || c.categoria === cat) &&
-                 (!texto || c.nombre.toLowerCase().includes(texto) || (c.observaciones || '').toLowerCase().includes(texto)))
+    .filter(c => trip ? !!c.tripulante_id : !c.tripulante_id)
+    .filter(c => {
+      const t = tripulanteDe(c);
+      if (depto && c.departamento !== depto) return false;
+      if (cat && c.categoria !== cat) return false;
+      if (tripId && String(c.tripulante_id) !== tripId) return false;
+      if (texto && !(c.nombre.toLowerCase().includes(texto) ||
+                     (c.observaciones || '').toLowerCase().includes(texto) ||
+                     (t && (t.nombre.toLowerCase().includes(texto) || (t.cargo || '').toLowerCase().includes(texto))))) return false;
+      return true;
+    })
     .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento) || a.nombre.localeCompare(b.nombre));
 }
 
+// Solapa Tripulación: un grupo por tripulante con sus documentos filtrados.
+// Los tripulantes sin documentos se muestran mientras los filtros no los excluyan.
+// Orden: primero quien tiene algo vencido, después por vencer, después el resto (alfabético).
+// Con "Mostrar dados de baja", los dados de baja van al final y sin documentos (no se exportan).
+function gruposTripulacion() {
+  const { buscar, depto, tripId, mostrarBajas } = filtrosCert();
+  const texto = buscar.toLowerCase();
+  const docs = certFiltrados();
+  return tripulantes
+    .filter(t => t.activo || mostrarBajas)
+    .filter(t => (!depto || t.departamento === depto) && (!tripId || String(t.id) === tripId))
+    .map(t => ({ t, docs: t.activo ? docs.filter(c => c.tripulante_id === t.id) : [] }))
+    .filter(g => g.docs.length || !texto ||
+                 g.t.nombre.toLowerCase().includes(texto) || (g.t.cargo || '').toLowerCase().includes(texto))
+    .map(g => ({ ...g, peor: g.t.activo ? Math.min(3, ...g.docs.map(c => ORDEN_ESTADO_CERT[estadoCert(c)])) : 4 }))
+    .sort((a, b) => a.peor - b.peor || a.t.nombre.localeCompare(b.t.nombre));
+}
+
 function renderCertificados() {
-  const nAlerta = certificados.filter(c => estadoCert(c) !== 'OK').length;
-  const badge = document.getElementById('badge-certificados');
-  badge.textContent = nAlerta;
-  badge.style.display = nAlerta > 0 ? 'inline-block' : 'none';
+  const enAlerta = certificados.filter(c => estadoCert(c) !== 'OK');
+  const ponerBadge = (id, n) => {
+    const b = document.getElementById(id);
+    b.textContent = n;
+    b.style.display = n > 0 ? 'inline-block' : 'none';
+  };
+  ponerBadge('badge-certificados', enAlerta.length);
+  ponerBadge('badge-cert-barco', enAlerta.filter(c => !c.tripulante_id).length);
+  ponerBadge('badge-cert-trip', enAlerta.filter(c => c.tripulante_id).length);
+  llenarFiltroTripulantes();
+
+  const div = document.getElementById('cert-lista');
+  if (certSolapa === 'tripulacion') {
+    const grupos = gruposTripulacion();
+    if (!grupos.length) {
+      div.innerHTML = tripulantes.length
+        ? '<div class="empty"><div class="big">🔍</div>No hay tripulantes ni documentos con esos filtros</div>'
+        : '<div class="empty"><div class="big">👥</div>No hay tripulantes cargados</div>';
+      return;
+    }
+    div.innerHTML = grupos.map(renderGrupoTrip).join('');
+    return;
+  }
 
   const filtrados = certFiltrados();
-  const div = document.getElementById('cert-lista');
   if (!filtrados.length) {
-    div.innerHTML = certificados.length
+    div.innerHTML = certificados.some(c => !c.tripulante_id)
       ? '<div class="empty"><div class="big">🔍</div>No hay certificados con esos filtros</div>'
       : '<div class="empty"><div class="big">📋</div>No hay certificados cargados</div>';
     return;
   }
   div.innerHTML = filtrados.map(renderCertCard).join('');
+}
+
+function renderGrupoTrip({ t, docs }) {
+  if (!t.activo) {
+    const n = certificadosBaja.filter(c => c.tripulante_id === t.id).length;
+    return `
+      <div class="trip-grupo baja">
+        <div class="trip-cabecera">
+          <span class="nombre">${escape(t.nombre)}</span>
+          ${t.cargo ? `<span class="cargo">${escape(t.cargo)}</span>` : ''}
+          <span class="badge-tipo">${escape(t.departamento)}</span>
+          <span class="badge-baja">DADO DE BAJA</span>
+          <div class="acciones">
+            <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+          </div>
+        </div>
+        <div class="trip-vacio">${n ? `${n} documento${n>1?'s':''} guardado${n>1?'s':''}: vuelve${n>1?'n':''} a aparecer al reactivarlo` : 'Sin documentos cargados'}</div>
+      </div>`;
+  }
+  const total = certificados.filter(c => c.tripulante_id === t.id).length;
+  const cuerpo = docs.length
+    ? `<div class="task-list">${docs.map(renderCertCard).join('')}</div>`
+    : `<div class="trip-vacio">${total ? 'Ningún documento coincide con la búsqueda' : 'Sin documentos cargados'}</div>`;
+  return `
+    <div class="trip-grupo">
+      <div class="trip-cabecera">
+        <span class="nombre">${escape(t.nombre)}</span>
+        ${t.cargo ? `<span class="cargo">${escape(t.cargo)}</span>` : ''}
+        <span class="badge-tipo">${escape(t.departamento)}</span>
+        <div class="acciones">
+          <button class="btn btn-pequeno" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
+          <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+        </div>
+      </div>
+      ${cuerpo}
+    </div>`;
 }
 
 function renderCertCard(c) {
@@ -3500,13 +3708,17 @@ function renderCertCard(c) {
   const ultima = renovacionesCert(c.id)[0];
   const ultimaHtml = ultima ? ` · Última renovación: ${fmtFecha(ultima.fecha_renovacion)}` : '';
   const obsHtml = c.observaciones ? `<div class="obs">${escape(c.observaciones)}</div>` : '';
+  // En la solapa Tripulación el tripulante y su departamento ya están en la cabecera del grupo
+  const segundaLinea = c.tripulante_id
+    ? ''
+    : `<div class="tarea"><span class="badge-tipo">${escape(c.departamento)}</span>${escape(c.categoria)}</div>`;
 
   return `
     <div class="task-card ${cls}">
       <div class="estado-icon">${icono}</div>
       <div class="task-info">
         <div class="equipo">${escape(c.nombre)}</div>
-        <div class="tarea"><span class="badge-tipo">${escape(c.departamento)}</span>${escape(c.categoria)}</div>
+        ${segundaLinea}
         <div class="meta">Vence: ${fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
         ${obsHtml}
       </div>
@@ -3521,14 +3733,33 @@ function renderCertCard(c) {
     </div>`;
 }
 
-function abrirModalCert(id) {
+// id = certificado a editar; tripulanteId = agregar un documento nuevo a ese tripulante
+function abrirModalCert(id, tripulanteId) {
   certActual = id ? certificados.find(c => c.id === id) : null;
+  certTripNuevo = !certActual && tripulanteId ? tripulantes.find(t => t.id === tripulanteId) : null;
+  const trip = certActual ? tripulanteDe(certActual) : certTripNuevo;
+  const nombreInput = document.getElementById('c-nombre');
+
+  // Los documentos personales no eligen categoría ni departamento (vienen del tripulante)
+  document.getElementById('c-campos-barco').style.display = trip ? 'none' : 'grid';
+  if (trip) {
+    nombreInput.setAttribute('list', 'c-sugerencias-trip');
+    nombreInput.placeholder = 'ej: Carné de salud (o escribí otro)';
+  } else {
+    nombreInput.removeAttribute('list');
+    nombreInput.placeholder = 'ej: Certificado de navegabilidad';
+  }
+  const quien = trip ? `${trip.nombre}${trip.cargo ? ' · ' + trip.cargo : ''} (${trip.departamento})` : '';
+
   const histBox = document.getElementById('c-historial-box');
   if (certActual) {
-    document.getElementById('modal-cert-titulo').textContent = 'Editar certificado';
-    document.getElementById('c-nombre').value = certActual.nombre;
-    document.getElementById('c-categoria').value = certActual.categoria;
-    document.getElementById('c-departamento').value = certActual.departamento;
+    document.getElementById('modal-cert-titulo').textContent = trip ? 'Editar documento' : 'Editar certificado';
+    document.getElementById('modal-cert-sub').textContent = trip ? quien : 'Datos del certificado y su vencimiento';
+    nombreInput.value = certActual.nombre;
+    if (!trip) {
+      document.getElementById('c-categoria').value = certActual.categoria;
+      document.getElementById('c-departamento').value = certActual.departamento;
+    }
     document.getElementById('c-vencimiento').value = certActual.fecha_vencimiento;
     document.getElementById('c-dias-aviso').value = certActual.dias_aviso;
     document.getElementById('c-observaciones').value = certActual.observaciones || '';
@@ -3544,8 +3775,9 @@ function abrirModalCert(id) {
       : '<div class="fila" style="color:var(--texto-suave)">Todavía no se registraron renovaciones.</div>';
     histBox.style.display = '';
   } else {
-    document.getElementById('modal-cert-titulo').textContent = 'Agregar certificado';
-    document.getElementById('c-nombre').value = '';
+    document.getElementById('modal-cert-titulo').textContent = trip ? 'Agregar documento' : 'Agregar certificado';
+    document.getElementById('modal-cert-sub').textContent = trip ? quien : 'Datos del certificado y su vencimiento';
+    nombreInput.value = '';
     document.getElementById('c-categoria').value = CATEGORIAS_CERT[0];
     document.getElementById('c-departamento').value = 'Cubierta';
     document.getElementById('c-vencimiento').value = '';
@@ -3560,6 +3792,7 @@ function abrirModalCert(id) {
 function cerrarModalCert() {
   document.getElementById('modal-cert').classList.remove('show');
   certActual = null;
+  certTripNuevo = null;
 }
 
 async function guardarCert() {
@@ -3572,24 +3805,32 @@ async function guardarCert() {
   if (!vencimiento) { toast('Falta la fecha de vencimiento', true); return; }
   if (diasTxt === '' || !Number.isInteger(dias) || dias < 0) { toast('Los días de aviso tienen que ser un número entero, 0 o más', true); return; }
 
+  const trip = certActual ? tripulanteDe(certActual) : certTripNuevo;
   const data = {
     nombre,
-    categoria: document.getElementById('c-categoria').value,
-    departamento: document.getElementById('c-departamento').value,
     fecha_vencimiento: vencimiento,
     dias_aviso: dias,
     observaciones: document.getElementById('c-observaciones').value.trim() || null
   };
+  if (trip) {
+    // El trigger mant_certificados_depto_tripulante también copia el departamento del tripulante
+    data.categoria = CATEGORIA_TRIP;
+    data.departamento = trip.departamento;
+    if (!certActual) data.tripulante_id = trip.id;
+  } else {
+    data.categoria = document.getElementById('c-categoria').value;
+    data.departamento = document.getElementById('c-departamento').value;
+  }
 
   try {
     if (certActual) {
       const { error } = await sb.from('mant_certificados').update(data).eq('id', certActual.id);
       if (error) throw error;
-      toast('✓ Certificado actualizado');
+      toast(trip ? '✓ Documento actualizado' : '✓ Certificado actualizado');
     } else {
       const { error } = await sb.from('mant_certificados').insert(data);
       if (error) throw error;
-      toast('✓ Certificado agregado');
+      toast(trip ? `✓ Documento agregado a ${trip.nombre}` : '✓ Certificado agregado');
     }
     cerrarModalCert();
     await cargarTodo();
@@ -3606,7 +3847,7 @@ async function darDeBajaCert() {
   try {
     const { error } = await sb.from('mant_certificados').update({ activo: false }).eq('id', certActual.id);
     if (error) throw error;
-    toast('✓ Certificado dado de baja');
+    toast('✓ Dado de baja');
     cerrarModalCert();
     await cargarTodo();
   } catch (err) {
@@ -3615,12 +3856,95 @@ async function darDeBajaCert() {
   }
 }
 
+// ---- Tripulantes ----
+function abrirModalTrip(id) {
+  tripActual = id ? tripulantes.find(t => t.id === id) : null;
+  document.getElementById('modal-trip-titulo').textContent = tripActual ? 'Editar tripulante' : 'Agregar tripulante';
+  document.getElementById('t-nombre').value = tripActual?.nombre || '';
+  document.getElementById('t-cargo').value = tripActual?.cargo || '';
+  document.getElementById('t-departamento').value = tripActual?.departamento || 'Cubierta';
+  document.getElementById('t-btn-baja').style.display = tripActual?.activo ? '' : 'none';
+  document.getElementById('t-btn-reactivar').style.display = tripActual && !tripActual.activo ? '' : 'none';
+  document.getElementById('modal-trip').classList.add('show');
+}
+
+function cerrarModalTrip() {
+  document.getElementById('modal-trip').classList.remove('show');
+  tripActual = null;
+}
+
+async function guardarTrip() {
+  const nombre = document.getElementById('t-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre', true); return; }
+  const data = {
+    nombre,
+    cargo: document.getElementById('t-cargo').value.trim() || null,
+    departamento: document.getElementById('t-departamento').value
+  };
+  try {
+    if (tripActual) {
+      // Si cambia el departamento, el trigger mant_tripulantes_propagar_depto lo copia a sus documentos
+      const { error } = await sb.from('mant_tripulantes').update(data).eq('id', tripActual.id);
+      if (error) throw error;
+      toast('✓ Tripulante actualizado');
+    } else {
+      const { error } = await sb.from('mant_tripulantes').insert(data);
+      if (error) throw error;
+      toast(`✓ ${nombre} agregado a la tripulación`);
+    }
+    cerrarModalTrip();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// Baja lógica: sus documentos quedan en la base pero dejan de mostrarse y de contar en las alertas
+async function darDeBajaTrip() {
+  if (!tripActual) return;
+  const n = certificados.filter(c => c.tripulante_id === tripActual.id).length;
+  const docsTxt = n ? `\n\nSus ${n} documento${n>1?'s':''} dejan de aparecer en la lista y en las alertas (se conservan en la base).` : '';
+  if (!confirm(`¿Dar de baja a "${tripActual.nombre}"?${docsTxt}`)) return;
+  try {
+    const { error } = await sb.from('mant_tripulantes').update({ activo: false }).eq('id', tripActual.id);
+    if (error) throw error;
+    toast('✓ Tripulante dado de baja');
+    cerrarModalTrip();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// Vuelve a mostrar al tripulante y sus documentos (con su historial) en la lista y las alertas
+async function reactivarTrip() {
+  if (!tripActual) return;
+  const n = certificadosBaja.filter(c => c.tripulante_id === tripActual.id).length;
+  const docsTxt = n ? `\n\nSus ${n} documento${n>1?'s':''} vuelve${n>1?'n':''} a aparecer en la lista y en las alertas.` : '';
+  if (!confirm(`¿Reactivar a "${tripActual.nombre}"?${docsTxt}`)) return;
+  try {
+    const { error } = await sb.from('mant_tripulantes').update({ activo: true }).eq('id', tripActual.id);
+    if (error) throw error;
+    toast(`✓ ${tripActual.nombre} reactivado`);
+    cerrarModalTrip();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+// ---- Renovación ----
 function abrirModalCertRenovar(id) {
   certActual = certificados.find(c => c.id === id);
   if (!certActual) return;
+  const trip = tripulanteDe(certActual);
   document.getElementById('modal-cert-renovar-info').innerHTML =
-    `<strong>${escape(certActual.nombre)}</strong> — vence actualmente el ${fmtFecha(certActual.fecha_vencimiento)}`;
+    `<strong>${escape(certActual.nombre)}</strong>${trip ? ' de ' + escape(trip.nombre) : ''} — vence actualmente el ${fmtFecha(certActual.fecha_vencimiento)}`;
   document.getElementById('cr-fecha').value = hoyLocalISO();
+  document.getElementById('cr-fecha').max = hoyLocalISO();  // no se puede renovar en el futuro
   document.getElementById('cr-vencimiento').value = '';
   document.getElementById('cr-notas').value = '';
   document.getElementById('modal-cert-renovar').classList.add('show');
@@ -3636,6 +3960,7 @@ async function guardarRenovacionCert() {
   const fecha = document.getElementById('cr-fecha').value;
   const vencimiento = document.getElementById('cr-vencimiento').value;
   if (!fecha) { toast('Falta la fecha de renovación', true); return; }
+  if (fecha > hoyLocalISO()) { toast('La fecha de renovación no puede ser posterior a hoy', true); return; }
   if (!vencimiento) { toast('Falta el nuevo vencimiento', true); return; }
   if (vencimiento <= certActual.fecha_vencimiento) { toast('El nuevo vencimiento tiene que ser posterior al actual', true); return; }
   try {
@@ -3656,43 +3981,54 @@ async function guardarRenovacionCert() {
   }
 }
 
-// Exporta solo lo que se ve en pantalla según los filtros activos
+// Exporta solo lo que se ve en pantalla según la solapa y los filtros activos
 function exportarCertExcel() {
-  const filtrados = certFiltrados();
+  const trip = certSolapa === 'tripulacion';
+  // En Tripulación se respeta el orden de la pantalla (grupos por urgencia)
+  const filtrados = trip ? gruposTripulacion().flatMap(g => g.docs) : certFiltrados();
   if (!filtrados.length) {
-    toast(certificados.length ? 'No hay certificados con esos filtros para exportar' : 'No hay certificados para exportar');
+    const hayAlgo = certificados.some(c => trip ? c.tripulante_id : !c.tripulante_id);
+    toast(hayAlgo ? 'No hay certificados con esos filtros para exportar'
+                  : (trip ? 'No hay documentos de tripulación para exportar' : 'No hay certificados para exportar'));
     return;
   }
   const nombreEstado = { VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
-  const hoja = filtrados.map(c => ({
-      Certificado: c.nombre,
-      Categoría: c.categoria,
-      Departamento: c.departamento,
-      Vencimiento: c.fecha_vencimiento,
-      'Días restantes': diasEntre(c.fecha_vencimiento),
-      Estado: nombreEstado[estadoCert(c)],
-      'Días de aviso': c.dias_aviso,
-      'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
-      Observaciones: c.observaciones
-    }));
+  const comunes = c => ({
+    Vencimiento: c.fecha_vencimiento,
+    'Días restantes': diasEntre(c.fecha_vencimiento),
+    Estado: nombreEstado[estadoCert(c)],
+    'Días de aviso': c.dias_aviso,
+    'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
+    Observaciones: c.observaciones
+  });
+  const hoja = filtrados.map(c => {
+    if (!trip) return { Certificado: c.nombre, Categoría: c.categoria, Departamento: c.departamento, ...comunes(c) };
+    const t = tripulanteDe(c);
+    return { Tripulante: t?.nombre, Cargo: t?.cargo, Departamento: c.departamento, Documento: c.nombre, ...comunes(c) };
+  });
   // Solo las renovaciones de los certificados exportados
   const ids = new Set(filtrados.map(c => c.id));
   const renov = certHistorial.filter(h => ids.has(h.certificado_id)).map(h => ({
-    Certificado: h.certificado?.nombre || `(id ${h.certificado_id})`,
+    ...(trip ? { Tripulante: tripulanteDe(certificados.find(c => c.id === h.certificado_id))?.nombre } : {}),
+    [trip ? 'Documento' : 'Certificado']: h.certificado?.nombre || `(id ${h.certificado_id})`,
     'Fecha de renovación': h.fecha_renovacion,
     'Vencimiento anterior': h.vencimiento_anterior,
     'Vencimiento nuevo': h.vencimiento_nuevo,
     Notas: h.notas
   }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Certificados');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Certificado: 'Sin renovaciones registradas' }]), 'Renovaciones');
-  // El nombre indica los filtros: Certificados_Santa_Lucia_Cubierta_Navegabilidad_busqueda-radio_2026-10-13.xlsx
-  const { buscar, depto, cat } = filtrosCert();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), trip ? 'Tripulación' : 'Certificados');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Renovaciones: 'Sin renovaciones registradas' }]), 'Renovaciones');
+  // El nombre indica la solapa y los filtros:
+  // Certificados_Santa_Lucia_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_Santa_Lucia_Tripulacion_Juan_Perez_2026-10-16.xlsx
+  const { buscar, depto, cat, tripId } = filtrosCert();
   const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
   const partes = ['Certificados_Santa_Lucia'];
+  if (trip) partes.push('Tripulacion');
   if (depto) partes.push(limpiar(depto));
   if (cat) partes.push(limpiar(cat));
+  const tSel = tripId && tripulantes.find(t => String(t.id) === tripId);
+  if (tSel) partes.push(limpiar(tSel.nombre));
   const busqueda = limpiar(buscar).slice(0, 30);
   if (busqueda) partes.push('busqueda-' + busqueda);
   partes.push(hoyLocalISO());
@@ -3770,11 +4106,14 @@ llenarSelectoresTipoTrabajo();
 document.getElementById('modal-def').addEventListener('click', e => { if (e.target.id === 'modal-def') cerrarModalDef(); });
 document.getElementById('modal-def-cerrar').addEventListener('click', e => { if (e.target.id === 'modal-def-cerrar') cerrarModalDefCerrar(); });
 llenarSelectoresCategoriaCert();
-['cert-buscador','cert-filtro-depto','cert-filtro-cat'].forEach(id => {
+try { if (localStorage.getItem('cert-solapa') === 'tripulacion') certSolapa = 'tripulacion'; } catch (e) {}
+aplicarSolapaCert();
+['cert-buscador','cert-filtro-depto','cert-filtro-cat','cert-filtro-trip','cert-mostrar-bajas'].forEach(id => {
   document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderCertificados);
 });
 document.getElementById('modal-cert').addEventListener('click', e => { if (e.target.id === 'modal-cert') cerrarModalCert(); });
 document.getElementById('modal-cert-renovar').addEventListener('click', e => { if (e.target.id === 'modal-cert-renovar') cerrarModalCertRenovar(); });
+document.getElementById('modal-trip').addEventListener('click', e => { if (e.target.id === 'modal-trip') cerrarModalTrip(); });
 document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
 document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });

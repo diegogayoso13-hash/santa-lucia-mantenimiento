@@ -194,21 +194,38 @@ CREATE TABLE public.mant_deficiencias (
   CHECK (estado = 'abierta' OR (fecha_cierre IS NOT NULL AND accion_realizada IS NOT NULL))
 );
 
+-- =============== TRIPULANTES ===============
+-- Tripulación del barco. No se borran: se marcan activo = false (la app oculta sus documentos).
+CREATE TABLE public.mant_tripulantes (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  cargo TEXT,
+  departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),  -- lo heredan sus documentos
+  activo BOOLEAN NOT NULL DEFAULT true,
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  actualizado_en TIMESTAMPTZ DEFAULT now()
+);
+
 -- =============== CERTIFICADOS ===============
--- Certificados del barco y sus vencimientos. No se borran: se marcan activo = false.
+-- Certificados del barco y documentos personales de la tripulación, con sus vencimientos.
+-- No se borran: se marcan activo = false.
 -- Las categorías también están en la constante CATEGORIAS_CERT de index.html.
+-- Con tripulante_id es un documento personal (categoría 'Tripulación'); sin él, es del barco.
 CREATE TABLE public.mant_certificados (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   nombre TEXT NOT NULL,
   categoria TEXT NOT NULL CONSTRAINT mant_certificados_categoria_check
-    CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros')),
-  departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),
+    CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros', 'Tripulación')),
+  tripulante_id BIGINT REFERENCES public.mant_tripulantes(id),
+  departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),  -- en documentos personales, el del tripulante (trigger)
   fecha_vencimiento DATE NOT NULL,
   dias_aviso INTEGER NOT NULL DEFAULT 30 CHECK (dias_aviso >= 0),
   observaciones TEXT,
   activo BOOLEAN NOT NULL DEFAULT true,
   creado_en TIMESTAMPTZ DEFAULT now(),
-  actualizado_en TIMESTAMPTZ DEFAULT now()
+  actualizado_en TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT mant_certificados_tripulante_check
+    CHECK ((tripulante_id IS NOT NULL) = (categoria = 'Tripulación'))
 );
 
 -- Una fila por renovación; la escribe la función mant_certificados_renovar
@@ -224,6 +241,7 @@ CREATE TABLE public.mant_certificados_historial (
 
 -- =============== ÍNDICES ===============
 CREATE INDEX idx_mant_cert_hist_certificado ON public.mant_certificados_historial (certificado_id);
+CREATE INDEX idx_mant_certificados_tripulante ON public.mant_certificados (tripulante_id);
 CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
 CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
 CREATE INDEX idx_mant_tareas_activa ON public.mant_tareas (activa);
@@ -269,6 +287,48 @@ CREATE TRIGGER mant_repuestos_update_timestamp BEFORE UPDATE ON public.mant_repu
   FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
 CREATE TRIGGER trg_mant_certificados_upd BEFORE UPDATE ON public.mant_certificados
   FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+CREATE TRIGGER trg_mant_tripulantes_upd BEFORE UPDATE ON public.mant_tripulantes
+  FOR EACH ROW EXECUTE FUNCTION public.mant_update_timestamp_masc();
+
+-- El departamento de un documento personal es siempre el de su tripulante
+CREATE OR REPLACE FUNCTION public.mant_certificados_depto_tripulante()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.tripulante_id IS NOT NULL THEN
+    SELECT departamento INTO NEW.departamento
+      FROM public.mant_tripulantes WHERE id = NEW.tripulante_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER mant_certificados_depto_tripulante
+  BEFORE INSERT OR UPDATE OF tripulante_id, departamento ON public.mant_certificados
+  FOR EACH ROW EXECUTE FUNCTION public.mant_certificados_depto_tripulante();
+
+-- Si cambia el departamento de un tripulante, se copia a sus documentos
+CREATE OR REPLACE FUNCTION public.mant_tripulantes_propagar_depto()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.mant_certificados
+     SET departamento = NEW.departamento
+   WHERE tripulante_id = NEW.id AND departamento IS DISTINCT FROM NEW.departamento;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER mant_tripulantes_propagar_depto
+  AFTER UPDATE OF departamento ON public.mant_tripulantes
+  FOR EACH ROW EXECUTE FUNCTION public.mant_tripulantes_propagar_depto();
+
+REVOKE EXECUTE ON FUNCTION public.mant_certificados_depto_tripulante() FROM public, anon;
+REVOKE EXECUTE ON FUNCTION public.mant_tripulantes_propagar_depto() FROM public, anon;
 
 -- Renovación atómica de un certificado: guarda el historial y actualiza el vencimiento en la misma
 -- transacción. El vencimiento anterior se toma de la fila guardada. SECURITY INVOKER: RLS aplica.
@@ -294,6 +354,10 @@ BEGIN
   END IF;
   IF p_fecha_renovacion IS NULL OR p_vencimiento_nuevo IS NULL THEN
     RAISE EXCEPTION 'Faltan la fecha de renovación o el nuevo vencimiento';
+  END IF;
+  -- current_date es UTC (adelantado respecto de Uruguay): nunca rechaza el "hoy" local; el chequeo exacto lo hace la app
+  IF p_fecha_renovacion > current_date THEN
+    RAISE EXCEPTION 'La fecha de renovación no puede ser posterior a hoy';
   END IF;
   IF p_vencimiento_nuevo <= v_anterior THEN
     RAISE EXCEPTION 'El nuevo vencimiento debe ser posterior al actual (%)', v_anterior;
@@ -342,6 +406,7 @@ ALTER TABLE public.mant_lecturas_horas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_deficiencias ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_certificados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_certificados_historial ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_tripulantes ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "mant_buque_owner" ON public.mant_buque
   FOR ALL TO authenticated
@@ -399,6 +464,11 @@ CREATE POLICY "mant_certificados_owner" ON public.mant_certificados
   WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
 
 CREATE POLICY "mant_certificados_historial_owner" ON public.mant_certificados_historial
+  FOR ALL TO authenticated
+  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
+  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+
+CREATE POLICY "mant_tripulantes_owner" ON public.mant_tripulantes
   FOR ALL TO authenticated
   USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
   WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
