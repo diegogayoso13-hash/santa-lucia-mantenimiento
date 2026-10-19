@@ -26,15 +26,35 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 - `renderTodo()` re-renders every section from those in-memory arrays. There's no reactive framework: after any mutation (save/delete), code calls `cargarTodo()` again (or manually patches the array + calls the relevant `renderX()`), not a diffing re-render.
 - Tab switching (`cambiarTab`) just toggles `.active` on `<section>` elements — all tabs are already in the DOM, nothing is lazy-loaded.
 
+### Navigation (two levels)
+
+The top bar has four sections, each with its sub-tabs underneath:
+
+| Section | Sub-tabs |
+|---|---|
+| 📊 Inicio | Dashboard |
+| 🔧 Mantenimiento | Tareas, Deficiencias, Horas, Historial |
+| ⚓ Barco | Mi Barco, Equipos, Certificados |
+| 📦 Pañol | Stock, Herramientas |
+
+- **Markup:** each sub-tab is a `.tab` button with `data-tab` (opens `<section id="sec-<tab>">`) and `data-seccion`. `SECCION_DE_TAB` is built from those attributes, so **a new tab only needs its button and section**.
+- **Navigating:** always call `cambiarTab('<sub-tab>')`. It activates the section too, shows only that section's sub-tabs, and hides the sub-tab row when the section has a single sub-tab.
+  - Clicking a section (`cambiarSeccion()`) reopens the last sub-tab used in it.
+  - The current tab and the last sub-tab per section are saved in `localStorage` (key `nav`) and restored on load.
+- **Section badges** (`#badge-sec-*`) are the sum of the visible sub-tab badges, recomputed by a `MutationObserver` whenever any sub-tab badge changes. The code that sets the sub-tab badges never touches them.
+- On mobile the four sections share the width (icon above the label) and the sub-tab row scrolls horizontally.
+
 ### Maintenance status model
 
 `calcularEstado(t)` is the core rule: a task (`mant_tareas` row) is tracked either by engine hours (`unidad: 'hrs'`, comparing `proxima_hrs` vs `hrs_totales`) or by calendar date (`unidad: 'fecha'`, comparing `proxima_fecha` vs today). Thresholds: `VENCIDO` (overdue) if the difference is ≤ 0, `PROXIMO` (upcoming) if ≤ 100 hrs or ≤ 30 days, otherwise `OK`; `SIN_DATO` if neither field is set. This function is called everywhere status is displayed (dashboard counts, task list, equipment cards) — status is always derived, never stored.
 
-### Hour cascading (Cargar Horas tab)
+### Hour cascading (Horas tab)
+
+The "Horas" sub-tab (`sec-horas`) has the monthly hours entry on top (`renderCarga()`) and the per-equipment history below (`renderHoras()`). "Chequeos por fecha" — registering several date-based tasks at once (`renderChequeosFecha()` / `aplicarChequeos()`) — lives in the `#modal-chequeos` modal, opened by "✓ Registrar varias" in the Tareas tab; it closes itself after a successful apply.
 
 Monthly hours are entered per top-level equipment. `CAJAS_POR_MP` maps each main engine (`Motor Principal Babor/Estribor`) to its reduction gearbox (`Caja Reductora Babor/Estribor`); when hours are saved for an engine, the paired gearbox silently receives the same hours (`guardarCarga()`), and gearboxes are hidden from the manual entry form (`EQUIPOS_OCULTOS_CARGA`). Saving hours also finds tasks that just became `VENCIDO`/`PROXIMO` as a side effect and prompts the user to confirm which were actually completed (`abrirConfirm`/`aplicarConfirm`) before writing `mant_historial` rows.
 
-Each save also inserts one `mant_lecturas_horas` row per equipment (including the cascaded gearbox) with `horas_mes` (hours added this month) and `hrs_total` (cumulative). Readings are keyed by the equipment **name** (`equipo` text), not by `equipo_id`. They're only read by the "Horas" tab (`renderHoras()`).
+Each save also inserts one `mant_lecturas_horas` row per equipment (including the cascaded gearbox) with `horas_mes` (hours added this month) and `hrs_total` (cumulative). Readings are keyed by the equipment **name** (`equipo` text), not by `equipo_id`. They're only read by the history part of the Horas tab (`renderHoras()`).
 
 ### Ship & equipment fichas ("Mi Barco" / "Equipos" tabs)
 

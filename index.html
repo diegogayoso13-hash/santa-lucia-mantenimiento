@@ -56,22 +56,41 @@
   header.top h1 .accent { color: var(--acento); }
   header.top .sub { opacity: 0.75; font-size: 13px; margin-top: 2px; letter-spacing: 0.02em; }
 
+  /* Navegación: fila de secciones + fila de sub-pestañas, las dos fijas arriba */
   nav.tabs {
     background: white;
     border-bottom: 1px solid var(--gris-2);
     position: sticky; top: 0;
     z-index: 50;
+  }
+  .secciones-inner { max-width: 1200px; margin: 0 auto; display: flex; padding: 0 28px; gap: 4px; }
+  .seccion {
+    background: none; border: none; font: inherit; cursor: pointer;
+    padding: 12px 18px; font-size: 15px; font-weight: 600; color: var(--texto-suave);
+    border-bottom: 3px solid transparent; transition: all 0.2s;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .seccion:hover { color: var(--azul-profundo); }
+  .seccion.active { color: var(--azul-profundo); border-bottom-color: var(--acento); }
+  .seccion .badge, .tab .badge {
+    background: var(--rojo); color: white;
+    font-size: 11px; padding: 1px 6px; border-radius: 10px;
+    font-weight: 600; min-width: 18px; text-align: center;
+  }
+  .subtabs {
+    background: var(--gris-1, #f6f7f9);
+    border-top: 1px solid var(--gris-2);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  nav.tabs::-webkit-scrollbar { display: none; }
+  .subtabs::-webkit-scrollbar { display: none; }
   .tabs-inner { max-width: 1200px; margin: 0 auto; display: flex; padding: 0 28px; min-width: max-content; }
   .tab {
     background: none;
     border: none;
-    padding: 14px 18px;
+    padding: 10px 16px;
     font: inherit;
-    font-size: 14px;
+    font-size: 13.5px;
     color: var(--texto-suave);
     cursor: pointer;
     border-bottom: 2px solid transparent;
@@ -81,11 +100,6 @@
   }
   .tab:hover { color: var(--azul-profundo); }
   .tab.active { color: var(--azul-profundo); border-bottom-color: var(--acento); font-weight: 600; }
-  .tab .badge {
-    background: var(--rojo); color: white;
-    font-size: 11px; padding: 1px 6px; border-radius: 10px;
-    font-weight: 600; min-width: 18px; text-align: center;
-  }
 
   main { max-width: 1200px; margin: 0 auto; padding: 24px 28px 60px; }
   .section { display: none; }
@@ -533,9 +547,17 @@
     .header-inner { flex-direction: column; align-items: flex-start !important; gap: 10px !important; }
     .header-inner > div:last-child { width: 100%; justify-content: flex-end; }
 
-    /* Tabs scrollables */
+    /* Secciones: 4 partes iguales, ícono arriba y nombre abajo; sub-pestañas scrollables */
+    .secciones-inner { padding: 0 4px; gap: 0; }
+    .seccion {
+      flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px;
+      padding: 8px 2px 7px; font-size: 11.5px; position: relative;
+    }
+    .seccion .ico { font-size: 19px; line-height: 1; }
+    .seccion .txt { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .seccion .badge { position: absolute; top: 4px; left: calc(50% + 8px); font-size: 10px; padding: 0 5px; }
     .tabs-inner { padding: 0 12px; }
-    .tab { padding: 12px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+    .tab { padding: 10px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
 
     /* Stats - 2 columnas */
     .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -851,19 +873,28 @@
   </div>
 </header>
 
+<!-- Navegación en dos niveles: secciones arriba, sub-pestañas de la sección elegida abajo.
+     Cada sub-pestaña (data-tab) abre su <section id="sec-..."> como antes; data-seccion la agrupa. -->
 <nav class="tabs">
-  <div class="tabs-inner">
-    <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab" data-tab="barco">⚓ Mi Barco</button>
-    <button class="tab" data-tab="equipos">🚢 Equipos</button>
-    <button class="tab" data-tab="tareas">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
-    <button class="tab" data-tab="deficiencias">⚠️ Deficiencias <span id="badge-deficiencias" class="badge" style="display:none">0</span></button>
-    <button class="tab" data-tab="certificados">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
-    <button class="tab" data-tab="carga">⏱️ Cargar Horas</button>
-    <button class="tab" data-tab="stock">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
-    <button class="tab" data-tab="herramientas">🔧 Herramientas</button>
-    <button class="tab" data-tab="historial">📜 Historial</button>
-    <button class="tab" data-tab="horas">📈 Horas</button>
+  <div class="secciones-inner">
+    <button class="seccion active" data-seccion="inicio"><span class="ico">📊</span><span class="txt">Inicio</span></button>
+    <button class="seccion" data-seccion="mantenimiento"><span class="ico">🔧</span><span class="txt">Mantenimiento</span><span id="badge-sec-mantenimiento" class="badge" style="display:none">0</span></button>
+    <button class="seccion" data-seccion="barco"><span class="ico">⚓</span><span class="txt">Barco</span><span id="badge-sec-barco" class="badge" style="display:none">0</span></button>
+    <button class="seccion" data-seccion="panol"><span class="ico">📦</span><span class="txt">Pañol</span><span id="badge-sec-panol" class="badge" style="display:none">0</span></button>
+  </div>
+  <div class="subtabs" id="subtabs">
+    <div class="tabs-inner">
+      <button class="tab active" data-tab="dashboard" data-seccion="inicio">📊 Dashboard</button>
+      <button class="tab" data-tab="tareas" data-seccion="mantenimiento">🔧 Tareas <span id="badge-vencidos" class="badge" style="display:none">0</span></button>
+      <button class="tab" data-tab="deficiencias" data-seccion="mantenimiento">⚠️ Deficiencias <span id="badge-deficiencias" class="badge" style="display:none">0</span></button>
+      <button class="tab" data-tab="horas" data-seccion="mantenimiento">⏱️ Horas</button>
+      <button class="tab" data-tab="historial" data-seccion="mantenimiento">📜 Historial</button>
+      <button class="tab" data-tab="barco" data-seccion="barco">⚓ Mi Barco</button>
+      <button class="tab" data-tab="equipos" data-seccion="barco">🚢 Equipos</button>
+      <button class="tab" data-tab="certificados" data-seccion="barco">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
+      <button class="tab" data-tab="stock" data-seccion="panol">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
+      <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
+    </div>
   </div>
 </nav>
 
@@ -934,6 +965,7 @@
     <h2 class="panel-titulo">Todas las tareas</h2>
     <div class="acciones-globales">
       <button class="btn" onclick="abrirModalTarea()">➕ Agregar tarea</button>
+      <button class="btn btn-sec" onclick="abrirModalChequeos()">✓ Registrar varias</button>
       <button class="btn btn-acento" onclick="exportarExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -957,55 +989,6 @@
       <label class="toolbar-check"><input type="checkbox" id="filtro-critico"> ⚠️ Solo críticos</label>
     </div>
     <div class="task-list" id="lista"></div>
-  </section>
-
-  <!-- CARGA MENSUAL -->
-  <section class="section" id="sec-carga">
-    <h2 class="panel-titulo">Cargar horas del mes</h2>
-    <div class="carga-form">
-      <h3>Actualización mensual de horas por equipo</h3>
-      <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
-        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Las cajas reductoras se actualizan solas junto con su motor.
-      </p>
-      <div class="field" style="max-width:220px;margin-bottom:16px">
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Fecha de la carga</label>
-        <input type="date" id="carga-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--gris-2);border-radius:7px;font:inherit;font-size:14px;background:var(--gris-1)">
-      </div>
-      <div id="carga-equipos"></div>
-      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
-        <button class="btn btn-sec" onclick="resetCarga()">Limpiar</button>
-        <button class="btn" onclick="guardarCarga()">💾 Guardar horas</button>
-      </div>
-    </div>
-
-    <div class="carga-form">
-      <h3>📅 Chequeos por fecha</h3>
-      <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
-        Tareas que se manejan por fecha (chequeos mensuales, engrases, inspecciones). <strong>Marcá las que hiciste hoy</strong> y tocá Aplicar.
-      </p>
-      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-        <div>
-          <label>Fecha de realización</label>
-          <input type="date" id="fch-fecha">
-        </div>
-        <div>
-          <label>Realizado por</label>
-          <input type="text" id="fch-quien" value="Maquinista">
-        </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <label style="font-size:13px;color:var(--texto-suave);font-weight:500">Filtrar:</label>
-        <div style="display:flex;gap:6px">
-          <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('VENCIDOS')">Solo vencidos</button>
-          <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('TODOS')">Todos</button>
-          <button type="button" class="btn btn-pequeno btn-sec" onclick="toggleTodosChequeos()">Marcar/desmarcar</button>
-        </div>
-      </div>
-      <div id="chequeos-fecha"></div>
-      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
-        <button class="btn" onclick="aplicarChequeos()">✓ Aplicar marcados</button>
-      </div>
-    </div>
   </section>
 
   <!-- STOCK -->
@@ -1106,8 +1089,25 @@
     <div id="herr-lista"></div>
   </section>
 
-  <!-- HORAS (histórico) -->
+  <!-- HORAS: carga mensual arriba, histórico abajo -->
   <section class="section" id="sec-horas">
+    <h2 class="panel-titulo">Cargar horas del mes</h2>
+    <div class="carga-form">
+      <h3>Actualización mensual de horas por equipo</h3>
+      <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
+        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Las cajas reductoras se actualizan solas junto con su motor.
+      </p>
+      <div class="field" style="max-width:220px;margin-bottom:16px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Fecha de la carga</label>
+        <input type="date" id="carga-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--gris-2);border-radius:7px;font:inherit;font-size:14px;background:var(--gris-1)">
+      </div>
+      <div id="carga-equipos"></div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-sec" onclick="resetCarga()">Limpiar</button>
+        <button class="btn" onclick="guardarCarga()">💾 Guardar horas</button>
+      </div>
+    </div>
+
     <h2 class="panel-titulo">Histórico de horas</h2>
     <div class="carga-form">
       <p style="font-size:13px;color:var(--texto-suave);margin-bottom:14px">
@@ -1131,6 +1131,40 @@
     <div id="historial-lista"></div>
   </section>
 </main>
+
+<!-- MODAL: registrar varias (chequeos por fecha) -->
+<div class="modal-bg" id="modal-chequeos">
+  <div class="modal" style="max-width:640px">
+    <h2>✓ Registrar varias</h2>
+    <div class="modal-sub">📅 Chequeos por fecha</div>
+    <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
+      Tareas que se manejan por fecha (chequeos mensuales, engrases, inspecciones). <strong>Marcá las que hiciste hoy</strong> y tocá Aplicar.
+    </p>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div>
+        <label>Fecha de realización</label>
+        <input type="date" id="fch-fecha">
+      </div>
+      <div>
+        <label>Realizado por</label>
+        <input type="text" id="fch-quien" value="Maquinista">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <label style="font-size:13px;color:var(--texto-suave);font-weight:500">Filtrar:</label>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('VENCIDOS')">Solo vencidos</button>
+        <button type="button" class="btn btn-pequeno btn-sec" onclick="filtroChequeos('TODOS')">Todos</button>
+        <button type="button" class="btn btn-pequeno btn-sec" onclick="toggleTodosChequeos()">Marcar/desmarcar</button>
+      </div>
+    </div>
+    <div id="chequeos-fecha"></div>
+    <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-sec" onclick="cerrarModalChequeos()">Cancelar</button>
+      <button class="btn" onclick="aplicarChequeos()">✓ Aplicar marcados</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: registrar mantenimiento -->
 <div class="modal-bg" id="modal">
@@ -2686,6 +2720,7 @@ async function aplicarChequeos() {
       aplicadas++;
     }
     toast(`✓ ${aplicadas} tarea${aplicadas>1?'s':''} registrada${aplicadas>1?'s':''}`);
+    cerrarModalChequeos();
     await cargarTodo();
   } catch (err) {
     console.error(err);
@@ -4293,11 +4328,74 @@ function exportarExcel() {
 }
 
 // ============ NAVEGACIÓN TABS ============
+// Dos niveles: secciones (Inicio, Mantenimiento, Barco, Pañol) y sub-pestañas. Cada sub-pestaña
+// abre su <section id="sec-..."> y su botón .tab declara la sección con data-seccion.
+// cambiarTab(subpestaña) sigue siendo la única forma de navegar: también activa la sección.
+const SECCION_DE_TAB = Object.fromEntries(
+  [...document.querySelectorAll('.tab')].map(b => [b.dataset.tab, b.dataset.seccion]));
+let ultimaTabDeSeccion = {};  // sección -> última sub-pestaña abierta en ella
+
 function cambiarTab(name) {
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  if (!SECCION_DE_TAB[name]) name = 'dashboard';
+  const seccion = SECCION_DE_TAB[name];
+  document.querySelectorAll('.tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+    b.style.display = b.dataset.seccion === seccion ? '' : 'none';
+  });
+  document.querySelectorAll('.seccion').forEach(b => b.classList.toggle('active', b.dataset.seccion === seccion));
   document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + name));
+  // Inicio tiene una sola sub-pestaña: no se muestra la fila de abajo
+  const nTabs = Object.values(SECCION_DE_TAB).filter(s => s === seccion).length;
+  document.getElementById('subtabs').style.display = nTabs > 1 ? '' : 'none';
+
+  ultimaTabDeSeccion[seccion] = name;
+  try { localStorage.setItem('nav', JSON.stringify({ tab: name, ultimas: ultimaTabDeSeccion })); } catch (e) {}
 }
+
+// Al elegir una sección se abre la última sub-pestaña usada en ella (o la primera)
+function cambiarSeccion(seccion) {
+  const primera = Object.keys(SECCION_DE_TAB).find(t => SECCION_DE_TAB[t] === seccion);
+  const ultima = ultimaTabDeSeccion[seccion];
+  cambiarTab(SECCION_DE_TAB[ultima] === seccion ? ultima : primera);
+}
+
+// El badge de cada sección suma los badges visibles de sus sub-pestañas. Se recalcula solo
+// cuando cambia cualquiera de ellos, así no depende de quién los actualiza.
+function actualizarBadgesSecciones() {
+  document.querySelectorAll('.seccion').forEach(sec => {
+    const badge = sec.querySelector('.badge');
+    if (!badge) return;
+    const total = [...document.querySelectorAll(`.tab[data-seccion="${sec.dataset.seccion}"] .badge`)]
+      .filter(b => b.style.display !== 'none')
+      .reduce((s, b) => s + (parseInt(b.textContent) || 0), 0);
+    badge.textContent = total;
+    badge.style.display = total > 0 ? 'inline-block' : 'none';
+  });
+}
+const observadorBadges = new MutationObserver(actualizarBadgesSecciones);
+document.querySelectorAll('.tab .badge').forEach(b =>
+  observadorBadges.observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style'] }));
+
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => cambiarTab(b.dataset.tab)));
+document.querySelectorAll('.seccion').forEach(b => b.addEventListener('click', () => cambiarSeccion(b.dataset.seccion)));
+
+// Volver a la última pantalla abierta
+(function restaurarNavegacion() {
+  let guardada = null;
+  try { guardada = JSON.parse(localStorage.getItem('nav') || 'null'); } catch (e) {}
+  if (guardada && typeof guardada.ultimas === 'object' && guardada.ultimas) ultimaTabDeSeccion = guardada.ultimas;
+  cambiarTab(guardada?.tab || 'dashboard');
+})();
+
+// ---- Registrar varias (chequeos por fecha), desde la pestaña Tareas ----
+function abrirModalChequeos() {
+  renderChequeosFecha();
+  document.getElementById('modal-chequeos').classList.add('show');
+}
+function cerrarModalChequeos() {
+  document.getElementById('modal-chequeos').classList.remove('show');
+}
+document.getElementById('modal-chequeos').addEventListener('click', e => { if (e.target.id === 'modal-chequeos') cerrarModalChequeos(); });
 
 // Listeners filtros
 llenarSelectoresTipoTrabajo();
