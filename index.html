@@ -1175,7 +1175,7 @@
       <label>Fecha realizado</label>
       <input type="date" id="m-fecha">
     </div>
-    <div class="field">
+    <div class="field" id="m-hrs-campo">
       <label>Horas del equipo al hacerlo</label>
       <input type="number" id="m-hrs" placeholder="ej: 50545">
     </div>
@@ -2325,6 +2325,10 @@ function abrirModal(id) {
   document.getElementById('modal-info').innerHTML = `<strong>${escape(tareaActual.equipo)}</strong> — ${escape(tareaActual.tarea)}`;
   document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('m-hrs').value = tareaActual.hrs_totales || '';
+  // Solo visual: en tareas por fecha sin horas cargadas el campo no aplica. Si el equipo tiene
+  // horas (ej. muestras de aceite de motores) queda visible para verlas y corregirlas.
+  const sinHoras = !Number(tareaActual.hrs_totales);
+  document.getElementById('m-hrs-campo').style.display = tareaActual.unidad === 'fecha' && sinHoras ? 'none' : '';
   document.getElementById('m-quien').value = tareaActual.realizado_por || 'Maquinista';
   document.getElementById('m-notas').value = '';
   document.getElementById('m-tipo-trabajo').value = tareaActual.tipo_trabajo || '';
