@@ -97,8 +97,13 @@ CREATE TABLE public.mant_tareas (
   estado_op TEXT DEFAULT 'Operativo',
   observaciones TEXT,
   activa BOOLEAN DEFAULT true,
+  -- Postergación: mientras postergada_hasta sea hoy o futura, la tarea no cuenta en las alertas del Dashboard
+  postergada_hasta DATE,
+  motivo_postergacion TEXT,
   creada_en TIMESTAMPTZ DEFAULT now(),
-  actualizada_en TIMESTAMPTZ DEFAULT now()
+  actualizada_en TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT mant_tareas_postergacion_check
+    CHECK ((postergada_hasta IS NULL) = (motivo_postergacion IS NULL))
 );
 
 -- =============== HISTORIAL ===============
@@ -222,10 +227,15 @@ CREATE TABLE public.mant_certificados (
   dias_aviso INTEGER NOT NULL DEFAULT 30 CHECK (dias_aviso >= 0),
   observaciones TEXT,
   activo BOOLEAN NOT NULL DEFAULT true,
+  -- Postergación: mientras postergada_hasta sea hoy o futura, no cuenta en las alertas del Dashboard
+  postergada_hasta DATE,
+  motivo_postergacion TEXT,
   creado_en TIMESTAMPTZ DEFAULT now(),
   actualizado_en TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_certificados_tripulante_check
-    CHECK ((tripulante_id IS NOT NULL) = (categoria = 'Tripulación'))
+    CHECK ((tripulante_id IS NOT NULL) = (categoria = 'Tripulación')),
+  CONSTRAINT mant_certificados_postergacion_check
+    CHECK ((postergada_hasta IS NULL) = (motivo_postergacion IS NULL))
 );
 
 -- Una fila por renovación; la escribe la función mant_certificados_renovar
@@ -332,6 +342,7 @@ REVOKE EXECUTE ON FUNCTION public.mant_tripulantes_propagar_depto() FROM public,
 
 -- Renovación atómica de un certificado: guarda el historial y actualiza el vencimiento en la misma
 -- transacción. El vencimiento anterior se toma de la fila guardada. SECURITY INVOKER: RLS aplica.
+-- Si tenía postergación, la borra y deja el motivo en las notas del historial.
 CREATE OR REPLACE FUNCTION public.mant_certificados_renovar(
   p_id BIGINT,
   p_fecha_renovacion DATE,
@@ -344,8 +355,12 @@ SET search_path = ''
 AS $$
 DECLARE
   v_anterior DATE;
+  v_post_hasta DATE;
+  v_post_motivo TEXT;
+  v_notas TEXT;
 BEGIN
-  SELECT fecha_vencimiento INTO v_anterior
+  SELECT fecha_vencimiento, postergada_hasta, motivo_postergacion
+    INTO v_anterior, v_post_hasta, v_post_motivo
     FROM public.mant_certificados
    WHERE id = p_id AND activo
    FOR UPDATE;
@@ -362,10 +377,19 @@ BEGIN
   IF p_vencimiento_nuevo <= v_anterior THEN
     RAISE EXCEPTION 'El nuevo vencimiento debe ser posterior al actual (%)', v_anterior;
   END IF;
+  v_notas := nullif(trim(p_notas), '');
+  IF v_post_hasta IS NOT NULL THEN
+    v_notas := concat_ws(' — ', v_notas,
+      'Estuvo postergado hasta ' || to_char(v_post_hasta, 'DD/MM/YYYY') || ': ' || v_post_motivo);
+  END IF;
   INSERT INTO public.mant_certificados_historial
     (certificado_id, fecha_renovacion, vencimiento_anterior, vencimiento_nuevo, notas)
-  VALUES (p_id, p_fecha_renovacion, v_anterior, p_vencimiento_nuevo, nullif(trim(p_notas), ''));
-  UPDATE public.mant_certificados SET fecha_vencimiento = p_vencimiento_nuevo WHERE id = p_id;
+  VALUES (p_id, p_fecha_renovacion, v_anterior, p_vencimiento_nuevo, v_notas);
+  UPDATE public.mant_certificados
+     SET fecha_vencimiento = p_vencimiento_nuevo,
+         postergada_hasta = NULL,
+         motivo_postergacion = NULL
+   WHERE id = p_id;
 END;
 $$;
 

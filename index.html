@@ -219,6 +219,17 @@
   .task-card.cerrada { border-left-color: var(--verde); opacity: 0.85; }
   .cerrada .estado-icon { background: #dbf0e3; }
   .def-acciones { display: flex; flex-direction: column; gap: 6px; }
+  /* POSTERGACIONES */
+  .badge-postergada { display: inline-block; background: #e3ebf3; color: var(--azul-profundo); font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+  .postergada-info { font-size: 12px; color: var(--texto-suave); margin-top: 3px; }
+  .postergadas-linea { font-size: 13px; color: var(--texto-suave); padding: 8px 4px; cursor: pointer; margin-top: 4px; }
+  .postergadas-linea:hover { color: var(--azul-profundo); }
+  .postergadas-linea .flecha { font-size: 10px; margin-left: 4px; }
+  .postergadas-lista { border: 1px solid var(--gris-2); border-radius: 8px; background: white; margin-bottom: 8px; }
+  .postergada-item { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid var(--gris-2); cursor: pointer; }
+  .postergada-item:last-child { border-bottom: none; }
+  .postergada-item:hover { background: var(--gris-1, #f6f7f9); }
+  .postergada-item .meta { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
   .cert-solapas { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--gris-2); }
   .cert-solapa {
     background: none; border: none; font: inherit; font-size: 14px; font-weight: 500;
@@ -884,6 +895,8 @@
       </div>
     </div>
 
+    <div id="dash-postergadas"></div>
+
     <h2 class="panel-titulo">Más urgentes</h2>
     <div class="task-list" id="dash-urgentes"></div>
   </section>
@@ -938,6 +951,7 @@
         <option value="PROXIMO">🟡 Próximos</option>
         <option value="OK">🟢 Al día</option>
         <option value="SIN_DATO">⚪ Sin datos</option>
+        <option value="POSTERGADAS">⏸ Postergadas</option>
       </select>
       <select id="filtro-tipo-trabajo"></select>
       <label class="toolbar-check"><input type="checkbox" id="filtro-critico"> ⚠️ Solo críticos</label>
@@ -1146,6 +1160,7 @@
         <button type="button" class="btn btn-pequeno btn-sec" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
       </div>
     </div>
+    <div class="field" id="m-postergacion"></div>
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="borrarTareaActual()" style="margin-right:auto;background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
       <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
@@ -1507,6 +1522,7 @@
       <label>Observaciones</label>
       <textarea id="c-observaciones" rows="2"></textarea>
     </div>
+    <div class="field" id="c-postergacion"></div>
     <div id="c-historial-box" style="display:none">
       <label style="font-weight:600;font-size:13px">Historial de renovaciones</label>
       <div id="c-historial" class="cert-historial"></div>
@@ -1546,6 +1562,27 @@
       <button class="btn btn-sec" id="t-btn-reactivar" onclick="reactivarTrip()" style="margin-right:auto;color:var(--verde)">↩️ Reactivar</button>
       <button class="btn btn-sec" onclick="cerrarModalTrip()">Cancelar</button>
       <button class="btn" onclick="guardarTrip()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: postergar tarea o certificado -->
+<div class="modal-bg" id="modal-post">
+  <div class="modal">
+    <h2>⏸ Postergar</h2>
+    <div class="modal-sub" id="modal-post-info"></div>
+    <div class="field">
+      <label>Motivo *</label>
+      <textarea id="p-motivo" rows="2" placeholder="ej: Informado a la empresa, esperando repuesto"></textarea>
+    </div>
+    <div class="field">
+      <label>Fecha de revisión *</label>
+      <input type="date" id="p-hasta">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="p-btn-quitar" onclick="quitarPost()" style="margin-right:auto;color:var(--rojo)">Quitar postergación</button>
+      <button class="btn btn-sec" onclick="cerrarModalPost()">Cancelar</button>
+      <button class="btn" onclick="guardarPost()">⏸ Postergar</button>
     </div>
   </div>
 </div>
@@ -1778,6 +1815,29 @@ function calcularEstado(t) {
   return { estado: 'SIN_DATO', valor: null, mostrar: '—', unidad: '' };
 }
 
+// ---- Postergación (tareas y certificados) ----
+// Activa mientras postergada_hasta sea hoy o futura: el día de revisión todavía cuenta,
+// al día siguiente vuelve sola a las alertas. No cambia el estado (sigue vencida/por vencer),
+// solo la saca de los avisos y contadores.
+function estaPostergada(x) {
+  return !!x.postergada_hasta && x.postergada_hasta >= hoyLocalISO();
+}
+function fmtFechaDMA(f) {
+  return f ? f.split('-').reverse().join('/') : '';
+}
+// Texto que queda en las notas del historial al registrar una tarea que tenía postergación
+function trazaPostergacion(x) {
+  return x.postergada_hasta ? `Estuvo postergada hasta ${fmtFechaDMA(x.postergada_hasta)}: ${x.motivo_postergacion}` : null;
+}
+function notasConTraza(notas, x) {
+  return [notas, trazaPostergacion(x)].filter(Boolean).join(' — ') || null;
+}
+// Etiqueta y motivo para las tarjetas
+function htmlPostergacion(x) {
+  if (!estaPostergada(x)) return '';
+  return `<div class="postergada-info"><span class="badge-postergada">⏸ Postergada hasta ${fmtFecha(x.postergada_hasta)}</span> ${escape(x.motivo_postergacion)}</div>`;
+}
+
 // ============ CARGA INICIAL ============
 async function cargarTodo() {
   try {
@@ -1868,8 +1928,11 @@ function llenarFiltros() {
 
 // ============ DASHBOARD ============
 function renderDashboard() {
+  // Las postergadas no cuentan en contadores, banners ni "Más urgentes" (tienen su propia línea)
+  const tareasAlerta = tareas.filter(t => !estaPostergada(t));
+  const certsAlerta = certificados.filter(c => !estaPostergada(c));
   const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
-  tareas.forEach(t => stats[calcularEstado(t).estado]++);
+  tareasAlerta.forEach(t => stats[calcularEstado(t).estado]++);
 
   document.getElementById('n-vencido').textContent = stats.VENCIDO;
   document.getElementById('n-proximo').textContent = stats.PROXIMO;
@@ -1914,7 +1977,7 @@ function renderDashboard() {
   }
 
   // Aviso aparte de críticas vencidas (arriba del banner general)
-  const nCriticasVencidas = tareas.filter(t => esTareaCritica(t) && calcularEstado(t).estado === 'VENCIDO').length;
+  const nCriticasVencidas = tareasAlerta.filter(t => esTareaCritica(t) && calcularEstado(t).estado === 'VENCIDO').length;
   if (nCriticasVencidas > 0) {
     banner.innerHTML = `
       <div class="alert-banner" style="background:#fde0df">
@@ -1946,9 +2009,9 @@ function renderDashboard() {
   }
 
   // Certificados vencidos o por vencer
-  const nCertVencidos = certificados.filter(c => estadoCert(c) === 'VENCIDO').length;
-  const nCertPorVencer = certificados.filter(c => estadoCert(c) === 'PROXIMO').length;
-  const nCertTrip = certificados.filter(c => c.tripulante_id && estadoCert(c) !== 'OK').length;
+  const nCertVencidos = certsAlerta.filter(c => estadoCert(c) === 'VENCIDO').length;
+  const nCertPorVencer = certsAlerta.filter(c => estadoCert(c) === 'PROXIMO').length;
+  const nCertTrip = certsAlerta.filter(c => c.tripulante_id && estadoCert(c) !== 'OK').length;
   if (nCertVencidos > 0 || nCertPorVencer > 0) {
     const partes = [];
     if (nCertVencidos > 0) partes.push(`${nCertVencidos} certificado${nCertVencidos>1?'s':''} vencido${nCertVencidos>1?'s':''}`);
@@ -1964,8 +2027,10 @@ function renderDashboard() {
       </div>` + banner.innerHTML;
   }
 
+  renderPostergadasDashboard();
+
   // Top 5 urgentes (dentro de cada estado, las críticas primero)
-  const urgentes = tareas
+  const urgentes = tareasAlerta
     .map(t => ({ ...t, _est: calcularEstado(t), _critica: esTareaCritica(t) }))
     .filter(t => t._est.estado === 'VENCIDO' || t._est.estado === 'PROXIMO')
     .sort((a, b) => {
@@ -1989,6 +2054,139 @@ function irATareas(estado) {
   document.getElementById('filtro-estado').value = estado;
   cambiarTab('tareas');
   renderLista();
+}
+
+// ============ POSTERGACIONES ============
+// Tareas y certificados vencidos o por vencer ya informados a la empresa: salen de las alertas
+// hasta la fecha de revisión, sin cambiar sus fechas (ver estaPostergada()).
+let postActual = null;          // { tipo: 'tarea' | 'cert', item } en el modal de postergación
+let postergadasAbiertas = false; // lista desplegada en el Dashboard
+
+function renderPostergadasDashboard() {
+  const pTareas = tareas.filter(estaPostergada);
+  const pCerts = certificados.filter(estaPostergada);
+  const div = document.getElementById('dash-postergadas');
+  const total = pTareas.length + pCerts.length;
+  if (!total) { div.innerHTML = ''; return; }
+
+  const partes = [];
+  if (pTareas.length) partes.push(`${pTareas.length} tarea${pTareas.length>1?'s':''}`);
+  if (pCerts.length) partes.push(`${pCerts.length} certificado${pCerts.length>1?'s':''}`);
+  const nCrit = pTareas.filter(esTareaCritica).length;
+  const critTxt = nCrit ? ` · ${nCrit} crítica${nCrit>1?'s':''}` : '';
+
+  const items = [
+    ...pTareas.map(t => ({ hasta: t.postergada_hasta, html: `
+      <div class="postergada-item" onclick="abrirModal(${t.id})">
+        <div><strong>${escape(t.equipo)}</strong> — ${escape(t.tarea)}${esTareaCritica(t) ? ' <span class="badge-critico">⚠️ CRÍTICO</span>' : ''}</div>
+        <div class="meta">Revisar el ${fmtFecha(t.postergada_hasta)} · ${escape(t.motivo_postergacion)}</div>
+      </div>` })),
+    ...pCerts.map(c => {
+      const trip = tripulanteDe(c);
+      return { hasta: c.postergada_hasta, html: `
+      <div class="postergada-item" onclick="abrirCertDesdeDashboard(${c.id})">
+        <div><strong>📋 ${escape(c.nombre)}</strong>${trip ? ' — ' + escape(trip.nombre) : ''}</div>
+        <div class="meta">Revisar el ${fmtFecha(c.postergada_hasta)} · ${escape(c.motivo_postergacion)}</div>
+      </div>` };
+    })
+  ].sort((a, b) => a.hasta.localeCompare(b.hasta));  // la revisión más cercana primero
+
+  div.innerHTML = `
+    <div class="postergadas-linea" onclick="togglePostergadas()">
+      ⏸ ${total} postergada${total>1?'s':''} (${partes.join(', ')})${critTxt}
+      <span class="flecha">${postergadasAbiertas ? '▲' : '▼'}</span>
+    </div>
+    ${postergadasAbiertas ? `<div class="postergadas-lista">${items.map(i => i.html).join('')}</div>` : ''}`;
+}
+
+function togglePostergadas() {
+  postergadasAbiertas = !postergadasAbiertas;
+  renderPostergadasDashboard();
+}
+
+function abrirCertDesdeDashboard(id) {
+  const c = certificados.find(x => x.id === id);
+  if (!c) return;
+  cambiarTab('certificados');
+  cambiarSolapaCert(c.tripulante_id ? 'tripulacion' : 'barco');
+  abrirModalCert(id);
+}
+
+// Botón / estado de la postergación dentro de los modales de Registrar (tareas) y Editar (certificados).
+// Se ofrece si está vencida o por vencer, o si ya tiene una postergación cargada.
+function htmlBotonPostergar(tipo, item, enAlerta) {
+  if (!enAlerta && !item.postergada_hasta) return '';
+  const activa = estaPostergada(item);
+  const info = item.postergada_hasta
+    ? `<div class="meta" style="margin-top:6px">${activa ? '⏸ Postergada' : 'Postergación vencida'} hasta ${fmtFecha(item.postergada_hasta)} · ${escape(item.motivo_postergacion)}</div>`
+    : '';
+  return `
+    <button type="button" class="btn btn-sec btn-pequeno" onclick="abrirModalPost('${tipo}', ${item.id})">
+      ⏸ ${item.postergada_hasta ? 'Editar postergación' : 'Postergar'}
+    </button>${info}`;
+}
+
+function abrirModalPost(tipo, id) {
+  const item = tipo === 'tarea' ? tareas.find(t => t.id === id) : certificados.find(c => c.id === id);
+  if (!item) return;
+  // Se cierra el modal de origen y se abre el de postergación
+  if (tipo === 'tarea') cerrarModal(); else cerrarModalCert();
+  postActual = { tipo, item };
+  const titulo = tipo === 'tarea'
+    ? `<strong>${escape(item.equipo)}</strong> — ${escape(item.tarea)}`
+    : `<strong>${escape(item.nombre)}</strong>${tripulanteDe(item) ? ' — ' + escape(tripulanteDe(item).nombre) : ''}`;
+  document.getElementById('modal-post-info').innerHTML = titulo +
+    '<br>Sale de las alertas hasta la fecha de revisión, sin cambiar sus fechas.';
+  document.getElementById('p-motivo').value = item.motivo_postergacion || '';
+  const hasta = document.getElementById('p-hasta');
+  hasta.min = sumarDias(hoyLocalISO(), 1);
+  hasta.value = estaPostergada(item) && item.postergada_hasta > hoyLocalISO() ? item.postergada_hasta : '';
+  document.getElementById('p-btn-quitar').style.display = item.postergada_hasta ? '' : 'none';
+  document.getElementById('modal-post').classList.add('show');
+}
+
+function cerrarModalPost() {
+  document.getElementById('modal-post').classList.remove('show');
+  postActual = null;
+}
+
+async function guardarPostergacion(datos) {
+  const { tipo, item } = postActual;
+  const tabla = tipo === 'tarea' ? 'mant_tareas' : 'mant_certificados';
+  const { error } = await sb.from(tabla).update(datos).eq('id', item.id);
+  if (error) throw error;
+}
+
+async function guardarPost() {
+  if (!postActual) return;
+  const motivo = document.getElementById('p-motivo').value.trim();
+  const hasta = document.getElementById('p-hasta').value;
+  if (!motivo) { toast('Falta el motivo', true); return; }
+  if (!hasta) { toast('Falta la fecha de revisión', true); return; }
+  if (hasta <= hoyLocalISO()) { toast('La fecha de revisión tiene que ser posterior a hoy', true); return; }
+  try {
+    await guardarPostergacion({ postergada_hasta: hasta, motivo_postergacion: motivo });
+    toast(`⏸ Postergada hasta el ${fmtFecha(hasta)}`);
+    cerrarModalPost();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function quitarPost() {
+  if (!postActual) return;
+  if (!confirm('¿Quitar la postergación?\n\nVuelve a contar en las alertas del Dashboard si está vencida o por vencer.')) return;
+  try {
+    await guardarPostergacion({ postergada_hasta: null, motivo_postergacion: null });
+    toast('✓ Postergación quitada');
+    cerrarModalPost();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
 }
 
 // ============ LISTA DE TAREAS ============
@@ -2040,6 +2238,7 @@ function renderTaskCard(t) {
         <div class="equipo">${equipoHtml}${criticoHtml}</div>
         <div class="tarea">${tipoHtml}${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
+        ${htmlPostergacion(t)}
         ${obs}
       </div>
       <div class="proxima-box">
@@ -2059,7 +2258,8 @@ function renderLista() {
   const tipoTrabajo = document.getElementById('filtro-tipo-trabajo').value;
 
   let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
-    if (est !== 'TODOS' && t._est.estado !== est) return false;
+    if (est === 'POSTERGADAS') { if (!estaPostergada(t)) return false; }
+    else if (est !== 'TODOS' && t._est.estado !== est) return false;
     if (tipoTrabajo === 'SIN_TIPO' && t.tipo_trabajo) return false;
     if (tipoTrabajo && tipoTrabajo !== 'SIN_TIPO' && t.tipo_trabajo !== tipoTrabajo) return false;
     if (soloCriticos && !esTareaCritica(t)) return false;
@@ -2094,6 +2294,9 @@ function abrirModal(id) {
   document.getElementById('m-quien').value = tareaActual.realizado_por || 'Maquinista';
   document.getElementById('m-notas').value = '';
   document.getElementById('m-tipo-trabajo').value = tareaActual.tipo_trabajo || '';
+  const estado = calcularEstado(tareaActual).estado;
+  document.getElementById('m-postergacion').innerHTML =
+    htmlBotonPostergar('tarea', tareaActual, estado === 'VENCIDO' || estado === 'PROXIMO');
   document.getElementById('modal').classList.add('show');
 }
 
@@ -2135,7 +2338,10 @@ async function guardarMant() {
   const update = {
     fecha_ult: fecha,
     realizado_por: quien,
-    tipo_trabajo: document.getElementById('m-tipo-trabajo').value || null
+    tipo_trabajo: document.getElementById('m-tipo-trabajo').value || null,
+    // Registrar borra la postergación (el motivo queda en las notas del historial)
+    postergada_hasta: null,
+    motivo_postergacion: null
   };
   if (notas) update.observaciones = notas;
 
@@ -2165,7 +2371,7 @@ async function guardarMant() {
       fecha_realizado: fecha,
       hrs_equipo: isNaN(hrs) ? null : hrs,
       realizado_por: quien || null,
-      notas: notas || null
+      notas: notasConTraza(notas, tareaActual)
     });
     if (e2) throw e2;
     toast('✓ Mantenimiento registrado');
@@ -2459,7 +2665,7 @@ async function aplicarChequeos() {
       if (!t) continue;
 
       const meses = periodicidadAMeses(t.periodicidad);
-      const update = { fecha_ult: fecha, realizado_por: quien };
+      const update = { fecha_ult: fecha, realizado_por: quien, postergada_hasta: null, motivo_postergacion: null };
       if (meses) {
         const f = new Date(fecha + 'T00:00:00');
         f.setMonth(f.getMonth() + meses);
@@ -2474,7 +2680,7 @@ async function aplicarChequeos() {
         fecha_realizado: fecha,
         hrs_equipo: null,
         realizado_por: quien,
-        notas: 'Registrado desde chequeos por fecha (lote)'
+        notas: notasConTraza('Registrado desde chequeos por fecha (lote)', t)
       });
       if (e2) throw e2;
       aplicadas++;
@@ -2644,7 +2850,9 @@ async function aplicarConfirm() {
         ult_hrs: tr.hrs,
         fecha_ult: fechaHoy,
         realizado_por: quien,
-        hrs_totales: tr.hrs
+        hrs_totales: tr.hrs,
+        postergada_hasta: null,
+        motivo_postergacion: null
       };
       if (!isNaN(per)) {
         update.proxima_hrs = tr.hrs + per;
@@ -2657,7 +2865,7 @@ async function aplicarConfirm() {
         fecha_realizado: fechaHoy,
         hrs_equipo: tr.hrs,
         realizado_por: quien,
-        notas: 'Registrado desde carga mensual de horas'
+        notas: notasConTraza('Registrado desde carga mensual de horas', tarea)
       });
       if (e2) throw e2;
     }
@@ -3567,8 +3775,9 @@ function aplicarSolapaCert() {
 // Desde el Dashboard: abre la solapa donde está lo más urgente
 function irACertificados() {
   const peor = lista => Math.min(3, ...lista.map(c => ORDEN_ESTADO_CERT[estadoCert(c)]));
-  const barco = peor(certificados.filter(c => !c.tripulante_id));
-  const trip = peor(certificados.filter(c => c.tripulante_id));
+  const enAlerta = certificados.filter(c => !estaPostergada(c));
+  const barco = peor(enAlerta.filter(c => !c.tripulante_id));
+  const trip = peor(enAlerta.filter(c => c.tripulante_id));
   cambiarTab('certificados');
   cambiarSolapaCert(trip < barco ? 'tripulacion' : 'barco');
 }
@@ -3624,7 +3833,7 @@ function gruposTripulacion() {
 }
 
 function renderCertificados() {
-  const enAlerta = certificados.filter(c => estadoCert(c) !== 'OK');
+  const enAlerta = certificados.filter(c => estadoCert(c) !== 'OK' && !estaPostergada(c));
   const ponerBadge = (id, n) => {
     const b = document.getElementById(id);
     b.textContent = n;
@@ -3720,6 +3929,7 @@ function renderCertCard(c) {
         <div class="equipo">${escape(c.nombre)}</div>
         ${segundaLinea}
         <div class="meta">Vence: ${fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
+        ${htmlPostergacion(c)}
         ${obsHtml}
       </div>
       <div class="proxima-box">
@@ -3764,6 +3974,8 @@ function abrirModalCert(id, tripulanteId) {
     document.getElementById('c-dias-aviso').value = certActual.dias_aviso;
     document.getElementById('c-observaciones').value = certActual.observaciones || '';
     document.getElementById('c-btn-baja').style.display = '';
+    document.getElementById('c-postergacion').innerHTML =
+      htmlBotonPostergar('cert', certActual, estadoCert(certActual) !== 'OK');
 
     const renov = renovacionesCert(certActual.id);
     document.getElementById('c-historial').innerHTML = renov.length
@@ -3784,6 +3996,7 @@ function abrirModalCert(id, tripulanteId) {
     document.getElementById('c-dias-aviso').value = DIAS_AVISO_CERT;
     document.getElementById('c-observaciones').value = '';
     document.getElementById('c-btn-baja').style.display = 'none';
+    document.getElementById('c-postergacion').innerHTML = '';
     histBox.style.display = 'none';
   }
   document.getElementById('modal-cert').classList.add('show');
@@ -3999,6 +4212,8 @@ function exportarCertExcel() {
     Estado: nombreEstado[estadoCert(c)],
     'Días de aviso': c.dias_aviso,
     'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
+    'Postergada hasta': estaPostergada(c) ? c.postergada_hasta : '',
+    'Motivo postergación': estaPostergada(c) ? c.motivo_postergacion : '',
     Observaciones: c.observaciones
   });
   const hoja = filtrados.map(c => {
@@ -4051,6 +4266,8 @@ function exportarExcel() {
       'Falta': e.mostrar + ' ' + e.unidad,
       Estado: e.estado,
       Prioridad: t.prioridad,
+      'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
+      'Motivo postergación': estaPostergada(t) ? t.motivo_postergacion : '',
       'Realizado por': t.realizado_por,
       Observaciones: t.observaciones
     };
@@ -4114,6 +4331,7 @@ aplicarSolapaCert();
 document.getElementById('modal-cert').addEventListener('click', e => { if (e.target.id === 'modal-cert') cerrarModalCert(); });
 document.getElementById('modal-cert-renovar').addEventListener('click', e => { if (e.target.id === 'modal-cert-renovar') cerrarModalCertRenovar(); });
 document.getElementById('modal-trip').addEventListener('click', e => { if (e.target.id === 'modal-trip') cerrarModalTrip(); });
+document.getElementById('modal-post').addEventListener('click', e => { if (e.target.id === 'modal-post') cerrarModalPost(); });
 document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') cerrarModal(); });
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target.id === 'modal-rep') cerrarModalRep(); });
 document.getElementById('modal-mov').addEventListener('click', e => { if (e.target.id === 'modal-mov') cerrarModalMov(); });

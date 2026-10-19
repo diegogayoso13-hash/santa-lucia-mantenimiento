@@ -81,6 +81,25 @@ Don't confuse it with `#nt-tipo` in the "Agregar tarea" modal, which is the hour
   - `exportarCertExcel()` exports exactly what's on screen, as two sheets (Certificados or Tripulación, plus Renovaciones). The file name carries the sub-tab and the filters.
   - History is loaded with `select('*, certificado:mant_certificados(nombre)')` so names survive soft-deletes.
 
+### Postponement (postergación)
+
+Overdue or upcoming tasks and certificates that were already reported to the company can be taken out of the alerts without changing their dates (section `============ POSTERGACIONES ============`).
+
+- **Storage:** `mant_tareas` and `mant_certificados` have `postergada_hasta` (date) and `motivo_postergacion` (text). A table `check` makes them both null or both set.
+- **Rule:** `estaPostergada(x)` is true while `postergada_hasta >= hoyLocalISO()`. The review day still counts as postponed, and the item comes back to the alerts by itself the day after. It's derived, never stored.
+  - The status doesn't change: cards stay red or amber, with a "⏸ Postergada hasta …" label and the reason (`htmlPostergacion()`).
+- **Excluded while postponed:**
+  - The Dashboard counters, all banners (including the critical-task banner) and "Más urgentes".
+  - The Tareas / Certificados / sub-tab badges, and `irACertificados()`.
+  - Instead, `renderPostergadasDashboard()` shows a collapsible "⏸ N postergadas" line.
+  - Equipment cards and fichas intentionally still count them.
+  - The Tareas status filter has a "⏸ Postergadas" option.
+- **UI:** "⏸ Postergar / Editar postergación" sits in the Registrar modal (tasks) and the certificate Editar modal. It only appears when the item is VENCIDO/PROXIMO or already has a postponement, and it opens `#modal-post`. Reason and review date are required, and the date must be after today. `quitarPost()` clears it.
+- **Cleared on completion, with a trace:**
+  - Registering a task clears both fields in all three places that register: `guardarMant()`, `aplicarChequeos()` and `aplicarConfirm()`. The `mant_historial` note gets "Estuvo postergada hasta DD/MM/AAAA: motivo" through `notasConTraza()`.
+  - Renewing a certificate does the same inside `mant_certificados_renovar` ("Estuvo postergado hasta …").
+- **Excel:** both exports include "Postergada hasta" and "Motivo postergación", filled only while the postponement is active.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -91,7 +110,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 ## Database schema
 
-`docs/esquema.sql` documents all thirteen `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-16 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
+`docs/esquema.sql` documents all thirteen `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-19 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
 
 - `mant_buque` — single row of vessel particulars.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
@@ -100,6 +119,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_tripulantes` — `nombre`, `cargo`, `departamento` (`'Cubierta'|'Máquinas'`, inherited by their documents), `activo`.
 - `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
+- `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable). `unidad` also allows `'ninguna'`.
 
 Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`, and Auth's leaked password protection is disabled.
