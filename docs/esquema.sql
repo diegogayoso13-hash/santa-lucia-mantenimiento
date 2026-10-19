@@ -80,8 +80,12 @@ CREATE TABLE public.mant_tareas (
   equipo TEXT NOT NULL,                     -- nombre del equipo (texto libre; filtros y carga de horas usan esto)
   equipo_id INTEGER REFERENCES public.mant_equipos(id) ON DELETE SET NULL,
   tarea TEXT NOT NULL,
-  periodicidad TEXT,
-  unidad TEXT CHECK (unidad IN ('hrs', 'fecha', 'ninguna')) DEFAULT 'hrs',
+  periodicidad TEXT,                        -- solo para mostrar ("250 hrs", "Mensual", "250 hrs o 6 meses")
+  -- Control: 'hrs' (cada_hrs), 'fecha' (cada_meses), 'ambos' (lo que ocurra primero), 'ninguna'
+  unidad TEXT CONSTRAINT mant_tareas_unidad_check
+    CHECK (unidad IN ('hrs', 'fecha', 'ambos', 'ninguna')) DEFAULT 'hrs',
+  cada_hrs NUMERIC CHECK (cada_hrs > 0),    -- intervalo en horas (lo usa el cálculo)
+  cada_meses INTEGER CHECK (cada_meses > 0), -- intervalo en meses (lo usa el cálculo)
   hrs_totales NUMERIC DEFAULT 0,
   ult_hrs NUMERIC,
   fecha_ult DATE,
@@ -103,7 +107,11 @@ CREATE TABLE public.mant_tareas (
   creada_en TIMESTAMPTZ DEFAULT now(),
   actualizada_en TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_tareas_postergacion_check
-    CHECK ((postergada_hasta IS NULL) = (motivo_postergacion IS NULL))
+    CHECK ((postergada_hasta IS NULL) = (motivo_postergacion IS NULL)),
+  -- Cada tipo de control tiene su intervalo
+  CONSTRAINT mant_tareas_control_check CHECK (
+    (unidad NOT IN ('hrs', 'ambos') OR cada_hrs IS NOT NULL) AND
+    (unidad NOT IN ('fecha', 'ambos') OR cada_meses IS NOT NULL))
 );
 
 -- =============== HISTORIAL ===============

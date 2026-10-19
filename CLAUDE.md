@@ -46,7 +46,32 @@ The top bar has four sections, each with its sub-tabs underneath:
 
 ### Maintenance status model
 
-`calcularEstado(t)` is the core rule: a task (`mant_tareas` row) is tracked either by engine hours (`unidad: 'hrs'`, comparing `proxima_hrs` vs `hrs_totales`) or by calendar date (`unidad: 'fecha'`, comparing `proxima_fecha` vs today). Thresholds: `VENCIDO` (overdue) if the difference is ≤ 0, `PROXIMO` (upcoming) if ≤ 100 hrs or ≤ 30 days, otherwise `OK`; `SIN_DATO` if neither field is set. This function is called everywhere status is displayed (dashboard counts, task list, equipment cards) — status is always derived, never stored.
+`calcularEstado(t)` is the core rule. `mant_tareas.unidad` says how a task is controlled:
+
+| `unidad` | Interval column | Compares |
+|---|---|---|
+| `'hrs'` | `cada_hrs` | `proxima_hrs` vs `hrs_totales` |
+| `'fecha'` | `cada_meses` | `proxima_fecha` vs today |
+| `'ambos'` ("lo que ocurra primero") | both | both |
+| `'ninguna'` | — | nothing (always `SIN_DATO`) |
+
+- **Thresholds:** `VENCIDO` (overdue) if the difference is ≤ 0, `PROXIMO` (upcoming) if ≤ 100 hrs or ≤ 30 days, otherwise `OK`; `SIN_DATO` if there's no data.
+- **`'ambos'`:** the worse side wins (VENCIDO > PROXIMO > OK). The other side comes back in `.otro`, and the card shows both.
+- **Where it's used:** everywhere status is displayed (dashboard counts, task list, equipment cards). Status is always derived, never stored.
+- **Helpers:**
+  - `usaHoras(t)` / `usaFecha(t)` tell which sides apply. Use them instead of comparing `unidad` to `'hrs'`/`'fecha'` directly.
+  - `cadaHrs(t)` / `cadaMeses(t)` return the intervals, falling back to parsing `periodicidad` for rows without the columns.
+  - `sumarMeses()` adds months to a date.
+- **`periodicidad`** is display text only. `etiquetaPeriodicidad(t)` builds the label from the interval columns, and `textoPeriodicidad()` writes it on create/edit.
+- **The table check** `mant_tareas_control_check` requires the interval(s) for each `unidad`.
+- **Registering:**
+  - `guardarMant()` never changes `unidad`. It updates `proxima_hrs` and/or `proxima_fecha` according to `usaHoras`/`usaFecha`, and `'ambos'` requires the hours.
+  - The monthly hours confirmation (`aplicarConfirm()`) also recalculates `proxima_fecha` for `'ambos'`.
+  - "Registrar varias" lists only `'fecha'` tasks: `'ambos'` are left out on purpose, so their hours are checked in the Registrar modal.
+- **Editing:** "✏️ Editar tarea" in the Registrar modal (`abrirEditarTarea()`) reuses `#modal-tarea` in edit mode.
+  - It changes the name, priority, work type and control. The equipment is fixed, because hour cascading and filters match on its name.
+  - Next hours/date are recalculated only when the control or an interval changes (`controlCambia()`), counting from `ult_hrs` / `fecha_ult`. If those are missing, it asks for "contar desde".
+  - The side that stops being used is cleared.
 
 ### Hour cascading (Horas tab)
 
@@ -140,7 +165,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
-- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable). `unidad` also allows `'ninguna'`.
+- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
 
 Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`, and Auth's leaked password protection is disabled.
 

@@ -302,6 +302,7 @@
   .proxima-box { text-align: right; min-width: 80px; }
   .proxima-box .valor { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; line-height: 1; }
   .proxima-box .unidad { font-size: 10.5px; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+  .proxima-box .otro { font-size: 11px; color: var(--texto-suave); margin-top: 4px; padding-top: 3px; border-top: 1px solid var(--gris-2); }
   .vencido .proxima-box .valor { color: var(--rojo); }
   .proximo .proxima-box .valor { color: var(--ambar); }
   .ok .proxima-box .valor { color: var(--verde); }
@@ -1196,7 +1197,8 @@
     </div>
     <div class="field" id="m-postergacion"></div>
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="borrarTareaActual()" style="margin-right:auto;background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
+      <button class="btn btn-sec" onclick="borrarTareaActual()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
+      <button class="btn btn-sec" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
       <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
       <button class="btn" onclick="guardarMant()">✓ Guardar</button>
     </div>
@@ -1687,8 +1689,8 @@
 <!-- MODAL: agregar tarea nueva -->
 <div class="modal-bg" id="modal-tarea">
   <div class="modal">
-    <h2>Agregar tarea nueva</h2>
-    <div class="modal-sub">Creá un mantenimiento nuevo. Si ya lo hiciste, cargá la fecha/horas y la app calcula sola la próxima vez que toca.</div>
+    <h2 id="nt-titulo">Agregar tarea nueva</h2>
+    <div class="modal-sub" id="nt-sub">Creá un mantenimiento nuevo. Si ya lo hiciste, cargá la fecha/horas y la app calcula sola la próxima vez que toca.</div>
     <div class="field">
       <label>Equipo *</label>
       <input type="text" id="nt-equipo" list="lista-equipos-nt" placeholder="ej: Motor Principal">
@@ -1698,47 +1700,10 @@
       <label>Nombre de la tarea *</label>
       <input type="text" id="nt-tarea" placeholder="ej: Cambio de filtro de aceite">
     </div>
-    <div class="field">
-      <label>Tipo de trabajo</label>
-      <select id="nt-tipo-trabajo" class="sel-tipo-trabajo"></select>
-    </div>
-    <div class="field">
-      <label>¿Cómo se controla?</label>
-      <select id="nt-tipo" onchange="toggleTipoTarea()">
-        <option value="hrs">Por horas del equipo</option>
-        <option value="fecha">Por fecha (calendario)</option>
-      </select>
-    </div>
-
-    <div id="nt-bloque-hrs">
-      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label>Cada cuántas horas *</label>
-          <input type="number" id="nt-cada-hrs" min="1" placeholder="ej: 250">
-        </div>
-        <div>
-          <label>Horas del equipo hoy *</label>
-          <input type="number" id="nt-hrs-actual" min="0" placeholder="ej: 50545">
-        </div>
-      </div>
-    </div>
-
-    <div id="nt-bloque-fecha" style="display:none">
-      <div class="field">
-        <label>Cada cuánto *</label>
-        <select id="nt-cada-fecha">
-          <option value="mensual">Mensual</option>
-          <option value="3 meses">Cada 3 meses</option>
-          <option value="6 meses">Cada 6 meses</option>
-          <option value="anual">Anual</option>
-        </select>
-      </div>
-    </div>
-
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
-        <label>¿Cuándo la hiciste?</label>
-        <input type="date" id="nt-fecha-ult">
+        <label>Tipo de trabajo</label>
+        <select id="nt-tipo-trabajo" class="sel-tipo-trabajo"></select>
       </div>
       <div>
         <label>Prioridad</label>
@@ -1750,16 +1715,73 @@
       </div>
     </div>
     <div class="field">
-      <label>Realizado por</label>
-      <input type="text" id="nt-quien" value="Maquinista">
+      <label>¿Cómo se controla?</label>
+      <!-- No confundir con el tipo de trabajo: esto es mant_tareas.unidad -->
+      <select id="nt-tipo" onchange="toggleTipoTarea()">
+        <option value="hrs">Por horas del equipo</option>
+        <option value="fecha">Por fecha (calendario)</option>
+        <option value="ambos">Lo que ocurra primero (horas o fecha)</option>
+        <option value="ninguna" id="nt-opcion-ninguna">Sin control periódico</option>
+      </select>
     </div>
-    <div class="field">
-      <label>Observaciones (opcional)</label>
-      <textarea id="nt-notas" rows="2" placeholder="Algo a destacar..."></textarea>
+
+    <div class="field" id="nt-bloque-control" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div id="nt-bloque-hrs">
+        <label>Cada cuántas horas *</label>
+        <input type="number" id="nt-cada-hrs" min="1" placeholder="ej: 250">
+      </div>
+      <div id="nt-bloque-fecha">
+        <label>Cada cuántos meses *</label>
+        <input type="number" id="nt-cada-meses" min="1" step="1" list="nt-meses-sugeridos" placeholder="ej: 1 = mensual, 12 = anual">
+        <datalist id="nt-meses-sugeridos">
+          <option value="1">Mensual</option>
+          <option value="3">Cada 3 meses</option>
+          <option value="6">Cada 6 meses</option>
+          <option value="12">Anual</option>
+        </datalist>
+      </div>
     </div>
+
+    <!-- Alta: desde cuándo cuenta la tarea (la app registra esa realización en el historial) -->
+    <div id="nt-bloque-alta">
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div id="nt-alta-fecha">
+          <label id="nt-fecha-ult-label">¿Cuándo la hiciste?</label>
+          <input type="date" id="nt-fecha-ult">
+        </div>
+        <div id="nt-alta-hrs">
+          <label>Horas del equipo hoy *</label>
+          <input type="number" id="nt-hrs-actual" min="0" placeholder="ej: 50545">
+        </div>
+      </div>
+      <div class="field">
+        <label>Realizado por</label>
+        <input type="text" id="nt-quien" value="Maquinista">
+      </div>
+      <div class="field">
+        <label>Observaciones (opcional)</label>
+        <textarea id="nt-notas" rows="2" placeholder="Algo a destacar..."></textarea>
+      </div>
+    </div>
+
+    <!-- Edición: desde dónde se recalcula si cambia el control -->
+    <div id="nt-bloque-edicion">
+      <div class="meta" id="nt-recalculo-info" style="font-size:12.5px;color:var(--texto-suave);margin-bottom:10px"></div>
+      <div class="field" id="nt-desde" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div id="nt-desde-fecha-box">
+          <label>Contar desde (fecha) *</label>
+          <input type="date" id="nt-desde-fecha">
+        </div>
+        <div id="nt-desde-hrs-box">
+          <label>Contar desde (horas) *</label>
+          <input type="number" id="nt-desde-hrs" min="0">
+        </div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalTarea()">Cancelar</button>
-      <button class="btn" onclick="guardarTarea()">✓ Crear tarea</button>
+      <button class="btn" id="nt-btn-guardar" onclick="guardarTarea()">✓ Crear tarea</button>
     </div>
   </div>
 </div>
@@ -1833,20 +1855,69 @@ function periodicidadAMeses(p) {
   return null;
 }
 
+// ---- Control de las tareas ----
+// unidad: 'hrs' (cada cada_hrs horas), 'fecha' (cada cada_meses meses),
+// 'ambos' (lo que ocurra primero: horas o meses) o 'ninguna' (sin control periódico).
+// cada_hrs / cada_meses son lo que usa el cálculo; periodicidad es solo el texto que se muestra.
+function usaHoras(t) { return t.unidad === 'hrs' || t.unidad === 'ambos'; }
+function usaFecha(t) { return t.unidad === 'fecha' || t.unidad === 'ambos'; }
+// Respaldo para tareas sin cada_hrs/cada_meses (creadas con versiones anteriores de la app)
+function cadaHrs(t) {
+  if (t.cada_hrs != null) return Number(t.cada_hrs);
+  const n = t.unidad === 'hrs' ? parseFloat(t.periodicidad) : NaN;
+  return isNaN(n) ? null : n;
+}
+function cadaMeses(t) {
+  if (t.cada_meses != null) return Number(t.cada_meses);
+  return t.unidad === 'fecha' ? periodicidadAMeses(t.periodicidad) : null;
+}
+function sumarMeses(fechaStr, meses) {
+  const f = new Date(fechaStr + 'T00:00:00Z');
+  f.setUTCMonth(f.getUTCMonth() + meses);
+  return f.toISOString().split('T')[0];
+}
+function textoMeses(m) {
+  return m === 1 ? 'Mensual' : m === 12 ? 'Anual' : `${m} meses`;
+}
+// Texto de periodicidad que se guarda al crear o editar una tarea
+function textoPeriodicidad(unidad, hrs, meses) {
+  if (unidad === 'hrs') return `${hrs} hrs`;
+  if (unidad === 'fecha') return textoMeses(meses);
+  if (unidad === 'ambos') return `${hrs} hrs o ${textoMeses(meses).toLowerCase()}`;
+  return null;
+}
+// Texto para mostrar, armado desde cada_hrs/cada_meses (así es igual para tareas viejas y nuevas)
+function etiquetaPeriodicidad(t) {
+  const h = cadaHrs(t), m = cadaMeses(t);
+  if (t.unidad === 'hrs' && h) return `${h} hrs`;
+  if (t.unidad === 'fecha' && m) return textoMeses(m);
+  if (t.unidad === 'ambos' && h && m) return `${h} hrs o ${textoMeses(m).toLowerCase()}`;
+  return t.periodicidad || '—';
+}
+
+function estadoPorHoras(t) {
+  if (t.proxima_hrs == null || t.hrs_totales == null) return null;
+  const dif = Number(t.proxima_hrs) - Number(t.hrs_totales);
+  const estado = dif <= 0 ? 'VENCIDO' : dif <= 100 ? 'PROXIMO' : 'OK';
+  return { estado, valor: dif, mostrar: dif, unidad: 'hrs' };
+}
+function estadoPorFecha(t) {
+  if (!t.proxima_fecha) return null;
+  const d = diasEntre(t.proxima_fecha);
+  const estado = d <= 0 ? 'VENCIDO' : d <= 30 ? 'PROXIMO' : 'OK';
+  return { estado, valor: d, mostrar: d, unidad: 'días' };
+}
+
+// En 'ambos' manda el peor de los dos (vencido > próximo > al día); el otro va en .otro
 function calcularEstado(t) {
-  if (t.unidad === 'hrs' && t.proxima_hrs != null && t.hrs_totales != null) {
-    const dif = Number(t.proxima_hrs) - Number(t.hrs_totales);
-    if (dif <= 0) return { estado: 'VENCIDO', valor: dif, mostrar: dif, unidad: 'hrs' };
-    if (dif <= 100) return { estado: 'PROXIMO', valor: dif, mostrar: dif, unidad: 'hrs' };
-    return { estado: 'OK', valor: dif, mostrar: dif, unidad: 'hrs' };
+  const h = usaHoras(t) ? estadoPorHoras(t) : null;
+  const f = usaFecha(t) ? estadoPorFecha(t) : null;
+  if (h && f) {
+    const ord = { VENCIDO: 0, PROXIMO: 1, OK: 2 };
+    const [principal, otro] = ord[f.estado] < ord[h.estado] ? [f, h] : [h, f];
+    return { ...principal, otro };
   }
-  if (t.unidad === 'fecha' && t.proxima_fecha) {
-    const d = diasEntre(t.proxima_fecha);
-    if (d <= 0) return { estado: 'VENCIDO', valor: d, mostrar: d, unidad: 'días' };
-    if (d <= 30) return { estado: 'PROXIMO', valor: d, mostrar: d, unidad: 'días' };
-    return { estado: 'OK', valor: d, mostrar: d, unidad: 'días' };
-  }
-  return { estado: 'SIN_DATO', valor: null, mostrar: '—', unidad: '' };
+  return h || f || { estado: 'SIN_DATO', valor: null, mostrar: '—', unidad: '' };
 }
 
 // ---- Postergación (tareas y certificados) ----
@@ -2270,7 +2341,7 @@ function renderTaskCard(t) {
       <div class="estado-icon">${iconos[est.estado]}</div>
       <div class="task-info">
         <div class="equipo">${equipoHtml}${criticoHtml}</div>
-        <div class="tarea">${tipoHtml}${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
+        <div class="tarea">${tipoHtml}${escape(t.tarea)} · cada ${escape(etiquetaPeriodicidad(t))}</div>
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Prioridad ${escape(t.prioridad)}</div>
         ${htmlPostergacion(t)}
         ${obs}
@@ -2278,6 +2349,7 @@ function renderTaskCard(t) {
       <div class="proxima-box">
         <div class="valor">${est.mostrar}</div>
         <div class="unidad">${est.unidad}</div>
+        ${est.otro ? `<div class="otro">${est.otro.mostrar} ${est.otro.unidad}</div>` : ''}
       </div>
       <button class="btn" onclick="abrirModal(${t.id})">✓ Registrar</button>
     </div>`;
@@ -2372,6 +2444,8 @@ async function guardarMant() {
   const notas = document.getElementById('m-notas').value;
 
   if (!fecha) { toast('Falta la fecha', true); return; }
+  // "Lo que ocurra primero" recalcula las dos cosas: sin horas no se puede
+  if (tareaActual.unidad === 'ambos' && isNaN(hrs)) { toast('Faltan las horas del equipo (la tarea se controla por horas y por fecha)', true); return; }
 
   const update = {
     fecha_ult: fecha,
@@ -2386,20 +2460,12 @@ async function guardarMant() {
   if (!isNaN(hrs)) {
     update.ult_hrs = hrs;
     update.hrs_totales = Math.max(Number(tareaActual.hrs_totales || 0), hrs);
-    const per = parseFloat(tareaActual.periodicidad);
-    if (!isNaN(per)) {
-      update.proxima_hrs = hrs + per;
-      update.unidad = 'hrs';
-    }
   }
-  // Recalcular fecha si aplica
-  const meses = periodicidadAMeses(tareaActual.periodicidad);
-  if (meses) {
-    const f = new Date(fecha + 'T00:00:00');
-    f.setMonth(f.getMonth() + meses);
-    update.proxima_fecha = f.toISOString().split('T')[0];
-    if (tareaActual.unidad !== 'hrs') update.unidad = 'fecha';
-  }
+  // Próximas horas y/o fecha según cómo se controla la tarea (la unidad no cambia al registrar)
+  const cHrs = cadaHrs(tareaActual);
+  if (usaHoras(tareaActual) && cHrs && !isNaN(hrs)) update.proxima_hrs = hrs + cHrs;
+  const cMeses = cadaMeses(tareaActual);
+  if (usaFecha(tareaActual) && cMeses) update.proxima_fecha = sumarMeses(fecha, cMeses);
 
   try {
     const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tareaActual.id);
@@ -2440,17 +2506,29 @@ async function guardarSoloTipo() {
   }
 }
 
-// ============ AGREGAR TAREA NUEVA ============
+// ============ AGREGAR / EDITAR TAREA ============
+// El mismo modal sirve para crear (registra la realización inicial en el historial) y para editar
+// nombre, prioridad, tipo de trabajo y control. Al editar, las próximas horas/fecha se recalculan
+// solo si cambia el control o el intervalo, contando desde la última realización.
+let tareaEditando = null;  // tarea en edición (null = alta)
+
 function abrirModalTarea() {
+  tareaEditando = null;
   const equipos = [...new Set(tareas.map(t => t.equipo))].sort();
   document.getElementById('lista-equipos-nt').innerHTML = equipos.map(e => `<option value="${escape(e)}">`).join('');
-  document.getElementById('nt-equipo').value = '';
+  document.getElementById('nt-titulo').textContent = 'Agregar tarea nueva';
+  document.getElementById('nt-sub').textContent = 'Creá un mantenimiento nuevo. Si ya lo hiciste, cargá la fecha/horas y la app calcula sola la próxima vez que toca.';
+  document.getElementById('nt-btn-guardar').textContent = '✓ Crear tarea';
+  const eq = document.getElementById('nt-equipo');
+  eq.value = '';
+  eq.disabled = false;
   document.getElementById('nt-tarea').value = '';
   document.getElementById('nt-tipo-trabajo').value = '';
   document.getElementById('nt-tipo').value = 'hrs';
+  document.getElementById('nt-opcion-ninguna').hidden = true;  // al crear siempre hay control
   document.getElementById('nt-cada-hrs').value = '';
   document.getElementById('nt-hrs-actual').value = '';
-  document.getElementById('nt-cada-fecha').value = 'mensual';
+  document.getElementById('nt-cada-meses').value = 1;
   document.getElementById('nt-fecha-ult').value = new Date().toISOString().split('T')[0];
   document.getElementById('nt-prioridad').value = 'MEDIA';
   document.getElementById('nt-quien').value = 'Maquinista';
@@ -2459,20 +2537,107 @@ function abrirModalTarea() {
   document.getElementById('modal-tarea').classList.add('show');
 }
 
+// Desde el modal Registrar
+function abrirEditarTarea() {
+  const t = tareaActual;
+  if (!t) return;
+  cerrarModal();
+  tareaEditando = t;
+  document.getElementById('nt-titulo').textContent = 'Editar tarea';
+  document.getElementById('nt-sub').innerHTML = `<strong>${escape(t.equipo)}</strong> — ${escape(t.tarea)}`;
+  document.getElementById('nt-btn-guardar').textContent = '✓ Guardar cambios';
+  const eq = document.getElementById('nt-equipo');
+  eq.value = t.equipo;
+  eq.disabled = true;  // la carga de horas y los filtros van por el nombre del equipo
+  document.getElementById('nt-tarea').value = t.tarea;
+  document.getElementById('nt-tipo-trabajo').value = t.tipo_trabajo || '';
+  document.getElementById('nt-prioridad').value = t.prioridad || 'MEDIA';
+  document.getElementById('nt-opcion-ninguna').hidden = false;
+  document.getElementById('nt-tipo').value = t.unidad || 'ninguna';
+  document.getElementById('nt-cada-hrs').value = cadaHrs(t) ?? '';
+  document.getElementById('nt-cada-meses').value = cadaMeses(t) ?? '';
+  document.getElementById('nt-desde-fecha').value = hoyLocalISO();
+  document.getElementById('nt-desde-hrs').value = t.hrs_totales != null ? Number(t.hrs_totales) : '';
+  toggleTipoTarea();
+  document.getElementById('modal-tarea').classList.add('show');
+}
+
 function cerrarModalTarea() {
   document.getElementById('modal-tarea').classList.remove('show');
+  tareaEditando = null;
+}
+
+// Lo elegido en el modal (control + intervalos)
+function controlElegido() {
+  const unidad = document.getElementById('nt-tipo').value;
+  return {
+    unidad,
+    hrs: parseFloat(document.getElementById('nt-cada-hrs').value),
+    meses: Number(document.getElementById('nt-cada-meses').value)
+  };
+}
+
+function controlCambia(t, { unidad, hrs, meses }) {
+  if (unidad !== t.unidad) return true;
+  if (usaHoras({ unidad }) && hrs !== cadaHrs(t)) return true;
+  if (usaFecha({ unidad }) && meses !== cadaMeses(t)) return true;
+  return false;
 }
 
 function toggleTipoTarea() {
-  const tipo = document.getElementById('nt-tipo').value;
-  document.getElementById('nt-bloque-hrs').style.display = tipo === 'hrs' ? '' : 'none';
-  document.getElementById('nt-bloque-fecha').style.display = tipo === 'fecha' ? '' : 'none';
+  const c = controlElegido();
+  const horas = usaHoras(c), fecha = usaFecha(c);
+  document.getElementById('nt-bloque-control').style.display = horas || fecha ? 'grid' : 'none';
+  document.getElementById('nt-bloque-hrs').style.display = horas ? '' : 'none';
+  document.getElementById('nt-bloque-fecha').style.display = fecha ? '' : 'none';
+
+  const editando = !!tareaEditando;
+  document.getElementById('nt-bloque-alta').style.display = editando ? 'none' : '';
+  document.getElementById('nt-bloque-edicion').style.display = editando ? '' : 'none';
+
+  if (!editando) {
+    document.getElementById('nt-alta-hrs').style.display = horas ? '' : 'none';
+    document.getElementById('nt-fecha-ult-label').textContent = fecha ? '¿Cuándo la hiciste? *' : '¿Cuándo la hiciste?';
+    return;
+  }
+
+  // Edición: explicar desde dónde se recalcula y pedir "contar desde" si nunca se hizo
+  const t = tareaEditando;
+  const info = document.getElementById('nt-recalculo-info');
+  const faltaFecha = fecha && !t.fecha_ult;
+  const faltaHrs = horas && t.ult_hrs == null;
+  if (!controlCambia(t, c)) {
+    info.textContent = 'El control no cambia: los vencimientos quedan como están.';
+  } else if (!horas && !fecha) {
+    info.textContent = 'Sin control periódico: la tarea deja de vencer (queda "sin datos").';
+  } else {
+    const partes = [];
+    if (fecha && t.fecha_ult) partes.push(`fecha ${fmtFecha(t.fecha_ult)}`);
+    if (horas && t.ult_hrs != null) partes.push(`${Number(t.ult_hrs)} hrs`);
+    info.textContent = partes.length
+      ? `Se recalcula desde la última realización: ${partes.join(' · ')}.` +
+        (faltaFecha || faltaHrs ? ' Falta un dato porque nunca se registró: elegí desde cuándo contar.' : '')
+      : 'Nunca se registró: elegí desde cuándo contar.';
+  }
+  const pedir = controlCambia(t, c) && (faltaFecha || faltaHrs);
+  document.getElementById('nt-desde').style.display = pedir ? 'grid' : 'none';
+  document.getElementById('nt-desde-fecha-box').style.display = pedir && faltaFecha ? '' : 'none';
+  document.getElementById('nt-desde-hrs-box').style.display = pedir && faltaHrs ? '' : 'none';
+}
+
+// Valida los intervalos del control elegido; devuelve un mensaje de error o null
+function errorControl({ unidad, hrs, meses }) {
+  if (usaHoras({ unidad }) && !(hrs > 0)) return 'Falta cada cuántas horas';
+  if (usaFecha({ unidad }) && !(Number.isInteger(meses) && meses > 0)) return 'Falta cada cuántos meses (número entero)';
+  return null;
 }
 
 async function guardarTarea() {
+  if (tareaEditando) return guardarEdicionTarea();
+
   const equipo = document.getElementById('nt-equipo').value.trim();
   const tarea = document.getElementById('nt-tarea').value.trim();
-  const tipo = document.getElementById('nt-tipo').value;
+  const c = controlElegido();
   const fechaUlt = document.getElementById('nt-fecha-ult').value;
   const prioridad = document.getElementById('nt-prioridad').value;
   const quien = document.getElementById('nt-quien').value.trim() || 'Maquinista';
@@ -2480,38 +2645,34 @@ async function guardarTarea() {
 
   if (!equipo) { toast('Falta el equipo', true); return; }
   if (!tarea) { toast('Falta el nombre de la tarea', true); return; }
+  const err = errorControl(c);
+  if (err) { toast(err, true); return; }
 
   const data = {
     equipo, tarea, prioridad,
     realizado_por: quien,
     activa: true,
     observaciones: notas || null,
-    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null
+    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null,
+    unidad: c.unidad,
+    cada_hrs: usaHoras(c) ? c.hrs : null,
+    cada_meses: usaFecha(c) ? c.meses : null,
+    periodicidad: textoPeriodicidad(c.unidad, c.hrs, c.meses)
   };
   let hrsActual = null;
 
-  if (tipo === 'hrs') {
-    const cada = parseFloat(document.getElementById('nt-cada-hrs').value);
+  if (usaHoras(c)) {
     hrsActual = parseFloat(document.getElementById('nt-hrs-actual').value);
-    if (isNaN(cada) || cada <= 0) { toast('Falta cada cuántas horas', true); return; }
     if (isNaN(hrsActual)) { toast('Faltan las horas del equipo', true); return; }
-    data.unidad = 'hrs';
-    data.periodicidad = String(cada);
     data.hrs_totales = hrsActual;
     data.ult_hrs = hrsActual;
-    data.proxima_hrs = hrsActual + cada;
-    if (fechaUlt) data.fecha_ult = fechaUlt;
-  } else {
-    if (!fechaUlt) { toast('Falta la fecha en que la hiciste', true); return; }
-    const cada = document.getElementById('nt-cada-fecha').value;
-    data.unidad = 'fecha';
-    data.periodicidad = cada;
-    data.fecha_ult = fechaUlt;
-    const meses = periodicidadAMeses(cada);
-    const fx = new Date(fechaUlt + 'T00:00:00');
-    fx.setMonth(fx.getMonth() + meses);
-    data.proxima_fecha = fx.toISOString().split('T')[0];
+    data.proxima_hrs = hrsActual + c.hrs;
   }
+  if (usaFecha(c)) {
+    if (!fechaUlt) { toast('Falta la fecha en que la hiciste', true); return; }
+    data.proxima_fecha = sumarMeses(fechaUlt, c.meses);
+  }
+  if (fechaUlt) data.fecha_ult = fechaUlt;
 
   try {
     const { data: nueva, error: e1 } = await sb.from('mant_tareas').insert(data).select().single();
@@ -2533,6 +2694,57 @@ async function guardarTarea() {
   }
 }
 
+async function guardarEdicionTarea() {
+  const t = tareaEditando;
+  const nombre = document.getElementById('nt-tarea').value.trim();
+  if (!nombre) { toast('Falta el nombre de la tarea', true); return; }
+  const c = controlElegido();
+  const err = errorControl(c);
+  if (err) { toast(err, true); return; }
+
+  const data = {
+    tarea: nombre,
+    prioridad: document.getElementById('nt-prioridad').value,
+    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null
+  };
+
+  if (controlCambia(t, c)) {
+    data.unidad = c.unidad;
+    data.cada_hrs = usaHoras(c) ? c.hrs : null;
+    data.cada_meses = usaFecha(c) ? c.meses : null;
+    data.periodicidad = textoPeriodicidad(c.unidad, c.hrs, c.meses);
+    // Se recalcula desde la última realización; el lado que deja de usarse se vacía
+    if (usaHoras(c)) {
+      const base = t.ult_hrs != null ? Number(t.ult_hrs) : parseFloat(document.getElementById('nt-desde-hrs').value);
+      if (isNaN(base)) { toast('Falta desde cuántas horas contar', true); return; }
+      data.proxima_hrs = base + c.hrs;
+    } else {
+      data.proxima_hrs = null;
+    }
+    if (usaFecha(c)) {
+      const base = t.fecha_ult || document.getElementById('nt-desde-fecha').value;
+      if (!base) { toast('Falta desde qué fecha contar', true); return; }
+      data.proxima_fecha = sumarMeses(base, c.meses);
+    } else {
+      data.proxima_fecha = null;
+    }
+  }
+
+  try {
+    const { error } = await sb.from('mant_tareas').update(data).eq('id', t.id);
+    if (error) throw error;
+    toast(data.unidad ? '✓ Tarea actualizada y vencimientos recalculados' : '✓ Tarea actualizada');
+    cerrarModalTarea();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+['nt-cada-hrs', 'nt-cada-meses'].forEach(id =>
+  document.getElementById(id).addEventListener('input', toggleTipoTarea));
+
 // ============ CARGA MENSUAL DE HORAS ============
 // Cada caja reductora tiene las mismas horas que su motor principal:
 // se cargan solas cuando se cargan las horas del motor.
@@ -2543,7 +2755,7 @@ const CAJAS_POR_MP = {
 const EQUIPOS_OCULTOS_CARGA = new Set(Object.values(CAJAS_POR_MP));
 
 function renderCarga() {
-  const equipos = [...new Set(tareas.filter(t => t.unidad === 'hrs').map(t => t.equipo))]
+  const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))]
     .filter(eq => !EQUIPOS_OCULTOS_CARGA.has(eq))
     .sort();
   const div = document.getElementById('carga-equipos');
@@ -2589,7 +2801,7 @@ function actualizarNuevoTotal(inp) {
 function renderHoras() {
   const sel = document.getElementById('horas-equipo');
   if (!sel) return;
-  const equipos = [...new Set(tareas.filter(t => t.unidad === 'hrs').map(t => t.equipo))].sort();
+  const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))].sort();
   if (!sel.options.length) {
     sel.innerHTML = equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join('');
   }
@@ -2630,7 +2842,8 @@ function renderChequeosFecha() {
   const div = document.getElementById('chequeos-fecha');
   if (!div) return;
 
-  // Tareas por fecha (no por horas)
+  // Solo tareas por fecha. Las de "lo que ocurra primero" quedan afuera a propósito:
+  // se registran desde el modal Registrar, donde se ven y corrigen las horas.
   let lista = tareas.filter(t => t.unidad === 'fecha').map(t => {
     const dias = t.proxima_fecha ? diasEntre(t.proxima_fecha) : null;
     let estado = 'SIN_DATO';
@@ -2671,7 +2884,7 @@ function renderChequeosFecha() {
         <input type="checkbox" data-fch-tarea-id="${t.id}">
         <div class="ci-info">
           <div class="equipo">${escape(t.equipo)}</div>
-          <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad || '—')}</div>
+          <div class="tarea">${escape(t.tarea)} · cada ${escape(etiquetaPeriodicidad(t))}</div>
           <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · Próxima: ${fmtFecha(t.proxima_fecha)}</div>
         </div>
         ${estadoTxt ? `<span class="ci-estado ${cls}">${estadoTxt}</span>` : ''}
@@ -2702,13 +2915,9 @@ async function aplicarChequeos() {
       const t = tareas.find(x => x.id === id);
       if (!t) continue;
 
-      const meses = periodicidadAMeses(t.periodicidad);
+      const meses = cadaMeses(t);
       const update = { fecha_ult: fecha, realizado_por: quien, postergada_hasta: null, motivo_postergacion: null };
-      if (meses) {
-        const f = new Date(fecha + 'T00:00:00');
-        f.setMonth(f.getMonth() + meses);
-        update.proxima_fecha = f.toISOString().split('T')[0];
-      }
+      if (meses) update.proxima_fecha = sumarMeses(fecha, meses);
 
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', id);
       if (e1) throw e1;
@@ -2767,7 +2976,7 @@ async function guardarCarga() {
 
   const tareasAfectadas = [];
   for (const t of tareas) {
-    if (t.unidad !== 'hrs') continue;
+    if (!usaHoras(t)) continue;
     if (t.proxima_hrs == null) continue;
     if (!(t.equipo in horasNuevas)) continue;
 
@@ -2814,7 +3023,7 @@ function abrirConfirm() {
         <input type="checkbox" data-tarea-id="${t.id}" data-hrs="${t.hrs_nuevas}">
         <div class="ci-info">
           <div class="equipo">${escape(t.equipo)}</div>
-          <div class="tarea">${escape(t.tarea)} · cada ${escape(t.periodicidad)} hrs</div>
+          <div class="tarea">${escape(t.tarea)} · cada ${escape(etiquetaPeriodicidad(t))}</div>
           <div class="meta">Vencía a las ${t.proxima_hrs} hrs · Última: ${fmtFecha(t.fecha_ult)}</div>
         </div>
         <span class="ci-estado ${cls}">${estado}</span>
@@ -2884,7 +3093,8 @@ async function aplicarConfirm() {
     for (const tr of tareasRealizadas) {
       const tarea = tareas.find(t => t.id === tr.id);
       if (!tarea) continue;
-      const per = parseFloat(tarea.periodicidad);
+      const per = cadaHrs(tarea);
+      const meses = usaFecha(tarea) ? cadaMeses(tarea) : null;
       const update = {
         ult_hrs: tr.hrs,
         fecha_ult: fechaHoy,
@@ -2893,9 +3103,9 @@ async function aplicarConfirm() {
         postergada_hasta: null,
         motivo_postergacion: null
       };
-      if (!isNaN(per)) {
-        update.proxima_hrs = tr.hrs + per;
-      }
+      if (per) update.proxima_hrs = tr.hrs + per;
+      // "Lo que ocurra primero": registrar también recalcula la próxima fecha
+      if (meses) update.proxima_fecha = sumarMeses(fechaHoy, meses);
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tr.id);
       if (e1) throw e1;
 
@@ -4297,12 +4507,13 @@ function exportarExcel() {
     return {
       Equipo: t.equipo,
       Tarea: t.tarea,
-      Periodicidad: t.periodicidad,
+      Control: { hrs: 'Por horas', fecha: 'Por fecha', ambos: 'Lo que ocurra primero', ninguna: 'Sin control' }[t.unidad] || t.unidad,
+      Periodicidad: etiquetaPeriodicidad(t),
       'Hrs totales': t.hrs_totales,
       'Última fecha': t.fecha_ult,
       'Próx. hrs': t.proxima_hrs,
       'Próx. fecha': t.proxima_fecha,
-      'Falta': e.mostrar + ' ' + e.unidad,
+      'Falta': e.mostrar + ' ' + e.unidad + (e.otro ? ` · ${e.otro.mostrar} ${e.otro.unidad}` : ''),
       Estado: e.estado,
       Prioridad: t.prioridad,
       'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
@@ -4746,7 +4957,7 @@ function renderFichaEquipo() {
   tareasEq.forEach(t => stats[calcularEstado(t).estado]++);
 
   // Horas actuales (máximo de las tareas que usan horas)
-  const hrsActual = Math.max(0, ...tareasEq.filter(t => t.unidad === 'hrs').map(t => Number(t.hrs_totales || 0)));
+  const hrsActual = Math.max(0, ...tareasEq.filter(usaHoras).map(t => Number(t.hrs_totales || 0)));
 
   // Pills
   const fabPills = [];
@@ -4803,7 +5014,7 @@ function renderFichaEquipo() {
       ? `<h3 class="panel-titulo" style="margin-top:6px">📋 Datos técnicos</h3><div class="datos-tecnicos-box">${escape(eq.datos_tecnicos)}</div>`
       : `<div class="datos-tecnicos-box vacio">Sin datos técnicos cargados. Tocá <strong>Editar ficha</strong> para agregarlos.</div>`}
 
-    ${(histEq.length > 0 || tareasEq.some(t => t.unidad === 'hrs')) ? `
+    ${(histEq.length > 0 || tareasEq.some(usaHoras)) ? `
       <h3 class="panel-titulo">📊 Gráficos</h3>
       <div class="charts-row">
         <div class="chart-box">
