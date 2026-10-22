@@ -19,3 +19,6 @@ secrets.json
 # Backups
 *.bak
 *.tmp
+
+# Archivos de importación de datos (no se publican)
+docs/importacion/
