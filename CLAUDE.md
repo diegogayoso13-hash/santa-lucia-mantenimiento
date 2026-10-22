@@ -22,7 +22,9 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 
 ### Data flow
 
-- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`, `tripulantes`). Only active rows are loaded for `mant_tareas` (`activa = true`), `mant_equipos` and `mant_certificados` (`activo = true`) — equipment, certificates and crew are soft-deleted, never hard-deleted. `tripulantes` is loaded in full (including inactive), and `certificados` drops the documents of inactive crew members right after loading.
+- `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `tareasTodas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`, `tripulantes`).
+  - **Paging:** PostgREST returns at most 1000 rows per request, so every list goes through `traerTodo(() => consulta)`, which pages with `.range()` until it has everything. The callback must build a fresh query each time with a stable order (add `.order('id')` as a tie-breaker). New list loads must use it too.
+  - **Active rows:** `mant_tareas` is loaded in full into `tareasTodas`; `tareas` holds only the active ones (`activa = true`) and is what everything else uses (status, Dashboard, alerts, filters, hours). `mant_equipos` and `mant_certificados` load only `activo = true` — tasks with history, equipment, certificates and crew are soft-deleted, never hard-deleted. `tripulantes` is loaded in full (including inactive), and `certificados` drops the documents of inactive crew members right after loading.
 - `renderTodo()` re-renders every section from those in-memory arrays. There's no reactive framework: after any mutation (save/delete), code calls `cargarTodo()` again (or manually patches the array + calls the relevant `renderX()`), not a diffing re-render.
 - Tab switching (`cambiarTab`) just toggles `.active` on `<section>` elements — all tabs are already in the DOM, nothing is lazy-loaded.
 
@@ -72,6 +74,22 @@ The top bar has four sections, each with its sub-tabs underneath:
   - It changes the name, priority, work type and control. The equipment is fixed, because hour cascading and filters match on its name.
   - Next hours/date are recalculated only when the control or an interval changes (`controlCambia()`), counting from `ult_hrs` / `fecha_ult`. If those are missing, it asks for "contar desde".
   - The side that stops being used is cleared.
+
+### Retiring tasks and fixing history
+
+- **Dar de baja:** the left button of the Registrar modal (`#m-btn-baja`, `bajaOBorrarTarea()`) depends on the task:
+  - With history it reads "⏹ Dar de baja" and sets `activa = false`. A task with history is never deleted, because `mant_historial` (and `mant_tarea_repuestos`) cascade on delete.
+  - Without history it reads "🗑 Borrar tarea" and hard-deletes. The confirmation says how many linked spare parts get unlinked.
+- **Retired tasks:**
+  - They're out of `tareas`, so they don't show in the Dashboard, alerts, badges, hours entry or Registrar varias.
+  - The "Mostrar dadas de baja" checkbox in Tareas (`#filtro-bajas`) lists them last, greyed (`renderTaskCardBaja()`), filtered by the same non-status filters, with "↺ Reactivar" (`reactivarTarea()`).
+  - Their history still shows everywhere (Historial tab, equipment ficha and charts, Excel), marked "(dada de baja)" through `htmlTareaHist()`. History lists must resolve tasks through `tareasTodas`, not `tareas`.
+  - Hour loads update `hrs_totales` by equipment name for all rows, so a reactivated task has current hours.
+- **Fixing a history record:** every record in the Historial tab and the equipment ficha has a ✏️ button that opens `#modal-hist` (`abrirModalHist()`) to edit date (not after today), hours, who and notes, or delete it.
+  - The task stores its last completion and next due itself; they aren't derived from history. `recalculoTarea()` compares what `datosDesdeHistorial()` gives before and after the change. The task is updated only if that differs, i.e. when the change affects the latest record.
+  - **Recalculation:** same rule as `guardarMant()`. `fecha_ult`/`proxima_fecha` come from the most recent record; `ult_hrs`/`proxima_hrs` come from the most recent record that has hours. `hrs_totales`, `unidad`, observations and postponement are never touched.
+  - The modal previews the result ("La tarea queda: …") and has a "Recalcular la tarea" checkbox, ticked by default.
+  - If no records (or no records with hours) are left, that side of the task is left as is and the user is warned to fix it with "✏️ Editar tarea".
 
 ### Hour cascading (Horas tab)
 

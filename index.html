@@ -231,6 +231,8 @@
   .task-card.ok { border-left-color: var(--verde); }
   .task-card.sin_dato { border-left-color: var(--gris-3); opacity: 0.78; }
   .task-card.cerrada { border-left-color: var(--verde); opacity: 0.85; }
+  .task-card.baja { border-left-color: var(--gris-3); background: var(--gris-1); opacity: 0.7; }
+  .task-card.baja .tarea { text-decoration: line-through; }
   .cerrada .estado-icon { background: #dbf0e3; }
   .def-acciones { display: flex; flex-direction: column; gap: 6px; }
   /* POSTERGACIONES */
@@ -419,7 +421,7 @@
     padding: 12px 16px;
     margin-bottom: 8px;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto;
     gap: 14px;
     align-items: center;
   }
@@ -437,6 +439,9 @@
   .hist-info .por { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
   .hist-info .notas { font-size: 12px; color: #a8651a; font-style: italic; margin-top: 3px; }
   .hist-hrs { font-family: 'Fraunces', serif; font-weight: 700; color: var(--azul-profundo); }
+  .hist-baja { font-size: 11.5px; color: var(--texto-suave); font-style: italic; }
+  .hist-reg-info { font-size: 12.5px; color: var(--texto-suave); background: var(--gris-1); border-radius: 7px; padding: 8px 10px; margin-top: 4px; }
+  .hist-reg-info.aviso { color: #a8651a; background: #fff6e8; }
 
   /* VARIOS */
   .empty {
@@ -619,6 +624,7 @@
     /* Historial */
     .hist-item { grid-template-columns: auto 1fr; gap: 10px; padding: 10px 12px; }
     .hist-item .hist-hrs { grid-column: 2; justify-self: start; font-size: 13px; }
+    .hist-item .hist-editar { grid-column: 1; grid-row: 2; justify-self: center; }
   }
 
   @media (max-width: 380px) {
@@ -988,6 +994,7 @@
       </select>
       <select id="filtro-tipo-trabajo"></select>
       <label class="toolbar-check"><input type="checkbox" id="filtro-critico"> ⚠️ Solo críticos</label>
+      <label class="toolbar-check"><input type="checkbox" id="filtro-bajas"> Mostrar dadas de baja</label>
     </div>
     <div class="task-list" id="lista"></div>
   </section>
@@ -1197,7 +1204,7 @@
     </div>
     <div class="field" id="m-postergacion"></div>
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="borrarTareaActual()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
+      <button class="btn btn-sec" id="m-btn-baja" onclick="bajaOBorrarTarea()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
       <button class="btn btn-sec" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
       <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
       <button class="btn" onclick="guardarMant()">✓ Guardar</button>
@@ -1623,6 +1630,39 @@
   </div>
 </div>
 
+<!-- MODAL: corregir o borrar un registro del historial -->
+<div class="modal-bg" id="modal-hist">
+  <div class="modal">
+    <h2>Registro de historial</h2>
+    <div class="modal-sub" id="h-info"></div>
+    <div class="field">
+      <label>Fecha realizado *</label>
+      <input type="date" id="h-fecha">
+    </div>
+    <div class="field">
+      <label>Horas del equipo al hacerlo</label>
+      <input type="number" id="h-hrs" min="0" placeholder="vacío si no se anotaron">
+    </div>
+    <div class="field">
+      <label>Realizado por</label>
+      <input type="text" id="h-quien">
+    </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="h-notas" rows="3"></textarea>
+    </div>
+    <div class="field" id="h-recalculo-box">
+      <label class="toolbar-check"><input type="checkbox" id="h-recalcular" checked> Recalcular la tarea</label>
+      <div class="hist-reg-info" id="h-recalculo-info"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="borrarRegistroHist()" style="margin-right:auto;background:#fde0df;color:var(--rojo)">🗑 Borrar</button>
+      <button class="btn btn-sec" onclick="cerrarModalHist()">Cancelar</button>
+      <button class="btn" onclick="guardarRegistroHist()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: renovar certificado -->
 <div class="modal-bg" id="modal-cert-renovar">
   <div class="modal">
@@ -1795,7 +1835,8 @@ const SUPABASE_KEY = 'sb_publishable_v46DhQgi48QpamiqYzMfwQ_7wrKKLc0';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============ ESTADO GLOBAL ============
-let tareas = [];
+let tareas = [];           // solo activas: todo el semáforo, alertas y filtros trabajan con estas
+let tareasTodas = [];      // incluye las dadas de baja (para mostrar su historial y poder reactivarlas)
 let historial = [];
 let lecturas = [];
 let repuestos = [];
@@ -1944,6 +1985,19 @@ function htmlPostergacion(x) {
 }
 
 // ============ CARGA INICIAL ============
+// Supabase devuelve como máximo 1000 filas por consulta: se pide de a páginas hasta traer todo.
+// armarConsulta() tiene que devolver una consulta nueva cada vez y con orden estable (desempate por id).
+const FILAS_POR_PAGINA = 1000;
+async function traerTodo(armarConsulta) {
+  const filas = [];
+  for (let desde = 0; ; desde += FILAS_POR_PAGINA) {
+    const { data, error } = await armarConsulta().range(desde, desde + FILAS_POR_PAGINA - 1);
+    if (error) return { data: null, error };
+    filas.push(...(data || []));
+    if (!data || data.length < FILAS_POR_PAGINA) return { data: filas, error: null };
+  }
+}
+
 async function cargarTodo() {
   try {
     const [
@@ -1960,18 +2014,19 @@ async function cargarTodo() {
       {data: ch, error: e11},
       {data: tp, error: e12}
     ] = await Promise.all([
-      sb.from('mant_tareas').select('*').eq('activa', true).order('id'),
-      sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }),
-      sb.from('mant_repuestos').select('*').order('nombre'),
-      sb.from('mant_tarea_repuestos').select('*'),
-      sb.from('mant_herramientas').select('*').order('nombre'),
+      // Todas las tareas (también las dadas de baja); abajo se separan las activas
+      traerTodo(() => sb.from('mant_tareas').select('*').order('id')),
+      traerTodo(() => sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_repuestos').select('*').order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_tarea_repuestos').select('*').order('id')),
+      traerTodo(() => sb.from('mant_herramientas').select('*').order('nombre').order('id')),
       sb.from('mant_buque').select('*').limit(1),
-      sb.from('mant_equipos').select('*').eq('activo', true).order('nombre'),
-      sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }),
-      sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero'),
-      sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento'),
-      sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false }),
-      sb.from('mant_tripulantes').select('*').order('nombre')
+      traerTodo(() => sb.from('mant_equipos').select('*').eq('activo', true).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero')),
+      traerTodo(() => sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento').order('id')),
+      traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_tripulantes').select('*').order('nombre').order('id'))
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
@@ -1985,7 +2040,8 @@ async function cargarTodo() {
     if (e10) throw e10;
     if (e11) throw e11;
     if (e12) throw e12;
-    tareas = tt || [];
+    tareasTodas = tt || [];
+    tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
     repuestos = rr || [];
     tareaRepuestos = tr || [];
@@ -2024,7 +2080,8 @@ function renderTodo() {
 
 // ============ FILTROS ============
 function llenarFiltros() {
-  const equipos = [...new Set(tareas.map(t => t.equipo))].sort();
+  // Incluye equipos de tareas dadas de baja: su historial se sigue viendo
+  const equipos = [...new Set(tareasTodas.map(t => t.equipo))].sort();
   const selT = document.getElementById('filtro-equipo');
   const selH = document.getElementById('hist-filtro-equipo');
   selT.innerHTML = '<option value="">Todos los equipos</option>' + equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join('');
@@ -2362,10 +2419,10 @@ function renderLista() {
   const est = document.getElementById('filtro-estado').value;
   const soloCriticos = document.getElementById('filtro-critico').checked;
   const tipoTrabajo = document.getElementById('filtro-tipo-trabajo').value;
+  const mostrarBajas = document.getElementById('filtro-bajas').checked;
 
-  let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
-    if (est === 'POSTERGADAS') { if (!estaPostergada(t)) return false; }
-    else if (est !== 'TODOS' && t._est.estado !== est) return false;
+  // Filtros que no dependen del estado (también se aplican a las dadas de baja)
+  const pasaFiltros = t => {
     if (tipoTrabajo === 'SIN_TIPO' && t.tipo_trabajo) return false;
     if (tipoTrabajo && tipoTrabajo !== 'SIN_TIPO' && t.tipo_trabajo !== tipoTrabajo) return false;
     if (soloCriticos && !esTareaCritica(t)) return false;
@@ -2373,7 +2430,17 @@ function renderLista() {
     if (pri && t.prioridad !== pri) return false;
     if (buscar && !(t.equipo.toLowerCase().includes(buscar) || t.tarea.toLowerCase().includes(buscar))) return false;
     return true;
+  };
+
+  let filtradas = tareas.map(t => ({ ...t, _est: calcularEstado(t) })).filter(t => {
+    if (est === 'POSTERGADAS') { if (!estaPostergada(t)) return false; }
+    else if (est !== 'TODOS' && t._est.estado !== est) return false;
+    return pasaFiltros(t);
   });
+  // Las dadas de baja van al final, sin semáforo, solo si se pidieron
+  const bajas = mostrarBajas
+    ? tareasTodas.filter(t => !t.activa && pasaFiltros(t)).sort((a, b) => a.equipo.localeCompare(b.equipo) || a.tarea.localeCompare(b.tarea))
+    : [];
 
   const ordEst = { VENCIDO: 0, PROXIMO: 1, OK: 2, SIN_DATO: 3 };
   const ordPri = { ALTA: 0, MEDIA: 1, BAJA: 2 };
@@ -2383,11 +2450,27 @@ function renderLista() {
   });
 
   const div = document.getElementById('lista');
-  if (!filtradas.length) {
+  if (!filtradas.length && !bajas.length) {
     div.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay tareas con esos filtros</div>';
   } else {
-    div.innerHTML = filtradas.map(renderTaskCard).join('');
+    div.innerHTML = filtradas.map(renderTaskCard).join('') + bajas.map(renderTaskCardBaja).join('');
   }
+}
+
+// Tarjeta de una tarea dada de baja: en gris, sin semáforo, con "Reactivar"
+function renderTaskCardBaja(t) {
+  const nHist = historial.filter(h => h.tarea_id === t.id).length;
+  return `
+    <div class="task-card baja">
+      <div class="estado-icon">⏹</div>
+      <div class="task-info">
+        <div class="equipo">${escape(t.equipo)} <span class="badge-baja">DADA DE BAJA</span></div>
+        <div class="tarea">${escape(t.tarea)} · cada ${escape(etiquetaPeriodicidad(t))}</div>
+        <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · ${nHist} registro${nHist === 1 ? '' : 's'} en el historial</div>
+      </div>
+      <div class="proxima-box"></div>
+      <button class="btn btn-sec" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
+    </div>`;
 }
 
 // ============ MODAL ============
@@ -2407,6 +2490,9 @@ function abrirModal(id) {
   const estado = calcularEstado(tareaActual).estado;
   document.getElementById('m-postergacion').innerHTML =
     htmlBotonPostergar('tarea', tareaActual, estado === 'VENCIDO' || estado === 'PROXIMO');
+  // Con historial se da de baja (se conserva); sin historial se puede borrar
+  document.getElementById('m-btn-baja').textContent =
+    historial.some(h => h.tarea_id === tareaActual.id) ? '⏹ Dar de baja' : '🗑 Borrar tarea';
   document.getElementById('modal').classList.add('show');
 }
 
@@ -2415,20 +2501,48 @@ function cerrarModal() {
   tareaActual = null;
 }
 
-async function borrarTareaActual() {
+// Una tarea con historial nunca se borra (el borrado arrastraría el historial por ON DELETE CASCADE):
+// se da de baja con activa = false. Sin historial se puede borrar, por ejemplo si se creó por error.
+async function bajaOBorrarTarea() {
   if (!tareaActual) return;
-  const nHist = historial.filter(h => h.tarea_id === tareaActual.id).length;
-  let msg = `¿Borrar la tarea "${tareaActual.tarea}" del equipo ${tareaActual.equipo}?`;
+  const t = tareaActual;
+  const nHist = historial.filter(h => h.tarea_id === t.id).length;
+  const nRep = tareaRepuestos.filter(tr => tr.tarea_id === t.id).length;
+  const txtRep = nRep
+    ? `\n\nTiene ${nRep} repuesto${nRep > 1 ? 's' : ''} vinculado${nRep > 1 ? 's' : ''}: se ${nRep > 1 ? 'van' : 'va'} a desvincular (el stock no cambia).`
+    : '';
+
   if (nHist > 0) {
-    msg += `\n\nOJO: también se van a borrar ${nHist} registro${nHist>1?'s':''} del historial de esta tarea.`;
+    if (!confirm(`¿Dar de baja la tarea "${t.tarea}" del equipo ${t.equipo}?\n\n` +
+      `Deja de aparecer en Tareas, en el Dashboard y en las alertas. ` +
+      `Sus ${nHist} registro${nHist > 1 ? 's' : ''} del historial se conservan y se puede reactivar desde "Mostrar dadas de baja".`)) return;
+  } else {
+    if (!confirm(`¿Borrar la tarea "${t.tarea}" del equipo ${t.equipo}?\n\nNo tiene registros en el historial.${txtRep}\n\nEsta acción no se puede deshacer.`)) return;
   }
-  msg += `\n\nEsta acción no se puede deshacer.`;
-  if (!confirm(msg)) return;
   try {
-    const { error } = await sb.from('mant_tareas').delete().eq('id', tareaActual.id);
+    const { error } = nHist > 0
+      ? await sb.from('mant_tareas').update({ activa: false }).eq('id', t.id)
+      : await sb.from('mant_tareas').delete().eq('id', t.id);
     if (error) throw error;
-    toast('✓ Tarea borrada');
+    toast(nHist > 0 ? '✓ Tarea dada de baja' : '✓ Tarea borrada');
     cerrarModal();
+    await cargarTodo();
+    if (equipoActualFicha) renderFichaEquipo();
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function reactivarTarea(id) {
+  const t = tareasTodas.find(x => x.id === id);
+  if (!t) return;
+  if (!confirm(`¿Reactivar la tarea "${t.tarea}" del equipo ${t.equipo}?\n\n` +
+    `Vuelve con sus datos de antes (última realización y próximo vencimiento): si ya pasó, va a aparecer vencida.`)) return;
+  try {
+    const { error } = await sb.from('mant_tareas').update({ activa: true }).eq('id', t.id);
+    if (error) throw error;
+    toast('✓ Tarea reactivada');
     await cargarTodo();
   } catch (err) {
     console.error(err);
@@ -3140,7 +3254,7 @@ function renderHistorial() {
   const buscar = (document.getElementById('hist-buscador').value || '').toLowerCase();
   const eq = document.getElementById('hist-filtro-equipo').value;
   const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
+  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
 
   let filtrado = historial.filter(h => {
     const t = idMap[h.tarea_id];
@@ -3166,14 +3280,215 @@ function renderHistorial() {
         </div>
         <div class="hist-info">
           <div class="equipo">${escape(t.equipo)}</div>
-          <div class="tarea">${escape(t.tarea)}</div>
+          <div class="tarea">${htmlTareaHist(t)}</div>
           <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
           ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
         </div>
         <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
+        <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }).join('');
 }
+
+// Nombre de la tarea en las listas de historial, marcando las dadas de baja
+function htmlTareaHist(t) {
+  if (!t) return '—';
+  return escape(t.tarea) + (t.activa ? '' : ' <span class="hist-baja">(dada de baja)</span>');
+}
+
+// ---- Corregir / borrar un registro ----
+// La tarea guarda su última realización (fecha_ult, ult_hrs) y el próximo vencimiento: no se calculan
+// del historial. Si un cambio en el historial cambia cuál es el último registro (o sus datos), la tarea
+// se recalcula con la misma lógica que guardarMant(): la fecha sale del registro más reciente y las
+// horas del más reciente que tenga horas. No se tocan hrs_totales, unidad, observaciones ni postergación.
+let histActual = null;  // registro en edición
+
+function masReciente(regs) {
+  return regs.reduce((a, b) => !a || b.fecha_realizado > a.fecha_realizado ||
+    (b.fecha_realizado === a.fecha_realizado && b.id > a.id) ? b : a, null);
+}
+
+// Datos de la tarea que salen de sus registros (solo los lados que se pueden calcular)
+function datosDesdeHistorial(t, regs) {
+  const d = {};
+  const ult = masReciente(regs);
+  if (ult) {
+    d.fecha_ult = ult.fecha_realizado;
+    const cMeses = cadaMeses(t);
+    if (usaFecha(t) && cMeses) d.proxima_fecha = sumarMeses(ult.fecha_realizado, cMeses);
+  }
+  const ultHrs = masReciente(regs.filter(r => r.hrs_equipo != null && r.hrs_equipo !== ''));
+  if (ultHrs) {
+    d.ult_hrs = Number(ultHrs.hrs_equipo);
+    const cHrs = cadaHrs(t);
+    if (usaHoras(t) && cHrs) d.proxima_hrs = d.ult_hrs + cHrs;
+  }
+  return d;
+}
+
+// Qué cambia en la tarea si sus registros pasan de "antes" a "despues".
+// Devuelve { update, avisos }: update vacío = la tarea no cambia.
+function recalculoTarea(t, antes, despues) {
+  const a = datosDesdeHistorial(t, antes), d = datosDesdeHistorial(t, despues);
+  const update = {}, avisos = [];
+  for (const k of ['fecha_ult', 'proxima_fecha', 'ult_hrs', 'proxima_hrs']) {
+    if (!(k in d)) continue;
+    if (a[k] !== d[k]) update[k] = d[k];
+  }
+  if (!despues.length) {
+    avisos.push('No le quedan registros: la tarea queda como está. Si hace falta, corregila con ✏️ Editar tarea.');
+  } else if ('ult_hrs' in a && !('ult_hrs' in d)) {
+    avisos.push('No le quedan registros con horas: las horas de la tarea quedan como están.');
+  }
+  return { update, avisos };
+}
+
+// Texto de cómo queda la tarea con el recálculo
+function textoRecalculo(t, update) {
+  const n = { ...t, ...update };
+  const partes = [`última ${fmtFecha(n.fecha_ult)}`];
+  if (n.ult_hrs != null) partes[0] += ` · ${Number(n.ult_hrs).toLocaleString('es-UY')} h`;
+  if (usaHoras(t) && n.proxima_hrs != null) partes.push(`próxima a las ${Number(n.proxima_hrs).toLocaleString('es-UY')} h`);
+  if (usaFecha(t) && n.proxima_fecha) partes.push(`próxima el ${fmtFecha(n.proxima_fecha)}`);
+  return 'La tarea queda: ' + partes.join(' → ');
+}
+
+function abrirModalHist(id) {
+  const h = historial.find(x => x.id === id);
+  if (!h) return;
+  histActual = h;
+  const t = tareasTodas.find(x => x.id === h.tarea_id);
+  document.getElementById('h-info').innerHTML = t
+    ? `<strong>${escape(t.equipo)}</strong> — ${htmlTareaHist(t)}`
+    : 'Tarea no encontrada';
+  document.getElementById('h-fecha').value = h.fecha_realizado;
+  document.getElementById('h-fecha').max = hoyLocalISO();
+  document.getElementById('h-hrs').value = h.hrs_equipo != null ? Number(h.hrs_equipo) : '';
+  document.getElementById('h-quien').value = h.realizado_por || '';
+  document.getElementById('h-notas').value = h.notas || '';
+  document.getElementById('h-recalcular').checked = true;
+  actualizarRecalculoHist();
+  document.getElementById('modal-hist').classList.add('show');
+}
+
+function cerrarModalHist() {
+  document.getElementById('modal-hist').classList.remove('show');
+  histActual = null;
+}
+
+// Registro con los valores del formulario (sin validar)
+function histEditado() {
+  const hrsTxt = document.getElementById('h-hrs').value.trim();
+  return {
+    ...histActual,
+    fecha_realizado: document.getElementById('h-fecha').value,
+    hrs_equipo: hrsTxt === '' ? null : parseFloat(hrsTxt),
+    realizado_por: document.getElementById('h-quien').value.trim() || null,
+    notas: document.getElementById('h-notas').value.trim() || null
+  };
+}
+
+// Registros de la tarea antes y después del cambio (editado = null para borrar)
+function registrosTarea(editado) {
+  const antes = historial.filter(r => r.tarea_id === histActual.tarea_id);
+  const despues = antes.filter(r => r.id !== histActual.id);
+  if (editado) despues.push(editado);
+  return { antes, despues };
+}
+
+// Muestra en el modal qué le pasa a la tarea si se guarda la corrección
+function actualizarRecalculoHist() {
+  if (!histActual) return;
+  const t = tareasTodas.find(x => x.id === histActual.tarea_id);
+  const box = document.getElementById('h-recalculo-box');
+  const info = document.getElementById('h-recalculo-info');
+  const ed = histEditado();
+  if (!t || !ed.fecha_realizado) { box.style.display = 'none'; return; }
+  const { antes, despues } = registrosTarea(ed);
+  const { update, avisos } = recalculoTarea(t, antes, despues);
+  box.style.display = '';
+  const hay = Object.keys(update).length > 0;
+  document.getElementById('h-recalcular').parentElement.style.display = hay ? '' : 'none';
+  info.className = 'hist-reg-info' + (avisos.length ? ' aviso' : '');
+  info.textContent = hay
+    ? textoRecalculo(t, update) + (avisos.length ? ' ' + avisos.join(' ') : '')
+    : (avisos.join(' ') || 'Este cambio no afecta la última realización: la tarea no cambia.');
+}
+
+// Aplica el recálculo a la tarea (si corresponde y está tildado)
+async function aplicarRecalculoHist(t, update) {
+  if (!t || !Object.keys(update).length || !document.getElementById('h-recalcular').checked) return false;
+  const { error } = await sb.from('mant_tareas').update(update).eq('id', t.id);
+  if (error) throw error;
+  return true;
+}
+
+async function despuesDeCambioHist(msg) {
+  toast(msg);
+  cerrarModalHist();
+  await cargarTodo();
+  if (equipoActualFicha) renderFichaEquipo();
+}
+
+async function guardarRegistroHist() {
+  if (!histActual) return;
+  const ed = histEditado();
+  if (!ed.fecha_realizado) { toast('Falta la fecha', true); return; }
+  if (ed.fecha_realizado > hoyLocalISO()) { toast('La fecha no puede ser posterior a hoy', true); return; }
+  if (ed.hrs_equipo != null && (isNaN(ed.hrs_equipo) || ed.hrs_equipo < 0)) { toast('Las horas no pueden ser negativas', true); return; }
+
+  const t = tareasTodas.find(x => x.id === histActual.tarea_id);
+  const { antes, despues } = registrosTarea(ed);
+  const { update } = t ? recalculoTarea(t, antes, despues) : { update: {} };
+  try {
+    const { error } = await sb.from('mant_historial').update({
+      fecha_realizado: ed.fecha_realizado,
+      hrs_equipo: ed.hrs_equipo,
+      realizado_por: ed.realizado_por,
+      notas: ed.notas
+    }).eq('id', histActual.id);
+    if (error) throw error;
+    const recalculada = await aplicarRecalculoHist(t, update);
+    await despuesDeCambioHist(recalculada ? '✓ Registro corregido y tarea recalculada' : '✓ Registro corregido');
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+async function borrarRegistroHist() {
+  if (!histActual) return;
+  const h = histActual;
+  const t = tareasTodas.find(x => x.id === h.tarea_id);
+  const { antes, despues } = registrosTarea(null);
+  const { update, avisos } = t ? recalculoTarea(t, antes, despues) : { update: {}, avisos: [] };
+  const recalcular = Object.keys(update).length && document.getElementById('h-recalcular').checked;
+
+  let msg = `¿Borrar este registro del historial?\n\n` +
+    `${t ? `${t.equipo} — ${t.tarea}\n` : ''}` +
+    `Fecha: ${fmtFechaDMA(h.fecha_realizado)}` +
+    (h.hrs_equipo != null ? ` · ${Number(h.hrs_equipo)} h` : '') +
+    `\nRealizado por: ${h.realizado_por || '—'}` +
+    (h.notas ? `\nNotas: ${h.notas}` : '');
+  if (recalcular) msg += `\n\nEra la última realización. ${textoRecalculo(t, update)}`;
+  else if (Object.keys(update).length) msg += `\n\nEra la última realización, pero "Recalcular la tarea" está destildado: la tarea queda como está.`;
+  if (avisos.length) msg += `\n\n${avisos.join(' ')}`;
+  msg += `\n\nEsta acción no se puede deshacer.`;
+  if (!confirm(msg)) return;
+
+  try {
+    const { error } = await sb.from('mant_historial').delete().eq('id', h.id);
+    if (error) throw error;
+    const recalculada = await aplicarRecalculoHist(t, update);
+    await despuesDeCambioHist(recalculada ? '✓ Registro borrado y tarea recalculada' : '✓ Registro borrado');
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, true);
+  }
+}
+
+['h-fecha', 'h-hrs'].forEach(id =>
+  document.getElementById(id).addEventListener('input', actualizarRecalculoHist));
 
 // ============ STOCK / REPUESTOS ============
 function estadoRepuesto(r) {
@@ -4527,11 +4842,11 @@ function exportarExcel() {
   XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
   // Hoja historial
   if (historial.length) {
-    const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
+    const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
     const hd = historial.map(h => ({
       Fecha: h.fecha_realizado,
       Equipo: idMap[h.tarea_id]?.equipo || '',
-      Tarea: idMap[h.tarea_id]?.tarea || '',
+      Tarea: idMap[h.tarea_id] ? idMap[h.tarea_id].tarea + (idMap[h.tarea_id].activa ? '' : ' (dada de baja)') : '',
       'Hrs equipo': h.hrs_equipo,
       'Realizado por': h.realizado_por,
       Notas: h.notas
@@ -4614,7 +4929,7 @@ document.getElementById('modal-chequeos').addEventListener('click', e => { if (e
 
 // Listeners filtros
 llenarSelectoresTipoTrabajo();
-['buscador','filtro-equipo','filtro-prioridad','filtro-estado','filtro-critico','filtro-tipo-trabajo'].forEach(id => {
+['buscador','filtro-equipo','filtro-prioridad','filtro-estado','filtro-critico','filtro-tipo-trabajo','filtro-bajas'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener(id === 'buscador' ? 'input' : 'change', renderLista);
 });
@@ -4947,10 +5262,9 @@ function renderFichaEquipo() {
   if (!equipoActualFicha) return;
   const eq = equipoActualFicha;
   const tareasEq = tareas.filter(t => t.equipo_id === eq.id);
-  const histEq = historial.filter(h => {
-    const t = tareas.find(tt => tt.id === h.tarea_id);
-    return t && t.equipo_id === eq.id;
-  });
+  // El historial incluye el de las tareas dadas de baja (marcadas en la lista)
+  const idMapTodas = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+  const histEq = historial.filter(h => idMapTodas[h.tarea_id]?.equipo_id === eq.id);
 
   // Estados
   const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
@@ -5052,9 +5366,8 @@ function renderFichaEquipo() {
     listaH.innerHTML = '<div class="empty">Aún no hay registros para este equipo</div>';
   } else {
     const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const idMap = Object.fromEntries(tareas.map(t => [t.id, t]));
     listaH.innerHTML = histEq.map(h => {
-      const t = idMap[h.tarea_id];
+      const t = idMapTodas[h.tarea_id];
       const f = new Date(h.fecha_realizado + 'T00:00:00');
       return `
         <div class="hist-item">
@@ -5063,11 +5376,12 @@ function renderFichaEquipo() {
             <div class="mes">${meses[f.getMonth()]} ${f.getFullYear()}</div>
           </div>
           <div class="hist-info">
-            <div class="tarea">${escape(t ? t.tarea : '—')}</div>
+            <div class="tarea">${htmlTareaHist(t)}</div>
             <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
             ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
           </div>
           <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
+          <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
         </div>`;
     }).join('');
   }
@@ -5336,7 +5650,7 @@ async function cerrarSesion() {
   if (!confirm('¿Cerrar sesión?')) return;
   await sb.auth.signOut();
   // Limpiar estado
-  tareas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
+  tareas = []; tareasTodas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
   buque = null; equipos = [];
   mostrarLogin();
 }
