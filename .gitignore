@@ -22,3 +22,6 @@ secrets.json
 
 # Archivos de importación de datos (no se publican)
 docs/importacion/
+
+# Cargas de datos desde bitácoras (no se publican)
+docs/cargas/
