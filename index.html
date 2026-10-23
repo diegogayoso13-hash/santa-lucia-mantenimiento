@@ -1135,6 +1135,7 @@
     <div class="toolbar">
       <input type="text" id="hist-buscador" placeholder="🔎 Buscar en historial...">
       <select id="hist-filtro-equipo"><option value="">Todos los equipos</option></select>
+      <button class="btn btn-acento" onclick="exportarHistExcel()">📥 Exportar Excel</button>
     </div>
     <div id="historial-lista"></div>
   </section>
@@ -3263,27 +3264,41 @@ async function aplicarConfirm() {
 }
 
 // ============ HISTORIAL ============
-function renderHistorial() {
-  const buscar = (document.getElementById('hist-buscador').value || '').toLowerCase();
-  const eq = document.getElementById('hist-filtro-equipo').value;
-  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+// Filtros de la solapa Historial (los usan la lista y el Excel)
+function filtrosHist() {
+  return {
+    buscar: (document.getElementById('hist-buscador').value || '').trim(),
+    eq: document.getElementById('hist-filtro-equipo').value
+  };
+}
 
-  let filtrado = historial.filter(h => {
-    const t = idMap[h.tarea_id];
-    if (!t) return false;
-    if (eq && t.equipo !== eq) return false;
-    if (buscar && !(t.equipo.toLowerCase().includes(buscar) || t.tarea.toLowerCase().includes(buscar) || (h.notas || '').toLowerCase().includes(buscar))) return false;
-    return true;
-  });
+// Registros que se ven en pantalla, de la fecha más nueva a la más vieja: [{ h, t }]
+// Incluye los de tareas dadas de baja (se resuelven con tareasTodas).
+function historialFiltrado() {
+  const { buscar, eq } = filtrosHist();
+  const texto = buscar.toLowerCase();
+  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+  return historial
+    .map(h => ({ h, t: idMap[h.tarea_id] }))
+    .filter(({ h, t }) => {
+      if (!t) return false;
+      if (eq && t.equipo !== eq) return false;
+      if (texto && !(t.equipo.toLowerCase().includes(texto) || t.tarea.toLowerCase().includes(texto) || (h.notas || '').toLowerCase().includes(texto))) return false;
+      return true;
+    })
+    .sort((a, b) => b.h.fecha_realizado.localeCompare(a.h.fecha_realizado) || b.h.id - a.h.id);
+}
+
+function renderHistorial() {
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const filtrado = historialFiltrado();
 
   const div = document.getElementById('historial-lista');
   if (!filtrado.length) {
     div.innerHTML = '<div class="empty"><div class="big">📜</div>Aún no hay registros de mantenimientos.<br><small>A medida que registres mantenimientos, van a aparecer acá.</small></div>';
     return;
   }
-  div.innerHTML = filtrado.map(h => {
-    const t = idMap[h.tarea_id];
+  div.innerHTML = filtrado.map(({ h, t }) => {
     const f = new Date(h.fecha_realizado + 'T00:00:00');
     return `
       <div class="hist-item">
@@ -3301,6 +3316,31 @@ function renderHistorial() {
         <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }).join('');
+}
+
+// Exporta exactamente lo que se ve (mismos filtros y orden que la lista)
+function exportarHistExcel() {
+  const filtrado = historialFiltrado();
+  if (!filtrado.length) { toast('No hay registros para exportar', true); return; }
+  const hoja = filtrado.map(({ h, t }) => ({
+    Fecha: h.fecha_realizado,
+    Equipo: t.equipo,
+    Tarea: t.tarea + (t.activa ? '' : ' (dada de baja)'),
+    'Hrs equipo': h.hrs_equipo != null ? Number(h.hrs_equipo) : '',
+    'Realizado por': h.realizado_por || '',
+    Notas: h.notas || ''
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Historial');
+  // Historial_Motor_Principal_Babor_2026-10-23.xlsx / Historial_Todos_busqueda-inyectores_2026-10-23.xlsx
+  const { buscar, eq } = filtrosHist();
+  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
+  const partes = ['Historial', eq ? limpiar(eq) : 'Todos'];
+  const busqueda = limpiar(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
+  if (busqueda) partes.push('busqueda-' + busqueda);
+  partes.push(hoyLocalISO());
+  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  toast('✓ Excel descargado');
 }
 
 // Nombre de la tarea en las listas de historial, marcando las dadas de baja

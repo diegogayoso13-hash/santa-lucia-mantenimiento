@@ -88,6 +88,9 @@ The top bar has four sections, each with its sub-tabs underneath:
   - The "Mostrar dadas de baja" checkbox in Tareas (`#filtro-bajas`) lists them last, greyed (`renderTaskCardBaja()`), filtered by the same non-status filters, with "↺ Reactivar" (`reactivarTarea()`).
   - Their history still shows everywhere (Historial tab, equipment ficha and charts, Excel), marked "(dada de baja)" through `htmlTareaHist()`. History lists must resolve tasks through `tareasTodas`, not `tareas`.
   - Hour loads update `hrs_totales` by equipment name for all rows, so a reactivated task has current hours.
+- **Historial tab list and Excel:** `historialFiltrado()` applies the equipment filter and the search box (`filtrosHist()`), sorts newest first and includes retired tasks. Both `renderHistorial()` and the tab's "📥 Exportar Excel" (`exportarHistExcel()`) use it, so the file is exactly what's on screen.
+  - The file has one "Historial" sheet with Fecha, Equipo, Tarea (with "(dada de baja)"), Hrs equipo, Realizado por and Notas.
+  - It's named `Historial_<equipo or Todos>[_busqueda-<text>]_<date>.xlsx`. With no rows it doesn't download and shows a toast instead.
 - **Fixing a history record:** every record in the Historial tab and the equipment ficha has a ✏️ button that opens `#modal-hist` (`abrirModalHist()`) to edit date (not after today), hours, who and notes, or delete it.
   - The task stores its last completion and next due itself; they aren't derived from history. `recalculoTarea()` compares what `datosDesdeHistorial()` gives before and after the change. The task is updated only if that differs, i.e. when the change affects the latest record.
   - **Recalculation:** same rule as `guardarMant()`. `fecha_ult`/`proxima_fecha` come from the most recent record; `ult_hrs`/`proxima_hrs` come from the most recent record that has hours. `hrs_totales`, `unidad`, observations and postponement are never touched.
