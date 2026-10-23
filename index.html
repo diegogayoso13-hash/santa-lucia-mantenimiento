@@ -1834,6 +1834,14 @@ const SUPABASE_URL = 'https://zfoetyauhauztkkltjaz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_v46DhQgi48QpamiqYzMfwQ_7wrKKLc0';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ============ SEMÁFORO DE TAREAS ============
+// PROXIMO (amarillo) cuando falta poco respecto del intervalo de cada tarea (umbralProximoHrs/Dias)
+const PROXIMO_PORCENTAJE = 0.10;         // falta ≤ 10% del intervalo...
+const PROXIMO_MIN_HRS = 30;              // ...pero por horas nunca menos de 30 hrs
+const PROXIMO_MIN_DIAS = 7;              // ...y por fecha nunca menos de 7 días
+const PROXIMO_HRS_SIN_INTERVALO = 100;   // tareas sin cada_hrs
+const PROXIMO_DIAS_SIN_INTERVALO = 30;   // tareas sin cada_meses
+
 // ============ ESTADO GLOBAL ============
 let tareas = [];           // solo activas: todo el semáforo, alertas y filtros trabajan con estas
 let tareasTodas = [];      // incluye las dadas de baja (para mostrar su historial y poder reactivarlas)
@@ -1936,16 +1944,26 @@ function etiquetaPeriodicidad(t) {
   return t.periodicidad || '—';
 }
 
+// Cuánto puede faltar para que la tarea pase a PROXIMO (constantes en SEMÁFORO DE TAREAS)
+function umbralProximoHrs(t) {
+  const c = cadaHrs(t);
+  return c ? Math.max(c * PROXIMO_PORCENTAJE, PROXIMO_MIN_HRS) : PROXIMO_HRS_SIN_INTERVALO;
+}
+function umbralProximoDias(t) {
+  const m = cadaMeses(t);
+  return m ? Math.max(m * 30 * PROXIMO_PORCENTAJE, PROXIMO_MIN_DIAS) : PROXIMO_DIAS_SIN_INTERVALO;
+}
+
 function estadoPorHoras(t) {
   if (t.proxima_hrs == null || t.hrs_totales == null) return null;
   const dif = Number(t.proxima_hrs) - Number(t.hrs_totales);
-  const estado = dif <= 0 ? 'VENCIDO' : dif <= 100 ? 'PROXIMO' : 'OK';
+  const estado = dif <= 0 ? 'VENCIDO' : dif <= umbralProximoHrs(t) ? 'PROXIMO' : 'OK';
   return { estado, valor: dif, mostrar: dif, unidad: 'hrs' };
 }
 function estadoPorFecha(t) {
   if (!t.proxima_fecha) return null;
   const d = diasEntre(t.proxima_fecha);
-  const estado = d <= 0 ? 'VENCIDO' : d <= 30 ? 'PROXIMO' : 'OK';
+  const estado = d <= 0 ? 'VENCIDO' : d <= umbralProximoDias(t) ? 'PROXIMO' : 'OK';
   return { estado, valor: d, mostrar: d, unidad: 'días' };
 }
 
@@ -2958,15 +2976,10 @@ function renderChequeosFecha() {
 
   // Solo tareas por fecha. Las de "lo que ocurra primero" quedan afuera a propósito:
   // se registran desde el modal Registrar, donde se ven y corrigen las horas.
+  // Mismo semáforo que el resto de la app (estadoPorFecha)
   let lista = tareas.filter(t => t.unidad === 'fecha').map(t => {
-    const dias = t.proxima_fecha ? diasEntre(t.proxima_fecha) : null;
-    let estado = 'SIN_DATO';
-    if (dias != null) {
-      if (dias <= 0) estado = 'VENCIDO';
-      else if (dias <= 30) estado = 'PROXIMO';
-      else estado = 'OK';
-    }
-    return { ...t, _dias: dias, _estado: estado };
+    const e = estadoPorFecha(t);
+    return { ...t, _dias: e ? e.valor : null, _estado: e ? e.estado : 'SIN_DATO' };
   });
 
   if (_filtroChequeos === 'VENCIDOS') {
@@ -3096,7 +3109,7 @@ async function guardarCarga() {
 
     const hrsNuevas = horasNuevas[t.equipo];
     const dif = Number(t.proxima_hrs) - hrsNuevas;
-    if (dif <= 100) {
+    if (dif <= umbralProximoHrs(t)) {
       tareasAfectadas.push({
         ...t,
         hrs_nuevas: hrsNuevas,

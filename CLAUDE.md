@@ -57,7 +57,10 @@ The top bar has four sections, each with its sub-tabs underneath:
 | `'ambos'` ("lo que ocurra primero") | both | both |
 | `'ninguna'` | — | nothing (always `SIN_DATO`) |
 
-- **Thresholds:** `VENCIDO` (overdue) if the difference is ≤ 0, `PROXIMO` (upcoming) if ≤ 100 hrs or ≤ 30 days, otherwise `OK`; `SIN_DATO` if there's no data.
+- **Thresholds:** `VENCIDO` (overdue) if the difference is ≤ 0, `PROXIMO` (upcoming) if it's within the task's threshold, otherwise `OK`; `SIN_DATO` if there's no data.
+  - The threshold is proportional to the task's interval: `umbralProximoHrs(t)` = max(10% of `cadaHrs`, 30 hrs) and `umbralProximoDias(t)` = max(10% of `cadaMeses` × 30 days, 7 days). Tasks without an interval fall back to 100 hrs / 30 days.
+  - The percentage, minimums and fallbacks are the `PROXIMO_*` constants at the top of the script (section `SEMÁFORO DE TAREAS`).
+  - Every place that colours tasks goes through these: `estadoPorHoras()`/`estadoPorFecha()` (so `calcularEstado()`), "Registrar varias" (`renderChequeosFecha()` calls `estadoPorFecha()`), and the hours-entry prompt in `guardarCarga()`. Deficiencies, spare parts and certificates have their own rules and don't use them.
 - **`'ambos'`:** the worse side wins (VENCIDO > PROXIMO > OK). The other side comes back in `.otro`, and the card shows both.
 - **Where it's used:** everywhere status is displayed (dashboard counts, task list, equipment cards). Status is always derived, never stored.
 - **Helpers:**
