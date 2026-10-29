@@ -407,6 +407,21 @@
     outline: none; border-color: var(--azul-profundo); background: white;
   }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  /* Ventana "Exportar plan de mantenimiento" */
+  .modal .exp-opciones { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .modal label.exp-op {
+    display: flex; align-items: center; gap: 8px; margin: 0;
+    text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; color: var(--texto); cursor: pointer;
+  }
+  .modal label.exp-op input { width: auto; margin: 0; flex: none; }
+  .modal .exp-bloque.apagado { opacity: 0.45; }
+  .exp-lista { margin-top: 10px; max-height: 260px; overflow-y: auto; border: 1px solid var(--gris-2); border-radius: 8px; padding: 6px 10px; background: var(--gris-1); }
+  .exp-grupo + .exp-grupo { border-top: 1px solid var(--gris-2); margin-top: 6px; padding-top: 6px; }
+  .modal .exp-grupo > label.exp-op { font-weight: 700; color: var(--azul-profundo); }
+  .exp-grupo .exp-items { padding-left: 24px; display: grid; gap: 4px; margin-top: 4px; }
+  .exp-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .exp-resumen { font-size: 13px; color: var(--texto-suave); background: var(--gris-1); border-radius: 8px; padding: 10px 12px; }
+  .exp-resumen.aviso { color: var(--rojo); }
 
   /* CARGA MENSUAL */
   .carga-form {
@@ -1017,7 +1032,7 @@
     <div class="acciones-globales">
       <button class="btn solo-jefe" onclick="abrirModalTarea()">➕ Agregar tarea</button>
       <button class="btn btn-sec solo-operador" onclick="abrirModalChequeos()">✓ Registrar varias</button>
-      <button class="btn btn-acento" onclick="exportarExcel()">📥 Exportar Excel</button>
+      <button class="btn btn-acento" onclick="abrirExportarPlan()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
       <input type="text" id="buscador" placeholder="🔎 Buscar equipo o tarea...">
@@ -1215,6 +1230,58 @@
     <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-sec" onclick="cerrarModalChequeos()">Cancelar</button>
       <button class="btn" onclick="aplicarChequeos()">✓ Aplicar marcados</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: exportar el plan de mantenimiento a Excel (abrirExportarPlan / exportarPlan) -->
+<div class="modal-bg" id="modal-export-plan">
+  <div class="modal" style="max-width:560px">
+    <h2>📥 Exportar plan de mantenimiento</h2>
+    <div class="modal-sub">Elegí qué querés bajar al Excel</div>
+
+    <div class="field">
+      <label>Equipos</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-equipos" value="todos"> Todos</label>
+        <label class="exp-op"><input type="radio" name="exp-equipos" value="elegir"> Elegir</label>
+      </div>
+      <div id="exp-lista-equipos" class="exp-lista"></div>
+    </div>
+
+    <div class="field">
+      <label>Qué incluir</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="checkbox" id="exp-plan"> Plan de tareas</label>
+        <label class="exp-op"><input type="checkbox" id="exp-hist"> Historial</label>
+      </div>
+    </div>
+
+    <div class="field exp-bloque" id="exp-bloque-tareas">
+      <label>Tareas</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-tareas" value="todas"> Todas</label>
+        <label class="exp-op"><input type="radio" name="exp-tareas" value="vencidas"> Solo vencidas y próximas</label>
+      </div>
+    </div>
+
+    <div class="field exp-bloque" id="exp-bloque-hist">
+      <label>Historial</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-hist-rango" value="todo"> Todo</label>
+        <label class="exp-op"><input type="radio" name="exp-hist-rango" value="fechas"> Entre fechas</label>
+      </div>
+      <div class="exp-fechas" id="exp-fechas">
+        <div><label>Desde</label><input type="date" id="exp-desde"></div>
+        <div><label>Hasta</label><input type="date" id="exp-hasta"></div>
+      </div>
+    </div>
+
+    <div id="exp-resumen" class="exp-resumen"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarExportarPlan()">Cancelar</button>
+      <button class="btn" id="exp-btn-exportar" onclick="exportarPlan()">📥 Exportar</button>
     </div>
   </div>
 </div>
@@ -1931,6 +1998,12 @@ let stockFiltradosActuales = [];  // últimos repuestos filtrados en la pestaña
 function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Rearma las opciones de un <select> de filtro sin perder lo elegido (si la opción sigue existiendo)
+function llenarSelectConservando(sel, html) {
+  const antes = sel.value;
+  sel.innerHTML = html;
+  if ([...sel.options].some(o => o.value === antes)) sel.value = antes;
+}
 function toast(msg, error = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -2154,11 +2227,19 @@ function conBarco(datos) {
     : { ...datos, barco_id: barcoActual.id };
 }
 
-// Nombre del barco para los archivos que se descargan (Stock_BM_Santa_Lucía_2026-10-29.xlsx),
-// limpiado igual que los filtros en los nombres de Historial y Certificados
+// Texto apto para nombres de archivo: sin tildes, ñ, signos ni espacios ("B/M Santa Lucía" -> "BM_Santa_Lucia")
+function textoArchivo(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9\s_-]/g, '').trim().replace(/[\s_]+/g, '_');
+}
+// "busqueda-<texto>" para el nombre del archivo, cortado a 30 caracteres; '' si no hay búsqueda
+function busquedaArchivo(buscar) {
+  const b = textoArchivo(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
+  return b ? 'busqueda-' + b : '';
+}
+// Nombre del barco para los archivos que se descargan (Stock_BM_Santa_Lucia_2026-10-29.xlsx)
 function nombreBarcoArchivo() {
-  const limpio = String(barcoActual ? barcoActual.nombre : '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  return limpio || 'Barco';
+  return textoArchivo(barcoActual ? barcoActual.nombre : '') || 'Barco';
 }
 
 async function cargarTodo() {
@@ -3501,14 +3582,10 @@ function exportarHistExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Historial');
-  // Historial_BM_Santa_Lucía_Motor_Principal_Babor_2026-10-23.xlsx / Historial_BM_Santa_Lucía_Todos_busqueda-inyectores_2026-10-23.xlsx
+  // Historial_BM_Santa_Lucia_Motor_Principal_Babor_2026-10-23.xlsx / Historial_BM_Santa_Lucia_Todos_busqueda-inyectores_2026-10-23.xlsx
   const { buscar, eq } = filtrosHist();
-  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const partes = ['Historial', nombreBarcoArchivo(), eq ? limpiar(eq) : 'Todos'];
-  const busqueda = limpiar(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
-  if (busqueda) partes.push('busqueda-' + busqueda);
-  partes.push(hoyLocalISO());
-  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  const partes = ['Historial', nombreBarcoArchivo(), eq ? textoArchivo(eq) : 'Todos', busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -3724,7 +3801,7 @@ function renderStock() {
   const cats = [...new Set(repuestos.map(r => r.categoria).filter(Boolean))].sort();
   const selCat = document.getElementById('stock-filtro-cat');
   const dl = document.getElementById('lista-categorias');
-  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  llenarSelectConservando(selCat, '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join(''));
   dl.innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
 
   // Badge bajo stock en tab
@@ -3757,19 +3834,8 @@ function renderStock() {
       </div>`;
   }
 
-  // Lista filtrada
-  const buscar = (document.getElementById('stock-buscador').value || '').toLowerCase();
-  const cat = document.getElementById('stock-filtro-cat').value;
-  const est = document.getElementById('stock-filtro-estado').value;
-
-  let filtrados = repuestos.filter(r => {
-    const e = estadoRepuesto(r);
-    if (est === 'BAJO' && e === 'OK') return false;
-    if (est === 'OK' && e !== 'OK') return false;
-    if (cat && r.categoria !== cat) return false;
-    if (buscar && !((r.nombre || '').toLowerCase().includes(buscar) || (r.codigo || '').toLowerCase().includes(buscar) || (r.categoria || '').toLowerCase().includes(buscar))) return false;
-    return true;
-  });
+  // Lista filtrada (la misma que exporta el Excel)
+  let filtrados = stockFiltrado();
 
   stockFiltradosActuales = filtrados;
 
@@ -4082,9 +4148,33 @@ async function guardarMovimiento() {
   }
 }
 
+function filtrosStock() {
+  return {
+    buscar: (document.getElementById('stock-buscador').value || '').trim(),
+    cat: document.getElementById('stock-filtro-cat').value,
+    est: document.getElementById('stock-filtro-estado').value,
+  };
+}
+// Repuestos que pasan los filtros de la pestaña Stock (pantalla y Excel)
+function stockFiltrado() {
+  const { cat, est } = filtrosStock();
+  const buscar = filtrosStock().buscar.toLowerCase();
+  return repuestos.filter(r => {
+    const e = estadoRepuesto(r);
+    if (est === 'BAJO' && e === 'OK') return false;
+    if (est === 'OK' && e !== 'OK') return false;
+    if (cat && r.categoria !== cat) return false;
+    if (buscar && !((r.nombre || '').toLowerCase().includes(buscar) || (r.codigo || '').toLowerCase().includes(buscar) || (r.categoria || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+}
+
+// Exporta lo que se ve en pantalla: Stock_BM_Santa_Lucia_Filtros_bajo-stock_2026-10-29.xlsx
 function exportarStockExcel() {
   if (!repuestos.length) { toast('No hay repuestos para exportar'); return; }
-  const data = repuestos.map(r => ({
+  const filtrados = stockFiltrado();
+  if (!filtrados.length) { toast('No hay repuestos con esos filtros para exportar'); return; }
+  const data = filtrados.map(r => ({
     Nombre: r.nombre,
     Código: r.codigo,
     Categoría: r.categoria,
@@ -4097,7 +4187,10 @@ function exportarStockExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Stock');
-  XLSX.writeFile(wb, `Stock_${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const { buscar, cat, est } = filtrosStock();
+  const partes = ['Stock', nombreBarcoArchivo(), cat && textoArchivo(cat),
+    { BAJO: 'bajo-stock', OK: 'stock-ok' }[est], busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -4106,21 +4199,12 @@ function renderHerramientas() {
   const ubics = [...new Set(herramientas.map(h => h.ubicacion).filter(Boolean))].sort();
   const marcas = [...new Set(herramientas.map(h => h.marca).filter(Boolean))].sort();
 
-  document.getElementById('herr-filtro-ubic').innerHTML = '<option value="">Todas las ubicaciones</option>' + ubics.map(u => `<option value="${escape(u)}">${escape(u)}</option>`).join('');
-  document.getElementById('herr-filtro-marca').innerHTML = '<option value="">Todas las marcas</option>' + marcas.map(m => `<option value="${escape(m)}">${escape(m)}</option>`).join('');
+  llenarSelectConservando(document.getElementById('herr-filtro-ubic'), '<option value="">Todas las ubicaciones</option>' + ubics.map(u => `<option value="${escape(u)}">${escape(u)}</option>`).join(''));
+  llenarSelectConservando(document.getElementById('herr-filtro-marca'), '<option value="">Todas las marcas</option>' + marcas.map(m => `<option value="${escape(m)}">${escape(m)}</option>`).join(''));
   document.getElementById('lista-ubic-herr').innerHTML = ubics.map(u => `<option value="${escape(u)}">`).join('');
   document.getElementById('lista-marcas-herr').innerHTML = marcas.map(m => `<option value="${escape(m)}">`).join('');
 
-  const buscar = (document.getElementById('herr-buscador').value || '').toLowerCase();
-  const ub = document.getElementById('herr-filtro-ubic').value;
-  const mc = document.getElementById('herr-filtro-marca').value;
-
-  let filtradas = herramientas.filter(h => {
-    if (ub && h.ubicacion !== ub) return false;
-    if (mc && h.marca !== mc) return false;
-    if (buscar && !((h.nombre || '').toLowerCase().includes(buscar) || (h.marca || '').toLowerCase().includes(buscar) || (h.ubicacion || '').toLowerCase().includes(buscar))) return false;
-    return true;
-  });
+  let filtradas = herrFiltradas();
 
   // Agrupar por ubicación
   const grupos = {};
@@ -4217,9 +4301,31 @@ async function borrarHerr() {
   }
 }
 
+function filtrosHerr() {
+  return {
+    buscar: (document.getElementById('herr-buscador').value || '').trim(),
+    ub: document.getElementById('herr-filtro-ubic').value,
+    mc: document.getElementById('herr-filtro-marca').value,
+  };
+}
+// Herramientas que pasan los filtros de la pestaña (pantalla y Excel)
+function herrFiltradas() {
+  const { ub, mc } = filtrosHerr();
+  const buscar = filtrosHerr().buscar.toLowerCase();
+  return herramientas.filter(h => {
+    if (ub && h.ubicacion !== ub) return false;
+    if (mc && h.marca !== mc) return false;
+    if (buscar && !((h.nombre || '').toLowerCase().includes(buscar) || (h.marca || '').toLowerCase().includes(buscar) || (h.ubicacion || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+}
+
+// Exporta lo que se ve en pantalla: Herramientas_BM_Santa_Lucia_Panol_Bahco_2026-10-29.xlsx
 function exportarHerrExcel() {
   if (!herramientas.length) { toast('No hay herramientas para exportar'); return; }
-  const data = herramientas.map(h => ({
+  const filtradas = herrFiltradas();
+  if (!filtradas.length) { toast('No hay herramientas con esos filtros para exportar'); return; }
+  const data = filtradas.map(h => ({
     Nombre: h.nombre,
     Marca: h.marca,
     Cantidad: h.cantidad,
@@ -4228,7 +4334,9 @@ function exportarHerrExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Herramientas');
-  XLSX.writeFile(wb, `Herramientas_${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const { buscar, ub, mc } = filtrosHerr();
+  const partes = ['Herramientas', nombreBarcoArchivo(), ub && textoArchivo(ub), mc && textoArchivo(mc), busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -4262,25 +4370,24 @@ function irADeficiencias() {
   renderDeficiencias();
 }
 
-function renderDeficiencias() {
-  const abiertas = deficiencias.filter(d => d.estado === 'abierta').length;
-  const badge = document.getElementById('badge-deficiencias');
-  badge.textContent = abiertas;
-  badge.style.display = abiertas > 0 ? 'inline-block' : 'none';
-
-  const buscar = (document.getElementById('def-buscador').value || '').toLowerCase();
-  const est = document.getElementById('def-filtro-estado').value;
-
-  const filtradas = deficiencias.filter(d => {
+function filtrosDef() {
+  return {
+    buscar: (document.getElementById('def-buscador').value || '').trim(),
+    est: document.getElementById('def-filtro-estado').value,
+  };
+}
+// Deficiencias que pasan los filtros de la pestaña, en el orden de la pantalla (pantalla y Excel):
+// abiertas primero (críticas arriba, luego por fecha límite); cerradas de la más reciente a la más vieja
+function defFiltradas() {
+  const { est } = filtrosDef();
+  const buscar = filtrosDef().buscar.toLowerCase();
+  return deficiencias.filter(d => {
     if (est && d.estado !== est) return false;
     if (buscar && !(numeroDef(d).includes(buscar) ||
                     nombreEquipoDef(d).toLowerCase().includes(buscar) ||
                     (d.descripcion || '').toLowerCase().includes(buscar))) return false;
     return true;
-  });
-
-  // Abiertas primero (críticas arriba, luego por fecha límite); cerradas de la más reciente a la más vieja
-  filtradas.sort((a, b) => {
+  }).sort((a, b) => {
     if (a.estado !== b.estado) return a.estado === 'abierta' ? -1 : 1;
     if (a.estado === 'abierta') {
       if (a.critica !== b.critica) return a.critica ? -1 : 1;
@@ -4288,6 +4395,15 @@ function renderDeficiencias() {
     }
     return (b.fecha_cierre || '').localeCompare(a.fecha_cierre || '') || b.id - a.id;
   });
+}
+
+function renderDeficiencias() {
+  const abiertas = deficiencias.filter(d => d.estado === 'abierta').length;
+  const badge = document.getElementById('badge-deficiencias');
+  badge.textContent = abiertas;
+  badge.style.display = abiertas > 0 ? 'inline-block' : 'none';
+
+  const filtradas = defFiltradas();
 
   const div = document.getElementById('def-lista');
   if (!filtradas.length) {
@@ -4474,9 +4590,12 @@ async function guardarCierreDef() {
   }
 }
 
+// Exporta lo que se ve en pantalla: Deficiencias_BM_Santa_Lucia_Abiertas_2026-10-29.xlsx
 function exportarDefExcel() {
   if (!deficiencias.length) { toast('No hay deficiencias para exportar'); return; }
-  const data = deficiencias.map(d => ({
+  const filtradas = defFiltradas();
+  if (!filtradas.length) { toast('No hay deficiencias con esos filtros para exportar'); return; }
+  const data = filtradas.map(d => ({
     'N°': numeroDef(d),
     Equipo: nombreEquipoDef(d),
     Descripción: d.descripcion,
@@ -4491,7 +4610,10 @@ function exportarDefExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Deficiencias');
-  XLSX.writeFile(wb, `Deficiencias_${nombreBarcoArchivo()}_${hoyLocalISO()}.xlsx`);
+  const { buscar, est } = filtrosDef();
+  const partes = ['Deficiencias', nombreBarcoArchivo(), { abierta: 'Abiertas', cerrada: 'Cerradas' }[est] || 'Todas',
+    busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -5021,51 +5143,209 @@ function exportarCertExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), trip ? 'Tripulación' : 'Certificados');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Renovaciones: 'Sin renovaciones registradas' }]), 'Renovaciones');
   // El nombre indica la solapa y los filtros:
-  // Certificados_BM_Santa_Lucía_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_BM_Santa_Lucía_Tripulacion_Juan_Perez_2026-10-16.xlsx
+  // Certificados_BM_Santa_Lucia_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_BM_Santa_Lucia_Tripulacion_Juan_Perez_2026-10-16.xlsx
   const { buscar, depto, cat, tripId } = filtrosCert();
-  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
   const partes = ['Certificados', nombreBarcoArchivo()];
   if (trip) partes.push('Tripulacion');
-  if (depto) partes.push(limpiar(depto));
-  if (cat) partes.push(limpiar(cat));
+  if (depto) partes.push(textoArchivo(depto));
+  if (cat) partes.push(textoArchivo(cat));
   const tSel = tripId && tripulantes.find(t => String(t.id) === tripId);
-  if (tSel) partes.push(limpiar(tSel.nombre));
-  const busqueda = limpiar(buscar).slice(0, 30);
-  if (busqueda) partes.push('busqueda-' + busqueda);
-  partes.push(hoyLocalISO());
-  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  if (tSel) partes.push(textoArchivo(tSel.nombre));
+  partes.push(busquedaArchivo(buscar), hoyLocalISO());
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
 // ============ EXPORTAR EXCEL ============
-function exportarExcel() {
-  const data = tareas.map(t => {
-    const e = calcularEstado(t);
-    return {
-      Equipo: t.equipo,
-      Tarea: t.tarea,
-      Control: { hrs: 'Por horas', fecha: 'Por fecha', ambos: 'Lo que ocurra primero', ninguna: 'Sin control' }[t.unidad] || t.unidad,
-      Periodicidad: etiquetaPeriodicidad(t),
-      'Hrs totales': t.hrs_totales,
-      'Última fecha': t.fecha_ult,
-      'Próx. hrs': t.proxima_hrs,
-      'Próx. fecha': t.proxima_fecha,
-      'Falta': e.mostrar + ' ' + e.unidad + (e.otro ? ` · ${e.otro.mostrar} ${e.otro.unidad}` : ''),
-      Estado: e.estado,
-      Prioridad: t.prioridad,
-      'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
-      'Motivo postergación': estaPostergada(t) ? t.motivo_postergacion : '',
-      'Realizado por': t.realizado_por,
-      Observaciones: t.observaciones
-    };
+// Ventana "Exportar plan de mantenimiento": equipos (todos o algunos, por categoría), plan de tareas y/o
+// historial, historial completo o entre fechas, y todas las tareas o solo vencidas y próximas.
+// La última elección se recuerda en prueba-exportar-plan.
+const EXPORT_PLAN_DEFECTO = { equipos: 'todos', elegidos: [], plan: true, hist: true, tareas: 'todas', histRango: 'todo', desde: '', hasta: '' };
+
+function exportPlanGuardado() {
+  let guardado = {};
+  try { guardado = JSON.parse(localStorage.getItem('prueba-exportar-plan') || '{}') || {}; } catch (e) {}
+  return { ...EXPORT_PLAN_DEFECTO, ...guardado };
+}
+
+// Equipos del plan y del historial (también de tareas dadas de baja), agrupados por la categoría de su ficha
+function gruposEquiposExport() {
+  const nombres = [...new Set(tareasTodas.map(t => t.equipo))].sort((a, b) => a.localeCompare(b, 'es'));
+  const grupos = {};
+  nombres.forEach(n => {
+    const ficha = equipos.find(e => e.nombre === n);
+    const cat = (ficha && ficha.categoria) || 'Sin categoría';
+    (grupos[cat] = grupos[cat] || []).push(n);
   });
-  const ws = XLSX.utils.json_to_sheet(data);
+  return Object.keys(grupos)
+    .sort((a, b) => (a === 'Sin categoría') - (b === 'Sin categoría') || a.localeCompare(b, 'es'))
+    .map(cat => ({ cat, equipos: grupos[cat] }));
+}
+
+function abrirExportarPlan() {
+  const cfg = exportPlanGuardado();
+  const grupos = gruposEquiposExport();
+  const existentes = new Set(grupos.flatMap(g => g.equipos));
+  // Equipos recordados que no existen en este barco se descartan; si no queda ninguno, "Todos"
+  const elegidos = new Set((cfg.elegidos || []).filter(n => existentes.has(n)));
+  if (cfg.equipos === 'elegir' && !elegidos.size) cfg.equipos = 'todos';
+
+  document.getElementById('exp-lista-equipos').innerHTML = grupos.map((g, i) => `
+    <div class="exp-grupo">
+      <label class="exp-op"><input type="checkbox" class="exp-chk-grupo" data-grupo="${i}"> ${escape(g.cat)}</label>
+      <div class="exp-items">
+        ${g.equipos.map(n => `<label class="exp-op"><input type="checkbox" class="exp-chk-equipo" data-grupo="${i}" value="${escape(n)}"${elegidos.has(n) ? ' checked' : ''}> ${escape(n)}</label>`).join('')}
+      </div>
+    </div>`).join('') || '<div style="font-size:13px;color:var(--texto-suave);padding:6px 0">No hay equipos con tareas</div>';
+
+  document.querySelector(`input[name="exp-equipos"][value="${cfg.equipos === 'elegir' ? 'elegir' : 'todos'}"]`).checked = true;
+  document.getElementById('exp-plan').checked = !!cfg.plan;
+  document.getElementById('exp-hist').checked = !!cfg.hist;
+  document.querySelector(`input[name="exp-tareas"][value="${cfg.tareas === 'vencidas' ? 'vencidas' : 'todas'}"]`).checked = true;
+  document.querySelector(`input[name="exp-hist-rango"][value="${cfg.histRango === 'fechas' ? 'fechas' : 'todo'}"]`).checked = true;
+  document.getElementById('exp-desde').value = cfg.desde || '';
+  document.getElementById('exp-hasta').value = cfg.hasta || '';
+  actualizarExportPlan();
+  document.getElementById('modal-export-plan').classList.add('show');
+}
+
+function cerrarExportarPlan() {
+  document.getElementById('modal-export-plan').classList.remove('show');
+}
+
+// Lo elegido en la ventana
+function leerExportPlan() {
+  return {
+    equipos: document.querySelector('input[name="exp-equipos"]:checked').value,
+    elegidos: [...document.querySelectorAll('.exp-chk-equipo:checked')].map(c => c.value),
+    plan: document.getElementById('exp-plan').checked,
+    hist: document.getElementById('exp-hist').checked,
+    tareas: document.querySelector('input[name="exp-tareas"]:checked').value,
+    histRango: document.querySelector('input[name="exp-hist-rango"]:checked').value,
+    desde: document.getElementById('exp-desde').value,
+    hasta: document.getElementById('exp-hasta').value,
+  };
+}
+
+// Problema que impide exportar, o null
+function errorExportPlan(cfg) {
+  if (!cfg.plan && !cfg.hist) return 'Marcá Plan de tareas, Historial o los dos.';
+  if (cfg.equipos === 'elegir' && !cfg.elegidos.length) return 'Elegí al menos un equipo.';
+  if (cfg.hist && cfg.histRango === 'fechas') {
+    if (!cfg.desde && !cfg.hasta) return 'Poné al menos una fecha (desde o hasta).';
+    if (cfg.desde && cfg.hasta && cfg.desde > cfg.hasta) return 'La fecha "desde" es posterior a "hasta".';
+  }
+  return null;
+}
+
+// Tareas y registros del historial que entran según lo elegido
+function datosExportPlan(cfg) {
+  const sel = cfg.equipos === 'elegir' ? new Set(cfg.elegidos) : null;
+  const tareasSel = !cfg.plan ? [] : tareas.filter(t =>
+    (!sel || sel.has(t.equipo)) &&
+    (cfg.tareas !== 'vencidas' || ['VENCIDO', 'PROXIMO'].includes(calcularEstado(t).estado)));
+  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+  const fechas = cfg.histRango === 'fechas';
+  const histSel = !cfg.hist ? [] : historial.filter(h => {
+    const t = idMap[h.tarea_id];
+    if (sel && !(t && sel.has(t.equipo))) return false;
+    if (fechas && cfg.desde && h.fecha_realizado < cfg.desde) return false;
+    if (fechas && cfg.hasta && h.fecha_realizado > cfg.hasta) return false;
+    return true;
+  });
+  return { tareasSel, histSel, idMap };
+}
+
+// Apaga lo que no aplica, marca los grupos y muestra qué se va a exportar
+function actualizarExportPlan() {
+  const cfg = leerExportPlan();
+  document.getElementById('exp-lista-equipos').style.display = cfg.equipos === 'elegir' ? '' : 'none';
+  document.querySelectorAll('.exp-chk-grupo').forEach(g => {
+    const items = [...document.querySelectorAll(`.exp-chk-equipo[data-grupo="${g.dataset.grupo}"]`)];
+    const marcados = items.filter(c => c.checked).length;
+    g.checked = marcados === items.length && marcados > 0;
+    g.indeterminate = marcados > 0 && marcados < items.length;
+  });
+  const bloqueTareas = document.getElementById('exp-bloque-tareas');
+  bloqueTareas.classList.toggle('apagado', !cfg.plan);
+  bloqueTareas.querySelectorAll('input').forEach(i => { i.disabled = !cfg.plan; });
+  const bloqueHist = document.getElementById('exp-bloque-hist');
+  bloqueHist.classList.toggle('apagado', !cfg.hist);
+  bloqueHist.querySelectorAll('input[name="exp-hist-rango"]').forEach(i => { i.disabled = !cfg.hist; });
+  const conFechas = cfg.hist && cfg.histRango === 'fechas';
+  document.getElementById('exp-fechas').style.display = cfg.histRango === 'fechas' ? '' : 'none';
+  ['exp-desde', 'exp-hasta'].forEach(id => { document.getElementById(id).disabled = !conFechas; });
+
+  const resumen = document.getElementById('exp-resumen');
+  const btn = document.getElementById('exp-btn-exportar');
+  const error = errorExportPlan(cfg);
+  if (error) {
+    resumen.textContent = error;
+    resumen.classList.add('aviso');
+    btn.disabled = true;
+    return;
+  }
+  const { tareasSel, histSel } = datosExportPlan(cfg);
+  const partes = [];
+  if (cfg.plan) partes.push(`${tareasSel.length} tarea${tareasSel.length !== 1 ? 's' : ''}`);
+  if (cfg.hist) partes.push(`${histSel.length} registro${histSel.length !== 1 ? 's' : ''} del historial`);
+  const nada = !tareasSel.length && !histSel.length;
+  resumen.textContent = nada ? 'No hay nada para exportar con esa elección.' : `Se van a exportar ${partes.join(' y ')}.`;
+  resumen.classList.toggle('aviso', nada);
+  btn.disabled = nada;
+}
+
+// Nombre: BM_Santa_Lucia[_Motor_Principal_Babor | _3_equipos][_Plan(_vencidas)][_Historial(_desde_a_hasta)]_2026-10-29.xlsx
+function nombreArchivoPlan(cfg) {
+  const partes = [nombreBarcoArchivo()];
+  if (cfg.equipos === 'elegir') {
+    partes.push(cfg.elegidos.length === 1 ? textoArchivo(cfg.elegidos[0]) : `${cfg.elegidos.length}_equipos`);
+  }
+  const vencidas = cfg.tareas === 'vencidas';
+  const fechas = cfg.histRango === 'fechas';
+  if (cfg.plan && (vencidas || !cfg.hist)) partes.push(vencidas ? 'Plan_vencidas' : 'Plan');
+  if (cfg.hist && (fechas || !cfg.plan)) {
+    partes.push(fechas ? `Historial_${cfg.desde || 'inicio'}_a_${cfg.hasta || hoyLocalISO()}` : 'Historial');
+  }
+  partes.push(hoyLocalISO());
+  return partes.join('_') + '.xlsx';
+}
+
+function exportarPlan() {
+  const cfg = leerExportPlan();
+  const error = errorExportPlan(cfg);
+  if (error) { toast(error, true); return; }
+  const { tareasSel, histSel, idMap } = datosExportPlan(cfg);
+  if (!tareasSel.length && !histSel.length) { toast('No hay nada para exportar con esa elección', true); return; }
+  try { localStorage.setItem('prueba-exportar-plan', JSON.stringify(cfg)); } catch (e) {}
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
-  // Hoja historial
-  if (historial.length) {
-    const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
-    const hd = historial.map(h => ({
+  if (cfg.plan) {
+    const data = tareasSel.map(t => {
+      const e = calcularEstado(t);
+      return {
+        Equipo: t.equipo,
+        Tarea: t.tarea,
+        Control: { hrs: 'Por horas', fecha: 'Por fecha', ambos: 'Lo que ocurra primero', ninguna: 'Sin control' }[t.unidad] || t.unidad,
+        Periodicidad: etiquetaPeriodicidad(t),
+        'Hrs totales': t.hrs_totales,
+        'Última fecha': t.fecha_ult,
+        'Próx. hrs': t.proxima_hrs,
+        'Próx. fecha': t.proxima_fecha,
+        'Falta': e.mostrar + ' ' + e.unidad + (e.otro ? ` · ${e.otro.mostrar} ${e.otro.unidad}` : ''),
+        Estado: e.estado,
+        Prioridad: t.prioridad,
+        'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
+        'Motivo postergación': estaPostergada(t) ? t.motivo_postergacion : '',
+        'Realizado por': t.realizado_por,
+        Observaciones: t.observaciones
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, data.length ? XLSX.utils.json_to_sheet(data)
+      : XLSX.utils.json_to_sheet([{ Tareas: 'No hay tareas con esa elección' }]), 'Tareas');
+  }
+  if (cfg.hist) {
+    const hd = histSel.map(h => ({
       Fecha: h.fecha_realizado,
       Equipo: idMap[h.tarea_id]?.equipo || '',
       Tarea: idMap[h.tarea_id] ? idMap[h.tarea_id].tarea + (idMap[h.tarea_id].activa ? '' : ' (dada de baja)') : '',
@@ -5073,11 +5353,22 @@ function exportarExcel() {
       'Realizado por': h.realizado_por,
       Notas: h.notas
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hd), 'Historial');
+    XLSX.utils.book_append_sheet(wb, hd.length ? XLSX.utils.json_to_sheet(hd)
+      : XLSX.utils.json_to_sheet([{ Historial: 'No hay registros con esa elección' }]), 'Historial');
   }
-  XLSX.writeFile(wb, `${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, nombreArchivoPlan(cfg));
+  cerrarExportarPlan();
   toast('✓ Excel descargado');
 }
+
+// Cualquier cambio en la ventana actualiza lo que se va a exportar; la casilla de un grupo marca o desmarca todo el grupo
+document.getElementById('modal-export-plan').addEventListener('change', e => {
+  if (e.target.classList.contains('exp-chk-grupo')) {
+    document.querySelectorAll(`.exp-chk-equipo[data-grupo="${e.target.dataset.grupo}"]`).forEach(c => { c.checked = e.target.checked; });
+  }
+  actualizarExportPlan();
+});
+document.getElementById('modal-export-plan').addEventListener('click', e => { if (e.target.id === 'modal-export-plan') cerrarExportarPlan(); });
 
 // ============ NAVEGACIÓN TABS ============
 // Dos niveles: secciones (Inicio, Mantenimiento, Barco, Pañol) y sub-pestañas. Cada sub-pestaña

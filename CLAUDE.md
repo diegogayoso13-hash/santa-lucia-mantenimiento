@@ -227,7 +227,13 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
     - Every insert wraps its data in `conBarco()`.
     - The hour updates by equipment name also filter by `barco_id`.
   - **Hour cascading:** `equiposQueTomanHorasDe(nombre)` gives the equipment that receives a piece of equipment's hours (also down a chain), and `equiposOcultosCarga()` hides those from the hours form. The "Toma las horas de" select (`llenarSelectorHorasDe()`) leaves out the equipment itself and anything that already takes its hours.
-  - **Excel names** carry the ship (`nombreBarcoArchivo()`), e.g. `Stock_BM_Santa_Lucía_2026-10-29.xlsx`.
+  - **Excel files:**
+    - **Names** carry the ship (`nombreBarcoArchivo()`) and go through `textoArchivo()`, so they have no accents, ñ, signs or spaces (`Stock_BM_Santa_Lucia_2026-10-29.xlsx`). `busquedaArchivo()` adds the search text.
+    - **Plan export:** the Tareas tab's "📥 Exportar Excel" opens `#modal-export-plan` (`abrirExportarPlan()` / `exportarPlan()`). It offers all equipment or a choice grouped by ficha category, plan and/or history, all tasks or only overdue and upcoming ones (postponed included), and full history or a date range.
+      - The last choice is kept in `prueba-exportar-plan`.
+      - The name reflects the choice, e.g. `BM_Santa_Lucia_3_equipos_Plan_vencidas_2026-10-29.xlsx`.
+    - **Other exports:** Stock, Herramientas and Deficiencias export exactly what's on screen (`stockFiltrado()`, `herrFiltradas()`, `defFiltradas()` are shared with the lists), and the name carries the filters.
+    - **Filter selects:** they're rebuilt on every render through `llenarSelectConservando()` so the choice survives (before, the stock category and the tool location and brand filters reset themselves and never filtered).
   - **Buttons by role:** `body` gets `puede-registrar` (operador and up) and `puede-editar` (jefe and up) in `renderEncabezado()`. Elements marked `.solo-operador` (register, hours form, deficiencies, stock movements) or `.solo-jefe` (everything that changes the plan, fichas, history fixes, postponing, renewing) are hidden by CSS otherwise. New action buttons need one of these classes. The database still enforces everything.
   - **Errors:** `textoError(err)` turns permission rejections (code `42501`, RLS messages) into "No tenés permiso para esto". Use it in every error toast.
 
