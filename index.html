@@ -1879,6 +1879,12 @@ let stockFiltradosActuales = [];  // últimos repuestos filtrados en la pestaña
 function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Rearma las opciones de un <select> de filtro sin perder lo elegido (si la opción sigue existiendo)
+function llenarSelectConservando(sel, html) {
+  const antes = sel.value;
+  sel.innerHTML = html;
+  if ([...sel.options].some(o => o.value === antes)) sel.value = antes;
+}
 function toast(msg, error = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -3555,7 +3561,7 @@ function renderStock() {
   const cats = [...new Set(repuestos.map(r => r.categoria).filter(Boolean))].sort();
   const selCat = document.getElementById('stock-filtro-cat');
   const dl = document.getElementById('lista-categorias');
-  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  llenarSelectConservando(selCat, '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join(''));
   dl.innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
 
   // Badge bajo stock en tab
@@ -3937,8 +3943,8 @@ function renderHerramientas() {
   const ubics = [...new Set(herramientas.map(h => h.ubicacion).filter(Boolean))].sort();
   const marcas = [...new Set(herramientas.map(h => h.marca).filter(Boolean))].sort();
 
-  document.getElementById('herr-filtro-ubic').innerHTML = '<option value="">Todas las ubicaciones</option>' + ubics.map(u => `<option value="${escape(u)}">${escape(u)}</option>`).join('');
-  document.getElementById('herr-filtro-marca').innerHTML = '<option value="">Todas las marcas</option>' + marcas.map(m => `<option value="${escape(m)}">${escape(m)}</option>`).join('');
+  llenarSelectConservando(document.getElementById('herr-filtro-ubic'), '<option value="">Todas las ubicaciones</option>' + ubics.map(u => `<option value="${escape(u)}">${escape(u)}</option>`).join(''));
+  llenarSelectConservando(document.getElementById('herr-filtro-marca'), '<option value="">Todas las marcas</option>' + marcas.map(m => `<option value="${escape(m)}">${escape(m)}</option>`).join(''));
   document.getElementById('lista-ubic-herr').innerHTML = ubics.map(u => `<option value="${escape(u)}">`).join('');
   document.getElementById('lista-marcas-herr').innerHTML = marcas.map(m => `<option value="${escape(m)}">`).join('');
 
@@ -5192,7 +5198,7 @@ function renderEquipos() {
   // Filtros
   const cats = [...new Set(equipos.map(e => e.categoria).filter(Boolean))].sort();
   const selCat = document.getElementById('eq-filtro-cat');
-  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  llenarSelectConservando(selCat, '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join(''));
   document.getElementById('lista-cat-eq').innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
 
   const buscar = (document.getElementById('eq-buscador').value || '').toLowerCase();
