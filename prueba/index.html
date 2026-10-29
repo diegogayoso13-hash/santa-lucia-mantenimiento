@@ -5653,7 +5653,7 @@ function renderEquipos() {
   // Filtros
   const cats = [...new Set(equipos.map(e => e.categoria).filter(Boolean))].sort();
   const selCat = document.getElementById('eq-filtro-cat');
-  selCat.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  llenarSelectConservando(selCat, '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join(''));
   document.getElementById('lista-cat-eq').innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
 
   const buscar = (document.getElementById('eq-buscador').value || '').toLowerCase();
