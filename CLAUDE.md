@@ -193,6 +193,19 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`, and Auth's leaked password protection is disabled.
 
+## Test version (`prueba/`)
+
+`prueba/index.html` is a separate copy of the app, published at `/prueba/`, for trying out changes without touching the real one. Changes to the root `index.html` are **not** copied to it (or back) automatically.
+
+- **Backend:** it points to a different Supabase project, "Mantenimiento Naval" (`ncughlkgdgigwkggnxri`), which holds a copy of the data. The real app and its project (`zfoetyauhauztkkltjaz`) must never be touched when working on the test version.
+- **Separation:** it shows a fixed orange banner ("VERSIÓN DE PRUEBA – no cargar datos reales") and a `[PRUEBA]` tab title, and its `localStorage` keys carry a `prueba-` prefix (`prueba-nav`, `prueba-cert-solapa`).
+- **Several ships:** the test database is being adapted for several ships. Its schema is documented in `docs/esquema_prueba.sql`, and `docs/esquema.sql` still describes the real project.
+  - **Ships table:** `mant_buque` is the ships table, one row per ship (id 1 = B/M Santa Lucía).
+  - **`barco_id`:** every other `mant_*` table has `barco_id not null` → `mant_buque(id)`.
+  - **Mixing ships is blocked:** child tables reference their parent by `(barco_id, id)` composite foreign keys, so the database rejects rows that mix ships.
+  - **Deficiency numbering** is per ship and per year.
+  - **Temporary default:** `barco_id` defaults to 1, so the test app still works without sending it. That default is to be removed in a later step, once the app sends `barco_id` itself.
+
 ## Conventions
 
 - UI text, comments, and variable/function names are in Spanish (matching the vessel's crew); keep new code consistent with that.
