@@ -10,10 +10,26 @@
 --   El DEFAULT 1 (Santa Lucía) es TEMPORAL, para que la app siga andando sin mandar barco_id; se saca en el Paso 5.
 -- - Las tablas que tienen hijas tienen UNIQUE (barco_id, id) y las hijas las referencian por (barco_id, x_id),
 --   así la base rechaza mezclar barcos (p. ej. una tarea de un barco con un equipo de otro).
+--
+-- EMPRESAS, USUARIOS Y PERMISOS:
+-- - Cada barco pertenece a una empresa (mant_empresas). Los datos de una empresa nunca se ven desde otra.
+-- - mant_accesos dice qué usuario (auth.users) tiene qué rol: admin_empresa (toda su empresa, sin barco)
+--   o jefe / operador / lectura (por barco). Los usuarios se dan de alta desde el panel (no hay registro libre).
+-- - Las reglas RLS de todas las tablas usan funciones de mant_priv (esquema que la API no expone).
+-- - Quién hizo cada cosa (creado_por, cerrada_por) lo pone la base con auth.uid(); la app no lo puede falsear.
+
+-- =============== EMPRESAS ===============
+-- Se crean desde la base (al sumar un cliente); el admin de la empresa solo puede renombrarla.
+CREATE TABLE public.mant_empresas (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  creado_en TIMESTAMPTZ DEFAULT now()
+);
 
 -- =============== BARCOS (mant_buque: una fila por barco) ===============
 CREATE TABLE public.mant_buque (
   id SERIAL PRIMARY KEY,
+  empresa_id INTEGER NOT NULL REFERENCES public.mant_empresas(id),  -- no se puede cambiar desde la app (trigger)
   nombre TEXT NOT NULL DEFAULT 'B/M Santa Lucía',
   tipo TEXT,
   astillero TEXT,
@@ -46,7 +62,26 @@ CREATE TABLE public.mant_buque (
   clase_maquina TEXT,
   notas TEXT,
   creado_en TIMESTAMPTZ DEFAULT now(),
-  actualizado_en TIMESTAMPTZ DEFAULT now()
+  actualizado_en TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT mant_buque_empresa_id_id_key UNIQUE (empresa_id, id)
+);
+
+-- =============== ACCESOS (usuario -> empresa/barco, con rol) ===============
+-- admin_empresa: sin barco, cubre todos los barcos de su empresa (también los que se agreguen).
+-- jefe / operador / lectura: por barco. Un solo rol por usuario y barco.
+CREATE TABLE public.mant_accesos (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  empresa_id INTEGER NOT NULL REFERENCES public.mant_empresas(id),
+  barco_id INTEGER,
+  rol TEXT NOT NULL CONSTRAINT mant_accesos_rol_check
+    CHECK (rol IN ('admin_empresa', 'jefe', 'operador', 'lectura')),
+  creado_en TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT mant_accesos_barco_rol_check CHECK ((rol = 'admin_empresa') = (barco_id IS NULL)),
+  -- el barco tiene que ser de esa empresa
+  CONSTRAINT mant_accesos_barco_id_fkey FOREIGN KEY (empresa_id, barco_id)
+    REFERENCES public.mant_buque(empresa_id, id) ON DELETE CASCADE,
+  CONSTRAINT mant_accesos_unico UNIQUE NULLS NOT DISTINCT (user_id, empresa_id, barco_id)
 );
 
 -- =============== EQUIPOS (fichas) ===============
@@ -138,6 +173,7 @@ CREATE TABLE public.mant_historial (
   hrs_equipo NUMERIC,
   realizado_por TEXT,
   notas TEXT,
+  creado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- lo pone la base (auth.uid())
   creado_en TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_historial_tarea_id_fkey FOREIGN KEY (barco_id, tarea_id)
     REFERENCES public.mant_tareas(barco_id, id) ON DELETE CASCADE
@@ -171,6 +207,7 @@ CREATE TABLE public.mant_movimientos (
   cantidad NUMERIC NOT NULL,
   motivo TEXT,
   tarea_id BIGINT,
+  creado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- lo pone la base (auth.uid())
   fecha TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_movimientos_repuesto_id_fkey FOREIGN KEY (barco_id, repuesto_id)
     REFERENCES public.mant_repuestos(barco_id, id) ON DELETE CASCADE,
@@ -215,6 +252,7 @@ CREATE TABLE public.mant_lecturas_horas (
   fecha DATE NOT NULL,
   horas_mes NUMERIC,                        -- horas sumadas en el mes
   hrs_total NUMERIC,                        -- horas acumuladas del equipo
+  creado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- lo pone la base (auth.uid())
   creado_en TIMESTAMPTZ DEFAULT now()
 );
 
@@ -235,6 +273,8 @@ CREATE TABLE public.mant_deficiencias (
   estado TEXT NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta', 'cerrada')),
   fecha_cierre DATE,
   accion_realizada TEXT,
+  creado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- lo pone la base (auth.uid())
+  cerrada_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- quién la cerró (lo pone la base)
   creado_en TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_deficiencias_barco_anio_numero_key UNIQUE (barco_id, anio, numero),
   CONSTRAINT mant_deficiencias_equipo_id_fkey FOREIGN KEY (barco_id, equipo_id)
@@ -333,6 +373,13 @@ CREATE INDEX idx_mant_lecturas_barco ON public.mant_lecturas_horas (barco_id);
 CREATE INDEX idx_mant_deficiencias_barco_equipo ON public.mant_deficiencias (barco_id, equipo_id);
 CREATE INDEX idx_mant_certificados_barco_trip ON public.mant_certificados (barco_id, tripulante_id);
 CREATE INDEX idx_mant_cert_hist_barco_cert ON public.mant_certificados_historial (barco_id, certificado_id);
+-- Accesos (user_id ya está cubierto por mant_accesos_unico) y autores
+CREATE INDEX idx_mant_accesos_empresa_barco ON public.mant_accesos (empresa_id, barco_id);
+CREATE INDEX idx_mant_historial_creado_por ON public.mant_historial (creado_por);
+CREATE INDEX idx_mant_lecturas_creado_por ON public.mant_lecturas_horas (creado_por);
+CREATE INDEX idx_mant_mov_creado_por ON public.mant_movimientos (creado_por);
+CREATE INDEX idx_mant_deficiencias_creado_por ON public.mant_deficiencias (creado_por);
+CREATE INDEX idx_mant_deficiencias_cerrada_por ON public.mant_deficiencias (cerrada_por);
 
 -- =============== FUNCIONES Y TRIGGERS ===============
 -- Fecha de última modificación (mant_tareas usa "actualizada_en"; el resto "actualizado_en")
@@ -485,11 +532,192 @@ $$;
 CREATE TRIGGER mant_deficiencias_numerar BEFORE INSERT ON public.mant_deficiencias
   FOR EACH ROW EXECUTE FUNCTION public.mant_deficiencias_numerar();
 
--- =============== ROW LEVEL SECURITY ===============
--- Política: SOLO el usuario propietario (por email) puede acceder a las tablas mant_*
--- Reemplazá 'tu-email@ejemplo.com' por tu email real de Supabase
+-- =============== PERMISOS: FUNCIONES AUXILIARES (esquema mant_priv) ===============
+-- mant_priv no está expuesto por la API. Las funciones son SECURITY DEFINER: leen mant_accesos sin pasar por RLS.
+-- Niveles: 1 lectura, 2 operador, 3 jefe, 4 admin_empresa (admin_empresa cubre todos los barcos de su empresa).
+CREATE SCHEMA mant_priv;
+REVOKE ALL ON SCHEMA mant_priv FROM public;
+GRANT USAGE ON SCHEMA mant_priv TO authenticated, service_role;
 
+CREATE FUNCTION mant_priv.nivel_rol(p_rol TEXT) RETURNS INTEGER
+LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT CASE p_rol WHEN 'admin_empresa' THEN 4 WHEN 'jefe' THEN 3 WHEN 'operador' THEN 2 WHEN 'lectura' THEN 1 ELSE 0 END;
+$$;
+
+-- Barcos donde el usuario actual tiene al menos ese nivel
+CREATE FUNCTION mant_priv.barcos(p_nivel INTEGER) RETURNS INTEGER[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT x.id), '{}') FROM (
+    SELECT a.barco_id AS id
+      FROM public.mant_accesos a
+     WHERE a.user_id = auth.uid() AND a.barco_id IS NOT NULL
+       AND mant_priv.nivel_rol(a.rol) >= p_nivel
+    UNION
+    SELECT b.id
+      FROM public.mant_accesos a
+      JOIN public.mant_buque b ON b.empresa_id = a.empresa_id
+     WHERE a.user_id = auth.uid() AND a.rol = 'admin_empresa'
+  ) x;
+$$;
+
+-- Empresas donde el usuario tiene algún acceso / donde es admin
+CREATE FUNCTION mant_priv.empresas() RETURNS INTEGER[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT a.empresa_id), '{}') FROM public.mant_accesos a WHERE a.user_id = auth.uid();
+$$;
+CREATE FUNCTION mant_priv.empresas_admin() RETURNS INTEGER[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT a.empresa_id), '{}') FROM public.mant_accesos a
+   WHERE a.user_id = auth.uid() AND a.rol = 'admin_empresa';
+$$;
+
+-- Nivel del usuario actual en un barco (lo usan los triggers de control)
+CREATE FUNCTION mant_priv.nivel(p_barco INTEGER) RETURNS INTEGER
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(max(mant_priv.nivel_rol(a.rol)), 0)
+    FROM public.mant_accesos a
+   WHERE a.user_id = auth.uid()
+     AND (a.barco_id = p_barco
+          OR (a.rol = 'admin_empresa'
+              AND a.empresa_id = (SELECT b.empresa_id FROM public.mant_buque b WHERE b.id = p_barco)));
+$$;
+
+-- =============== PERMISOS: TRIGGERS DE AUTOR Y DE CONTROL ===============
+-- Todos se saltean cuando no hay usuario de la app (auth.uid() nulo: SQL directo o panel de Supabase).
+
+-- Autor de historial, lecturas de horas y movimientos: siempre el usuario de la sesión, y no se cambia después
+CREATE FUNCTION mant_priv.registrar_autor() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.creado_por := auth.uid();
+  ELSE
+    NEW.creado_por := OLD.creado_por;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_historial_autor BEFORE INSERT OR UPDATE ON public.mant_historial
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.registrar_autor();
+CREATE TRIGGER mant_lecturas_horas_autor BEFORE INSERT OR UPDATE ON public.mant_lecturas_horas
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.registrar_autor();
+CREATE TRIGGER mant_movimientos_autor BEFORE INSERT OR UPDATE ON public.mant_movimientos
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.registrar_autor();
+
+-- Deficiencias: autor, quién la cerró (se borra al reabrir) y anio/numero fijos
+CREATE FUNCTION mant_priv.deficiencias_autor() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.creado_por := auth.uid();
+    NEW.cerrada_por := CASE WHEN NEW.estado = 'cerrada' THEN auth.uid() END;
+  ELSE
+    IF (NEW.anio, NEW.numero) IS DISTINCT FROM (OLD.anio, OLD.numero) THEN
+      RAISE EXCEPTION 'El número de la deficiencia no se puede cambiar' USING ERRCODE = '42501';
+    END IF;
+    NEW.creado_por := OLD.creado_por;
+    IF NEW.estado = 'cerrada' AND OLD.estado = 'abierta' THEN
+      NEW.cerrada_por := auth.uid();
+    ELSIF NEW.estado = 'abierta' THEN
+      NEW.cerrada_por := NULL;
+    ELSE
+      NEW.cerrada_por := OLD.cerrada_por;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_deficiencias_autor BEFORE INSERT OR UPDATE ON public.mant_deficiencias
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.deficiencias_autor();
+
+-- El operador (nivel < jefe) solo cambia el "estado" de una tarea al registrar o cargar horas, no el plan,
+-- y puede quitar una postergación al registrar pero no postergar
+CREATE FUNCTION mant_priv.tareas_control_operador() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  v_libres TEXT[] := ARRAY['fecha_ult', 'ult_hrs', 'hrs_totales', 'proxima_hrs', 'proxima_fecha', 'realizado_por',
+                           'observaciones', 'postergada_hasta', 'motivo_postergacion', 'actualizada_en'];
+BEGIN
+  IF auth.uid() IS NULL OR mant_priv.nivel(OLD.barco_id) >= 3 THEN RETURN NEW; END IF;
+  IF (to_jsonb(NEW) - v_libres) IS DISTINCT FROM (to_jsonb(OLD) - v_libres) THEN
+    RAISE EXCEPTION 'Sin permiso para cambiar el plan de la tarea' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.postergada_hasta IS NOT NULL
+     AND (NEW.postergada_hasta, NEW.motivo_postergacion) IS DISTINCT FROM (OLD.postergada_hasta, OLD.motivo_postergacion) THEN
+    RAISE EXCEPTION 'Sin permiso para postergar tareas' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_tareas_control_operador BEFORE UPDATE ON public.mant_tareas
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.tareas_control_operador();
+
+-- El operador solo cambia la cantidad de un repuesto (movimientos de stock)
+CREATE FUNCTION mant_priv.repuestos_control_operador() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  v_libres TEXT[] := ARRAY['cantidad', 'actualizado_en'];
+BEGIN
+  IF auth.uid() IS NULL OR mant_priv.nivel(OLD.barco_id) >= 3 THEN RETURN NEW; END IF;
+  IF (to_jsonb(NEW) - v_libres) IS DISTINCT FROM (to_jsonb(OLD) - v_libres) THEN
+    RAISE EXCEPTION 'Sin permiso para cambiar el repuesto (solo la cantidad)' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_repuestos_control_operador BEFORE UPDATE ON public.mant_repuestos
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.repuestos_control_operador();
+
+-- Un barco no se puede pasar a otra empresa desde la app
+CREATE FUNCTION mant_priv.buque_empresa_fija() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND NEW.empresa_id IS DISTINCT FROM OLD.empresa_id THEN
+    RAISE EXCEPTION 'El barco no se puede pasar a otra empresa' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_buque_empresa_fija BEFORE UPDATE ON public.mant_buque
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.buque_empresa_fija();
+
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv FROM public;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv TO authenticated, service_role;
+
+-- =============== ROW LEVEL SECURITY ===============
+-- Todo es "TO authenticated": sin sesión (anon) no hay ninguna política ni permisos sobre las tablas.
+-- mant_priv.barcos(n) va en un subselect con cast, así Postgres lo calcula una sola vez por consulta.
+-- Por tabla: ver / agregar / modificar / borrar, con el nivel mínimo (1 lectura, 2 operador, 3 jefe):
+--
+--   tabla                          ver agregar modificar borrar
+--   mant_equipos                    1     3        3       3
+--   mant_herramientas               1     3        3       3
+--   mant_tripulantes                1     3        3       3
+--   mant_certificados               1     3        3       3
+--   mant_certificados_historial     1     3        3       3   (lo escribe mant_certificados_renovar)
+--   mant_tarea_repuestos            1     3        3       3
+--   mant_tareas                     1     3        2       3   (el operador solo el estado: trigger)
+--   mant_repuestos                  1     3        2       3   (el operador solo la cantidad: trigger)
+--   mant_historial                  1     2        3       3
+--   mant_lecturas_horas             1     2        3       3
+--   mant_movimientos                1     2        3       3
+--
+-- Las once se crean así (<tabla>, <v>, <a>, <m>, <b> según la tabla de arriba):
+--   CREATE POLICY <tabla>_ver ON public.<tabla> FOR SELECT TO authenticated
+--     USING (barco_id = ANY ((SELECT mant_priv.barcos(<v>))::INTEGER[]));
+--   CREATE POLICY <tabla>_agregar ON public.<tabla> FOR INSERT TO authenticated
+--     WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(<a>))::INTEGER[]));
+--   CREATE POLICY <tabla>_modificar ON public.<tabla> FOR UPDATE TO authenticated
+--     USING (barco_id = ANY ((SELECT mant_priv.barcos(<m>))::INTEGER[]))
+--     WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(<m>))::INTEGER[]));
+--   CREATE POLICY <tabla>_borrar ON public.<tabla> FOR DELETE TO authenticated
+--     USING (barco_id = ANY ((SELECT mant_priv.barcos(<b>))::INTEGER[]));
+
+ALTER TABLE public.mant_empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_buque ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mant_accesos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_equipos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_tareas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_historial ENABLE ROW LEVEL SECURITY;
@@ -503,67 +731,75 @@ ALTER TABLE public.mant_certificados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_certificados_historial ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_tripulantes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mant_buque_owner" ON public.mant_buque
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+DO $$
+DECLARE g RECORD;
+BEGIN
+  FOR g IN SELECT * FROM (VALUES
+    ('mant_equipos',                1, 3, 3, 3),
+    ('mant_herramientas',           1, 3, 3, 3),
+    ('mant_tripulantes',            1, 3, 3, 3),
+    ('mant_certificados',           1, 3, 3, 3),
+    ('mant_certificados_historial', 1, 3, 3, 3),
+    ('mant_tarea_repuestos',        1, 3, 3, 3),
+    ('mant_tareas',                 1, 3, 2, 3),
+    ('mant_repuestos',              1, 3, 2, 3),
+    ('mant_historial',              1, 2, 3, 3),
+    ('mant_lecturas_horas',         1, 2, 3, 3),
+    ('mant_movimientos',            1, 2, 3, 3)
+  ) v(tabla, ver, agregar, modificar, borrar) LOOP
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
+                   g.tabla || '_ver', g.tabla, g.ver);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
+                   g.tabla || '_agregar', g.tabla, g.agregar);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[])) WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
+                   g.tabla || '_modificar', g.tabla, g.modificar, g.modificar);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
+                   g.tabla || '_borrar', g.tabla, g.borrar);
+  END LOOP;
+END $$;
 
-CREATE POLICY "mant_equipos_owner" ON public.mant_equipos
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+-- Deficiencias: el operador crea, edita y cierra las abiertas; las cerradas solo las cambia jefe/admin
+CREATE POLICY mant_deficiencias_ver ON public.mant_deficiencias FOR SELECT TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
+CREATE POLICY mant_deficiencias_agregar ON public.mant_deficiencias FOR INSERT TO authenticated
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+CREATE POLICY mant_deficiencias_modificar ON public.mant_deficiencias FOR UPDATE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
+         OR (estado = 'abierta' AND barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+CREATE POLICY mant_deficiencias_borrar ON public.mant_deficiencias FOR DELETE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
 
-CREATE POLICY "mant_tareas_owner" ON public.mant_tareas
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+-- Barcos: ver los propios (el admin, todos los de su empresa, también el que acaba de crear);
+-- editar la ficha el jefe; crear barcos el admin en su empresa; borrar, nadie desde la app
+CREATE POLICY mant_buque_ver ON public.mant_buque FOR SELECT TO authenticated
+  USING (id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[])
+         OR empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]));
+CREATE POLICY mant_buque_agregar ON public.mant_buque FOR INSERT TO authenticated
+  WITH CHECK (empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]));
+CREATE POLICY mant_buque_modificar ON public.mant_buque FOR UPDATE TO authenticated
+  USING (id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]))
+  WITH CHECK (id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
 
-CREATE POLICY "mant_historial_owner" ON public.mant_historial
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+-- Empresas: ver la propia; el admin la renombra; crear y borrar solo desde la base
+CREATE POLICY mant_empresas_ver ON public.mant_empresas FOR SELECT TO authenticated
+  USING (id = ANY ((SELECT mant_priv.empresas())::INTEGER[]));
+CREATE POLICY mant_empresas_modificar ON public.mant_empresas FOR UPDATE TO authenticated
+  USING (id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]))
+  WITH CHECK (id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]));
 
-CREATE POLICY "mant_repuestos_owner" ON public.mant_repuestos
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+-- Accesos: cada uno ve los suyos; el admin ve y administra los de su empresa, menos el propio
+-- (así nadie se sube el rol ni se deja afuera por error)
+CREATE POLICY mant_accesos_ver ON public.mant_accesos FOR SELECT TO authenticated
+  USING (user_id = (SELECT auth.uid()) OR empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]));
+CREATE POLICY mant_accesos_agregar ON public.mant_accesos FOR INSERT TO authenticated
+  WITH CHECK (empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]) AND user_id <> (SELECT auth.uid()));
+CREATE POLICY mant_accesos_modificar ON public.mant_accesos FOR UPDATE TO authenticated
+  USING (empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]) AND user_id <> (SELECT auth.uid()))
+  WITH CHECK (empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]) AND user_id <> (SELECT auth.uid()));
+CREATE POLICY mant_accesos_borrar ON public.mant_accesos FOR DELETE TO authenticated
+  USING (empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]) AND user_id <> (SELECT auth.uid()));
 
-CREATE POLICY "mant_movimientos_owner" ON public.mant_movimientos
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_tarea_repuestos_owner" ON public.mant_tarea_repuestos
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_herramientas_owner" ON public.mant_herramientas
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_lecturas_horas_owner" ON public.mant_lecturas_horas
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_deficiencias_owner" ON public.mant_deficiencias
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_certificados_owner" ON public.mant_certificados
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_certificados_historial_owner" ON public.mant_certificados_historial
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
-
-CREATE POLICY "mant_tripulantes_owner" ON public.mant_tripulantes
-  FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'tu-email@ejemplo.com');
+-- Permisos de tabla: anon no tiene ninguno; authenticated, los cuatro (RLS decide)
+REVOKE ALL ON public.mant_empresas, public.mant_accesos FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mant_empresas, public.mant_accesos TO authenticated;

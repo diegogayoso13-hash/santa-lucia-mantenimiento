@@ -205,6 +205,19 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
   - **Mixing ships is blocked:** child tables reference their parent by `(barco_id, id)` composite foreign keys, so the database rejects rows that mix ships.
   - **Deficiency numbering** is per ship and per year.
   - **Temporary default:** `barco_id` defaults to 1, so the test app still works without sending it. That default is to be removed in a later step, once the app sends `barco_id` itself.
+- **Companies, users and roles:** the test database no longer uses the "only my email" policy.
+  - **Companies:** every ship belongs to a company (`mant_buque.empresa_id` → `mant_empresas`), and data never crosses companies.
+  - **Access:** `mant_accesos` gives a user (`auth.users`) a role. `admin_empresa` is per company (no ship) and covers all its ships; `jefe`, `operador` and `lectura` are per ship.
+  - **What each role can do:**
+    - `jefe` can do everything in their ships.
+    - `operador` can see everything and add records: history, hour readings, deficiencies and stock movements. It can also edit and close open deficiencies.
+    - A trigger limits `operador` updates to a task's status columns (registering, hours) and to a spare part's `cantidad`.
+    - `lectura` can only see.
+    - The admin can create ships and manage access in their company, except their own access row.
+  - **RLS:** every table's policies call `SECURITY DEFINER` helpers in the `mant_priv` schema, which the API doesn't expose. `mant_priv.barcos(nivel)` returns the user's ships at that level or higher, with levels 1 lectura, 2 operador, 3 jefe. Policies wrap the helpers as `(select …)::integer[]` so they run once per query.
+  - **Authorship:** `creado_por` (history, hour readings, movements, deficiencies) and `cerrada_por` (deficiencies) are set by triggers from `auth.uid()`, so the app can't fake them. Rows written straight from SQL or the dashboard (no app session) keep whatever is sent.
+  - **New users:** sign-ups are meant to be off. Users are created in the dashboard (Authentication → Users), then given a `mant_accesos` row.
+  - The full rules are in `docs/esquema_prueba.sql`.
 
 ## Conventions
 
