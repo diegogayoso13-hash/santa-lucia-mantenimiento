@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>[PRUEBA] B/M Santa Lucía · Mantenimientos</title>
+<title>[PRUEBA] Plan de Mantenimiento</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,6 +55,23 @@
   header.top h1 { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; }
   header.top h1 .accent { color: var(--acento); }
   header.top .sub { opacity: 0.75; font-size: 13px; margin-top: 2px; letter-spacing: 0.02em; }
+  /* Selector de barco en el encabezado (solo si el usuario tiene más de uno) */
+  .sel-barco {
+    font: inherit; color: white; background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.35); border-radius: 8px;
+    padding: 2px 8px; max-width: 100%; cursor: pointer;
+  }
+  .sel-barco option { color: var(--texto); background: white; font-family: 'Inter', sans-serif; font-size: 15px; }
+  .header-rol {
+    background: var(--acento); color: var(--azul-profundo); font-weight: 700; font-size: 11px;
+    padding: 3px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .header-rol:empty { display: none; }
+  .sin-barcos { max-width: 560px; margin: 40px auto; padding: 24px; text-align: center; background: white;
+    border: 1px solid var(--gris-2); border-radius: 12px; color: var(--texto-suave); }
+  /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan) */
+  body:not(.puede-registrar) .solo-operador,
+  body:not(.puede-editar) .solo-jefe { display: none !important; }
 
   /* Navegación: fila de secciones + fila de sub-pestañas, las dos fijas arriba */
   nav.tabs {
@@ -867,8 +884,8 @@
   <div style="background:white;border-radius:14px;padding:36px 32px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:48px;margin-bottom:8px">⚓</div>
-      <h2 style="font-family:'Fraunces',serif;color:var(--azul-profundo);font-size:24px">B/M Santa Lucía</h2>
-      <p style="color:var(--texto-suave);font-size:13px;margin-top:4px">Plan de Mantenimiento</p>
+      <h2 style="font-family:'Fraunces',serif;color:var(--azul-profundo);font-size:24px">Plan de Mantenimiento</h2>
+      <p style="color:var(--texto-suave);font-size:13px;margin-top:4px">Ingresá con tu usuario</p>
     </div>
     <form id="login-form" onsubmit="return iniciarSesion(event)">
       <div style="margin-bottom:14px">
@@ -888,15 +905,24 @@
 <header class="top">
   <div class="header-inner" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
     <div>
-      <h1>⚓ B/M Santa Lucía <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
+      <!-- El nombre sale de la ficha del barco elegido; con más de un barco es un selector (renderEncabezado) -->
+      <h1>⚓ <span id="header-barco"></span> <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
       <p class="sub">Gestión integral del mantenimiento de a bordo</p>
     </div>
     <div style="display:flex;align-items:center;gap:10px;font-size:13px">
       <span id="header-user" style="opacity:0.85"></span>
+      <span id="header-rol" class="header-rol"></span>
       <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:7px 13px;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;font-weight:500">Salir</button>
     </div>
   </div>
 </header>
+
+<!-- Usuario sin ningún barco asignado (mant_accesos) -->
+<div id="sin-barcos" class="sin-barcos" style="display:none">
+  <div style="font-size:40px;margin-bottom:8px">⚓</div>
+  <p><strong>Tu usuario todavía no tiene barcos asignados.</strong></p>
+  <p style="margin-top:6px">Pedile acceso al administrador de tu empresa.</p>
+</div>
 
 <!-- Navegación en dos niveles: secciones arriba, sub-pestañas de la sección elegida abajo.
      Cada sub-pestaña (data-tab) abre su <section id="sec-..."> como antes; data-seccion la agrupa. -->
@@ -989,8 +1015,8 @@
   <section class="section" id="sec-tareas">
     <h2 class="panel-titulo">Todas las tareas</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalTarea()">➕ Agregar tarea</button>
-      <button class="btn btn-sec" onclick="abrirModalChequeos()">✓ Registrar varias</button>
+      <button class="btn solo-jefe" onclick="abrirModalTarea()">➕ Agregar tarea</button>
+      <button class="btn btn-sec solo-operador" onclick="abrirModalChequeos()">✓ Registrar varias</button>
       <button class="btn btn-acento" onclick="exportarExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1022,9 +1048,9 @@
     <div id="banner-stock"></div>
     <h2 class="panel-titulo">Stock de repuestos</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
+      <button class="btn solo-jefe" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
       <button class="btn btn-acento" onclick="exportarStockExcel()">📥 Exportar Excel</button>
-      <button class="btn btn-sec" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
+      <button class="btn btn-sec solo-jefe" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
     </div>
 
     <div class="carga-form" id="minimos-bar" style="display:none">
@@ -1060,7 +1086,7 @@
   <section class="section" id="sec-deficiencias">
     <h2 class="panel-titulo">Registro de deficiencias</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
+      <button class="btn solo-operador" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
       <button class="btn btn-acento" onclick="exportarDefExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1082,8 +1108,8 @@
       <button class="cert-solapa" data-solapa="tripulacion" onclick="cambiarSolapaCert('tripulacion')">👥 Tripulación <span id="badge-cert-trip" class="badge" style="display:none">0</span></button>
     </div>
     <div class="acciones-globales">
-      <button class="btn" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
-      <button class="btn" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
+      <button class="btn solo-jefe" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn solo-jefe" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
       <button class="btn btn-acento" onclick="exportarCertExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1104,7 +1130,7 @@
   <section class="section" id="sec-herramientas">
     <h2 class="panel-titulo">Inventario de herramientas</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalHerr()">➕ Agregar herramienta</button>
+      <button class="btn solo-jefe" onclick="abrirModalHerr()">➕ Agregar herramienta</button>
       <button class="btn btn-acento" onclick="exportarHerrExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1117,11 +1143,11 @@
 
   <!-- HORAS: carga mensual arriba, histórico abajo -->
   <section class="section" id="sec-horas">
-    <h2 class="panel-titulo">Cargar horas del mes</h2>
-    <div class="carga-form">
+    <h2 class="panel-titulo solo-operador">Cargar horas del mes</h2>
+    <div class="carga-form solo-operador">
       <h3>Actualización mensual de horas por equipo</h3>
       <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
-        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Las cajas reductoras se actualizan solas junto con su motor.
+        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Los equipos que toman las horas de otro (por ejemplo, las cajas reductoras) se actualizan solos junto con él.
       </p>
       <div class="field" style="max-width:220px;margin-bottom:16px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Fecha de la carga</label>
@@ -1218,15 +1244,15 @@
       <label>Tipo de trabajo</label>
       <div style="display:flex;gap:8px;align-items:center">
         <select id="m-tipo-trabajo" class="sel-tipo-trabajo" style="flex:1"></select>
-        <button type="button" class="btn btn-pequeno btn-sec" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
+        <button type="button" class="btn btn-pequeno btn-sec solo-jefe" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
       </div>
     </div>
     <div class="field" id="m-postergacion"></div>
     <div class="modal-actions">
-      <button class="btn btn-sec" id="m-btn-baja" onclick="bajaOBorrarTarea()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
-      <button class="btn btn-sec" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
+      <button class="btn btn-sec solo-jefe" id="m-btn-baja" onclick="bajaOBorrarTarea()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
+      <button class="btn btn-sec solo-jefe" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
       <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn" onclick="guardarMant()">✓ Guardar</button>
+      <button class="btn solo-operador" onclick="guardarMant()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -1315,10 +1341,10 @@
 <div class="modal-bg" id="modal-buque">
   <div class="modal" style="max-width:700px">
     <h2>Editar ficha del buque</h2>
-    <div class="modal-sub">Datos generales del Santa Lucía</div>
+    <div class="modal-sub">Datos generales del barco</div>
 
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Nombre</label><input type="text" id="bq-nombre"></div>
+      <div><label>Nombre *</label><input type="text" id="bq-nombre"></div>
       <div><label>Tipo</label><input type="text" id="bq-tipo" placeholder="Remolcador"></div>
     </div>
 
@@ -1402,6 +1428,11 @@
     </div>
     <datalist id="lista-cat-eq"></datalist>
     <div class="field"><label>Ubicación a bordo</label><input type="text" id="eq-ubicacion" placeholder="Sala de máquinas, Pañol..."></div>
+    <div class="field">
+      <label>Toma las horas de</label>
+      <select id="eq-horas-de"></select>
+      <div style="font-size:12px;color:var(--texto-suave);margin-top:4px">Para un equipo sin horómetro propio (por ejemplo, una caja reductora): recibe las mismas horas que el equipo elegido y no se carga aparte en Horas.</div>
+    </div>
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Fabricante</h3>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1869,7 +1900,10 @@ let lecturas = [];
 let repuestos = [];
 let herramientas = [];
 let tareaRepuestos = [];
-let buque = null;          // datos del barco (1 fila)
+let buque = null;          // ficha del barco elegido (fila de mant_buque)
+let usuarioId = null;      // auth.uid() de la sesión
+let barcosDisponibles = []; // [{ id, nombre, empresa_id, rol }]: barcos que el usuario puede ver y su rol en cada uno
+let barcoActual = null;    // barco elegido: todo se lee filtrado por él y todo lo nuevo se guarda con su barco_id
 let equipos = [];          // fichas de equipos
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
 let defActual = null;      // deficiencia en edición o cierre
@@ -1902,6 +1936,12 @@ function toast(msg, error = false) {
   t.textContent = msg;
   t.className = 'toast show' + (error ? ' error' : '');
   setTimeout(() => t.className = 'toast', 2500);
+}
+// Texto para mostrar un error de Supabase; los rechazos por permisos (RLS o triggers de control) salen en criollo
+function textoError(err) {
+  const msg = (err && err.message) || String(err || '');
+  if ((err && err.code === '42501') || /row-level security|permission denied/i.test(msg)) return 'No tenés permiso para esto';
+  return 'Error: ' + msg;
 }
 function diasEntre(fechaStr) {
   if (!fechaStr) return null;
@@ -2035,7 +2075,95 @@ async function traerTodo(armarConsulta) {
   }
 }
 
+// ============ BARCOS Y ROLES ============
+// mant_accesos: admin_empresa vale para todos los barcos de su empresa; jefe/operador/lectura, para un barco.
+const NIVEL_ROL = { lectura: 1, operador: 2, jefe: 3, admin_empresa: 4 };
+const NOMBRE_ROL = { lectura: 'Lectura', operador: 'Operador', jefe: 'Jefe', admin_empresa: 'Admin' };
+
+function nivelActual() { return barcoActual ? NIVEL_ROL[barcoActual.rol] : 0; }
+function puedeRegistrar() { return nivelActual() >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
+function puedeEditar() { return nivelActual() >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
+
+// Lee los accesos del usuario y los barcos que puede ver; elige el último usado. false si no tiene ninguno.
+async function cargarBarcos() {
+  const [{ data: acc, error: e1 }, { data: bqs, error: e2 }] = await Promise.all([
+    sb.from('mant_accesos').select('empresa_id, barco_id, rol').eq('user_id', usuarioId),
+    sb.from('mant_buque').select('id, nombre, empresa_id').order('nombre').order('id')
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  barcosDisponibles = (bqs || []).map(b => {
+    const roles = (acc || [])
+      .filter(a => a.barco_id === b.id || (a.rol === 'admin_empresa' && a.empresa_id === b.empresa_id))
+      .map(a => a.rol);
+    const rol = roles.sort((x, y) => NIVEL_ROL[y] - NIVEL_ROL[x])[0];
+    return rol ? { ...b, rol } : null;
+  }).filter(Boolean);
+
+  let guardado = null;
+  try { guardado = Number(localStorage.getItem('prueba-barco')); } catch (e) {}
+  barcoActual = barcosDisponibles.find(b => b.id === guardado) || barcosDisponibles[0] || null;
+
+  const hay = !!barcoActual;
+  document.getElementById('sin-barcos').style.display = hay ? 'none' : '';
+  document.querySelector('nav.tabs').style.display = hay ? '' : 'none';
+  document.querySelector('main').style.display = hay ? '' : 'none';
+  renderEncabezado();
+  return hay;
+}
+
+function renderEncabezado() {
+  const cont = document.getElementById('header-barco');
+  document.body.classList.toggle('puede-registrar', puedeRegistrar());
+  document.body.classList.toggle('puede-editar', puedeEditar());
+  if (!barcoActual) {
+    cont.textContent = 'Sin barco asignado';
+    document.getElementById('header-rol').textContent = '';
+    document.title = '[PRUEBA] Plan de Mantenimiento';
+    return;
+  }
+  if (barcosDisponibles.length > 1) {
+    cont.innerHTML = `<select id="sel-barco" class="sel-barco" aria-label="Barco" onchange="cambiarBarco(this.value)">` +
+      barcosDisponibles.map(b => `<option value="${b.id}"${b.id === barcoActual.id ? ' selected' : ''}>${escape(b.nombre)}</option>`).join('') +
+      `</select>`;
+  } else {
+    cont.textContent = barcoActual.nombre;
+  }
+  document.getElementById('header-rol').textContent = NOMBRE_ROL[barcoActual.rol];
+  document.title = `[PRUEBA] ${barcoActual.nombre} · Mantenimientos`;
+}
+
+async function cambiarBarco(id) {
+  const b = barcosDisponibles.find(x => x.id === Number(id));
+  if (!b || b === barcoActual) return;
+  barcoActual = b;
+  try { localStorage.setItem('prueba-barco', String(b.id)); } catch (e) {}
+  // Nada de lo abierto pertenece al barco nuevo
+  document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
+  tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null;
+  if (equipoActualFicha) volverAEquipos();
+  renderEncabezado();
+  await cargarTodo();
+}
+
+// Agrega el barco elegido a lo que se guarda nuevo (uno o varios registros)
+function conBarco(datos) {
+  return Array.isArray(datos)
+    ? datos.map(d => ({ ...d, barco_id: barcoActual.id }))
+    : { ...datos, barco_id: barcoActual.id };
+}
+
+// Nombre del barco para los archivos que se descargan (Stock_BM_Santa_Lucía_2026-10-29.xlsx),
+// limpiado igual que los filtros en los nombres de Historial y Certificados
+function nombreBarcoArchivo() {
+  const limpio = String(barcoActual ? barcoActual.nombre : '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
+  return limpio || 'Barco';
+}
+
 async function cargarTodo() {
+  if (!barcoActual) return;
+  const B = barcoActual.id;
   try {
     const [
       {data: tt, error: e1},
@@ -2051,20 +2179,22 @@ async function cargarTodo() {
       {data: ch, error: e11},
       {data: tp, error: e12}
     ] = await Promise.all([
-      // Todas las tareas (también las dadas de baja); abajo se separan las activas
-      traerTodo(() => sb.from('mant_tareas').select('*').order('id')),
-      traerTodo(() => sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_repuestos').select('*').order('nombre').order('id')),
-      traerTodo(() => sb.from('mant_tarea_repuestos').select('*').order('id')),
-      traerTodo(() => sb.from('mant_herramientas').select('*').order('nombre').order('id')),
-      sb.from('mant_buque').select('*').limit(1),
-      traerTodo(() => sb.from('mant_equipos').select('*').eq('activo', true).order('nombre').order('id')),
-      traerTodo(() => sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero')),
-      traerTodo(() => sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento').order('id')),
-      traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_tripulantes').select('*').order('nombre').order('id'))
+      // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
+      traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
+      traerTodo(() => sb.from('mant_historial').select('*').eq('barco_id', B).order('fecha_realizado', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_repuestos').select('*').eq('barco_id', B).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_tarea_repuestos').select('*').eq('barco_id', B).order('id')),
+      traerTodo(() => sb.from('mant_herramientas').select('*').eq('barco_id', B).order('nombre').order('id')),
+      sb.from('mant_buque').select('*').eq('id', B),
+      traerTodo(() => sb.from('mant_equipos').select('*').eq('barco_id', B).eq('activo', true).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_lecturas_horas').select('*').eq('barco_id', B).order('fecha', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B).order('anio').order('numero').order('id')),
+      traerTodo(() => sb.from('mant_certificados').select('*').eq('barco_id', B).eq('activo', true).order('fecha_vencimiento').order('id')),
+      traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').eq('barco_id', B).order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_tripulantes').select('*').eq('barco_id', B).order('nombre').order('id'))
     ]);
+    // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
+    if (!barcoActual || barcoActual.id !== B) return;
     if (e1) throw e1;
     if (e2) throw e2;
     if (e3) throw e3;
@@ -2084,6 +2214,11 @@ async function cargarTodo() {
     tareaRepuestos = tr || [];
     herramientas = he || [];
     buque = (bq && bq[0]) || null;
+    // El nombre del encabezado sale de la ficha (puede haber cambiado al editarla)
+    if (buque && buque.nombre !== barcoActual.nombre) {
+      barcoActual.nombre = buque.nombre;
+      renderEncabezado();
+    }
     equipos = eq || [];
     lecturas = lh || [];
     deficiencias = df || [];
@@ -2096,7 +2231,7 @@ async function cargarTodo() {
     renderTodo();
   } catch (err) {
     console.error(err);
-    toast('Error cargando datos: ' + err.message, true);
+    toast('Error cargando datos: ' + textoError(err), true);
   }
 }
 
@@ -2320,7 +2455,7 @@ function htmlBotonPostergar(tipo, item, enAlerta) {
     ? `<div class="meta" style="margin-top:6px">${activa ? '⏸ Postergada' : 'Postergación vencida'} hasta ${fmtFecha(item.postergada_hasta)} · ${escape(item.motivo_postergacion)}</div>`
     : '';
   return `
-    <button type="button" class="btn btn-sec btn-pequeno" onclick="abrirModalPost('${tipo}', ${item.id})">
+    <button type="button" class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalPost('${tipo}', ${item.id})">
       ⏸ ${item.postergada_hasta ? 'Editar postergación' : 'Postergar'}
     </button>${info}`;
 }
@@ -2370,7 +2505,7 @@ async function guardarPost() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2384,7 +2519,7 @@ async function quitarPost() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2445,7 +2580,7 @@ function renderTaskCard(t) {
         <div class="unidad">${est.unidad}</div>
         ${est.otro ? `<div class="otro">${est.otro.mostrar} ${est.otro.unidad}</div>` : ''}
       </div>
-      <button class="btn" onclick="abrirModal(${t.id})">✓ Registrar</button>
+      <button class="btn solo-operador" onclick="abrirModal(${t.id})">✓ Registrar</button>
     </div>`;
 }
 
@@ -2506,7 +2641,7 @@ function renderTaskCardBaja(t) {
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · ${nHist} registro${nHist === 1 ? '' : 's'} en el historial</div>
       </div>
       <div class="proxima-box"></div>
-      <button class="btn btn-sec" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
+      <button class="btn btn-sec solo-jefe" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
     </div>`;
 }
 
@@ -2567,7 +2702,7 @@ async function bajaOBorrarTarea() {
     if (equipoActualFicha) renderFichaEquipo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2583,7 +2718,7 @@ async function reactivarTarea(id) {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2621,20 +2756,20 @@ async function guardarMant() {
   try {
     const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tareaActual.id);
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_historial').insert({
+    const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
       tarea_id: tareaActual.id,
       fecha_realizado: fecha,
       hrs_equipo: isNaN(hrs) ? null : hrs,
       realizado_por: quien || null,
       notas: notasConTraza(notas, tareaActual)
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Mantenimiento registrado');
     cerrarModal();
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2653,7 +2788,7 @@ async function guardarSoloTipo() {
     toast('✓ Tipo de trabajo actualizado');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2826,22 +2961,22 @@ async function guardarTarea() {
   if (fechaUlt) data.fecha_ult = fechaUlt;
 
   try {
-    const { data: nueva, error: e1 } = await sb.from('mant_tareas').insert(data).select().single();
+    const { data: nueva, error: e1 } = await sb.from('mant_tareas').insert(conBarco(data)).select().single();
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_historial').insert({
+    const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
       tarea_id: nueva.id,
       fecha_realizado: fechaUlt || new Date().toISOString().split('T')[0],
       hrs_equipo: hrsActual,
       realizado_por: quien,
       notas: notas || 'Tarea creada y registrada como realizada'
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Tarea creada y registrada');
     cerrarModalTarea();
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2889,7 +3024,7 @@ async function guardarEdicionTarea() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2897,23 +3032,40 @@ async function guardarEdicionTarea() {
   document.getElementById(id).addEventListener('input', toggleTipoTarea));
 
 // ============ CARGA MENSUAL DE HORAS ============
-// Cada caja reductora tiene las mismas horas que su motor principal:
-// se cargan solas cuando se cargan las horas del motor.
-const CAJAS_POR_MP = {
-  'Motor Principal Babor': 'Caja Reductora Babor',
-  'Motor Principal Estribor': 'Caja Reductora Estribor'
-};
-const EQUIPOS_OCULTOS_CARGA = new Set(Object.values(CAJAS_POR_MP));
+// Un equipo puede tomar las horas de otro del mismo barco ("Toma las horas de", mant_equipos.horas_de_id),
+// p. ej. cada caja reductora las de su motor principal: no se carga a mano y recibe las mismas horas
+// cuando se cargan las del equipo de origen (también en cadena). La base impide círculos.
+
+// Nombres de los equipos que reciben las horas del equipo `nombre` (directa o indirectamente)
+function equiposQueTomanHorasDe(nombre) {
+  const origen = equipos.find(e => e.nombre === nombre);
+  if (!origen) return [];
+  const res = [];
+  const vistos = new Set([origen.id]);
+  let frente = [origen.id];
+  while (frente.length) {
+    const hijos = equipos.filter(e => frente.includes(e.horas_de_id) && !vistos.has(e.id));
+    hijos.forEach(h => { vistos.add(h.id); res.push(h.nombre); });
+    frente = hijos.map(h => h.id);
+  }
+  return res;
+}
+
+// Equipos que no se cargan a mano (toman las horas de otro equipo activo)
+function equiposOcultosCarga() {
+  return new Set(equipos.filter(e => e.horas_de_id && equipos.some(o => o.id === e.horas_de_id)).map(e => e.nombre));
+}
 
 function renderCarga() {
+  const ocultos = equiposOcultosCarga();
   const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))]
-    .filter(eq => !EQUIPOS_OCULTOS_CARGA.has(eq))
+    .filter(eq => !ocultos.has(eq))
     .sort();
   const div = document.getElementById('carga-equipos');
   div.innerHTML = equipos.map(eq => {
     const hrs_actuales = Math.max(...tareas.filter(t => t.equipo === eq).map(t => Number(t.hrs_totales || 0)));
-    const caja = CAJAS_POR_MP[eq];
-    const nota = caja ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(caja)}</div>` : '';
+    const reciben = equiposQueTomanHorasDe(eq);
+    const nota = reciben.length ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(reciben.join(', '))}</div>` : '';
     return `
       <div class="equipo-row">
         <div>
@@ -3068,13 +3220,13 @@ async function aplicarChequeos() {
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', id);
       if (e1) throw e1;
 
-      const { error: e2 } = await sb.from('mant_historial').insert({
+      const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: id,
         fecha_realizado: fecha,
         hrs_equipo: null,
         realizado_por: quien,
         notas: notasConTraza('Registrado desde chequeos por fecha (lote)', t)
-      });
+      }));
       if (e2) throw e2;
       aplicadas++;
     }
@@ -3083,7 +3235,7 @@ async function aplicarChequeos() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3108,10 +3260,9 @@ async function guardarCarga() {
     const nuevoTotal = actual + mes;
     horasNuevas[eq] = nuevoTotal;
     lecturasNuevas.push({ equipo: eq, fecha, horas_mes: mes, hrs_total: nuevoTotal });
-    const caja = CAJAS_POR_MP[eq];
-    if (caja) {
-      horasNuevas[caja] = nuevoTotal;
-      lecturasNuevas.push({ equipo: caja, fecha, horas_mes: mes, hrs_total: nuevoTotal });
+    for (const recibe of equiposQueTomanHorasDe(eq)) {
+      horasNuevas[recibe] = nuevoTotal;
+      lecturasNuevas.push({ equipo: recibe, fecha, horas_mes: mes, hrs_total: nuevoTotal });
     }
   }
 
@@ -3149,7 +3300,7 @@ async function guardarCarga() {
 
 async function guardarLecturas(lecturasNuevas) {
   if (!lecturasNuevas || !lecturasNuevas.length) return;
-  const { error } = await sb.from('mant_lecturas_horas').insert(lecturasNuevas);
+  const { error } = await sb.from('mant_lecturas_horas').insert(conBarco(lecturasNuevas));
   if (error) throw error;
 }
 
@@ -3200,7 +3351,7 @@ async function aplicarSoloHoras() {
   const { horasNuevas, lecturasNuevas } = cargaPendiente;
   try {
     for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
       if (error) throw error;
     }
     await guardarLecturas(lecturasNuevas);
@@ -3210,7 +3361,7 @@ async function aplicarSoloHoras() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3230,7 +3381,7 @@ async function aplicarConfirm() {
   try {
     // 2) Actualizar horas totales de todos los equipos
     for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
       if (error) throw error;
     }
     await guardarLecturas(lecturasNuevas);
@@ -3255,13 +3406,13 @@ async function aplicarConfirm() {
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tr.id);
       if (e1) throw e1;
 
-      const { error: e2 } = await sb.from('mant_historial').insert({
+      const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: tr.id,
         fecha_realizado: fechaHoy,
         hrs_equipo: tr.hrs,
         realizado_por: quien,
         notas: notasConTraza('Registrado desde carga mensual de horas', tarea)
-      });
+      }));
       if (e2) throw e2;
     }
 
@@ -3277,7 +3428,7 @@ async function aplicarConfirm() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3331,7 +3482,7 @@ function renderHistorial() {
           ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
         </div>
         <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-        <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }).join('');
 }
@@ -3350,10 +3501,10 @@ function exportarHistExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Historial');
-  // Historial_Motor_Principal_Babor_2026-10-23.xlsx / Historial_Todos_busqueda-inyectores_2026-10-23.xlsx
+  // Historial_BM_Santa_Lucía_Motor_Principal_Babor_2026-10-23.xlsx / Historial_BM_Santa_Lucía_Todos_busqueda-inyectores_2026-10-23.xlsx
   const { buscar, eq } = filtrosHist();
   const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const partes = ['Historial', eq ? limpiar(eq) : 'Todos'];
+  const partes = ['Historial', nombreBarcoArchivo(), eq ? limpiar(eq) : 'Todos'];
   const busqueda = limpiar(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
   if (busqueda) partes.push('busqueda-' + busqueda);
   partes.push(hoyLocalISO());
@@ -3523,7 +3674,7 @@ async function guardarRegistroHist() {
     await despuesDeCambioHist(recalculada ? '✓ Registro corregido y tarea recalculada' : '✓ Registro corregido');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3554,7 +3705,7 @@ async function borrarRegistroHist() {
     await despuesDeCambioHist(recalculada ? '✓ Registro borrado y tarea recalculada' : '✓ Registro borrado');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3785,7 +3936,7 @@ async function guardarMinimosEditados() {
     const exitosos = resultados.length - fallidos.length;
     if (fallidos.length) {
       console.error(fallidos.map(f => f.error));
-      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${fallidos[0].error.message}`, true);
+      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${textoError(fallidos[0].error)}`, true);
     } else {
       toast(`✓ ${exitosos} mínimo${exitosos > 1 ? 's' : ''} actualizado${exitosos > 1 ? 's' : ''}`);
       modoEditarMinimos = false;
@@ -3796,7 +3947,7 @@ async function guardarMinimosEditados() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3814,8 +3965,8 @@ function renderRepuestoCard(r) {
         <div class="num">${r.cantidad}</div>
         <div class="min">de ${r.minimo} mín · ${r.unidad}</div>
       </div>
-      <button class="btn btn-pequeno" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
-      <button class="btn btn-pequeno btn-sec" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
+      <button class="btn btn-pequeno solo-operador" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
+      <button class="btn btn-pequeno btn-sec solo-jefe" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
     </div>`;
 }
 
@@ -3860,7 +4011,7 @@ async function guardarRepuesto() {
       if (error) throw error;
       toast('✓ Repuesto actualizado');
     } else {
-      const { error } = await sb.from('mant_repuestos').insert(data);
+      const { error } = await sb.from('mant_repuestos').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Repuesto agregado');
     }
@@ -3868,7 +4019,7 @@ async function guardarRepuesto() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3882,7 +4033,7 @@ async function borrarRepuesto() {
     cerrarModalRep();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3916,18 +4067,18 @@ async function guardarMovimiento() {
   try {
     const { error: e1 } = await sb.from('mant_repuestos').update({ cantidad: nuevoStock }).eq('id', movRepuestoActual.id);
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_movimientos').insert({
+    const { error: e2 } = await sb.from('mant_movimientos').insert(conBarco({
       repuesto_id: movRepuestoActual.id,
       tipo,
       cantidad: cant,
       motivo: motivo || null
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Stock actualizado');
     cerrarModalMov();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3946,7 +4097,7 @@ function exportarStockExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Stock');
-  XLSX.writeFile(wb, `Stock_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, `Stock_${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast('✓ Excel descargado');
 }
 
@@ -4002,7 +4153,7 @@ function renderHerramientas() {
           <div class="num">${h.cantidad}</div>
           <div class="min">unidad${h.cantidad != 1 ? 'es' : ''}</div>
         </div>
-        <button class="btn btn-pequeno btn-sec" onclick="abrirModalHerr(${h.id})">✎</button>
+        <button class="btn btn-pequeno btn-sec solo-jefe" onclick="abrirModalHerr(${h.id})">✎</button>
       </div>`).join('') + '</div>';
   }
   div.innerHTML = html;
@@ -4041,14 +4192,14 @@ async function guardarHerr() {
       if (error) throw error;
       toast('✓ Herramienta actualizada');
     } else {
-      const { error } = await sb.from('mant_herramientas').insert(data);
+      const { error } = await sb.from('mant_herramientas').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Herramienta agregada');
     }
     cerrarModalHerr();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4062,7 +4213,7 @@ async function borrarHerr() {
     cerrarModalHerr();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4077,7 +4228,7 @@ function exportarHerrExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Herramientas');
-  XLSX.writeFile(wb, `Herramientas_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, `Herramientas_${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast('✓ Excel descargado');
 }
 
@@ -4170,8 +4321,8 @@ function renderDefCard(d) {
     ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
   const acciones = abierta
     ? `<div class="def-acciones">
-         <button class="btn" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
-         <button class="btn btn-sec btn-pequeno" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
+         <button class="btn solo-operador" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
+         <button class="btn btn-sec btn-pequeno solo-operador" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
        </div>`
     : '<div></div>';
 
@@ -4275,7 +4426,7 @@ async function guardarDef() {
     } else {
       data.fecha_detectada = fecha;
       // anio y numero los asigna la base (trigger mant_deficiencias_numerar)
-      const { data: nueva, error } = await sb.from('mant_deficiencias').insert(data).select().single();
+      const { data: nueva, error } = await sb.from('mant_deficiencias').insert(conBarco(data)).select().single();
       if (error) throw error;
       toast(`✓ Deficiencia ${numeroDef(nueva)} registrada`);
     }
@@ -4283,7 +4434,7 @@ async function guardarDef() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4319,7 +4470,7 @@ async function guardarCierreDef() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4340,7 +4491,7 @@ function exportarDefExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Deficiencias');
-  XLSX.writeFile(wb, `Deficiencias_Santa_Lucia_${hoyLocalISO()}.xlsx`);
+  XLSX.writeFile(wb, `Deficiencias_${nombreBarcoArchivo()}_${hoyLocalISO()}.xlsx`);
   toast('✓ Excel descargado');
 }
 
@@ -4513,7 +4664,7 @@ function renderGrupoTrip({ t, docs }) {
           <span class="badge-tipo">${escape(t.departamento)}</span>
           <span class="badge-baja">DADO DE BAJA</span>
           <div class="acciones">
-            <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+            <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
           </div>
         </div>
         <div class="trip-vacio">${n ? `${n} documento${n>1?'s':''} guardado${n>1?'s':''}: vuelve${n>1?'n':''} a aparecer al reactivarlo` : 'Sin documentos cargados'}</div>
@@ -4530,8 +4681,8 @@ function renderGrupoTrip({ t, docs }) {
         ${t.cargo ? `<span class="cargo">${escape(t.cargo)}</span>` : ''}
         <span class="badge-tipo">${escape(t.departamento)}</span>
         <div class="acciones">
-          <button class="btn btn-pequeno" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
-          <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+          <button class="btn btn-pequeno solo-jefe" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
+          <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
         </div>
       </div>
       ${cuerpo}
@@ -4572,8 +4723,8 @@ function renderCertCard(c) {
         <div class="unidad">${unidad}</div>
       </div>
       <div class="def-acciones">
-        <button class="btn" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>
-        <button class="btn btn-sec btn-pequeno" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
+        <button class="btn solo-jefe" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>
+        <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
       </div>
     </div>`;
 }
@@ -4676,7 +4827,7 @@ async function guardarCert() {
       if (error) throw error;
       toast(trip ? '✓ Documento actualizado' : '✓ Certificado actualizado');
     } else {
-      const { error } = await sb.from('mant_certificados').insert(data);
+      const { error } = await sb.from('mant_certificados').insert(conBarco(data));
       if (error) throw error;
       toast(trip ? `✓ Documento agregado a ${trip.nombre}` : '✓ Certificado agregado');
     }
@@ -4684,7 +4835,7 @@ async function guardarCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4700,7 +4851,7 @@ async function darDeBajaCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4736,7 +4887,7 @@ async function guardarTrip() {
       if (error) throw error;
       toast('✓ Tripulante actualizado');
     } else {
-      const { error } = await sb.from('mant_tripulantes').insert(data);
+      const { error } = await sb.from('mant_tripulantes').insert(conBarco(data));
       if (error) throw error;
       toast(`✓ ${nombre} agregado a la tripulación`);
     }
@@ -4744,7 +4895,7 @@ async function guardarTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4762,7 +4913,7 @@ async function darDeBajaTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4780,7 +4931,7 @@ async function reactivarTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4825,7 +4976,7 @@ async function guardarRenovacionCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4870,10 +5021,10 @@ function exportarCertExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), trip ? 'Tripulación' : 'Certificados');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Renovaciones: 'Sin renovaciones registradas' }]), 'Renovaciones');
   // El nombre indica la solapa y los filtros:
-  // Certificados_Santa_Lucia_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_Santa_Lucia_Tripulacion_Juan_Perez_2026-10-16.xlsx
+  // Certificados_BM_Santa_Lucía_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_BM_Santa_Lucía_Tripulacion_Juan_Perez_2026-10-16.xlsx
   const { buscar, depto, cat, tripId } = filtrosCert();
   const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const partes = ['Certificados_Santa_Lucia'];
+  const partes = ['Certificados', nombreBarcoArchivo()];
   if (trip) partes.push('Tripulacion');
   if (depto) partes.push(limpiar(depto));
   if (cat) partes.push(limpiar(cat));
@@ -4924,7 +5075,7 @@ function exportarExcel() {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hd), 'Historial');
   }
-  XLSX.writeFile(wb, `Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, `${nombreBarcoArchivo()}_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast('✓ Excel descargado');
 }
 
@@ -5054,7 +5205,7 @@ function renderBarco() {
       <div class="tipo">${escape(buque.tipo || 'Buque')}</div>
       <h2>${escape(buque.nombre)}</h2>
       <div class="subtitle">${buque.astillero ? escape(buque.astillero) : ''}${buque.pais_origen ? ' · ' + escape(buque.pais_origen) : ''}${buque.anio_construccion ? ' · ' + buque.anio_construccion : ''}</div>
-      <div style="margin-top:14px"><button class="btn btn-acento" onclick="abrirModalBuque()">✎ Editar ficha</button></div>
+      <div style="margin-top:14px"><button class="btn btn-acento solo-jefe" onclick="abrirModalBuque()">✎ Editar ficha</button></div>
     </div>
 
     <div class="ficha-grid">
@@ -5161,8 +5312,9 @@ async function guardarBuque() {
     return isNaN(v) ? null : v;
   };
   const txt = id => document.getElementById(id).value.trim() || null;
+  if (!txt('bq-nombre')) { toast('Falta el nombre del barco', true); return; }
   const data = {
-    nombre: txt('bq-nombre') || 'B/M Santa Lucía',
+    nombre: txt('bq-nombre'),
     tipo: txt('bq-tipo'),
     astillero: txt('bq-astillero'),
     pais_origen: txt('bq-pais'),
@@ -5201,7 +5353,7 @@ async function guardarBuque() {
     cerrarModalBuque();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -5351,6 +5503,8 @@ function renderFichaEquipo() {
   if (eq.numero_serie) fabPills.push(`<span class="pill">🔖 Serie ${escape(eq.numero_serie)}</span>`);
   if (eq.anio_fab) fabPills.push(`<span class="pill">📅 ${eq.anio_fab}</span>`);
   if (eq.ubicacion_abordo) fabPills.push(`<span class="pill">📍 ${escape(eq.ubicacion_abordo)}</span>`);
+  const origenHoras = eq.horas_de_id ? equipos.find(e => e.id === eq.horas_de_id) : null;
+  if (origenHoras) fabPills.push(`<span class="pill">⏱ Horas de ${escape(origenHoras.nombre)}</span>`);
   if (eq.cantidad > 1) fabPills.push(`<span class="pill">×${eq.cantidad}</span>`);
 
   // Estado del equipo
@@ -5379,7 +5533,7 @@ function renderFichaEquipo() {
         ${fabPills.join('')}
         <span class="pill ${estPillCls}">${escape(eq.estado || 'Operativo')}</span>
       </div>
-      <button class="btn btn-acento editar" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
+      <button class="btn btn-acento editar solo-jefe" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
     </div>
 
     ${quickStats.length ? `
@@ -5452,7 +5606,7 @@ function renderFichaEquipo() {
             ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
           </div>
           <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-          <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+          <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
         </div>`;
     }).join('');
   }
@@ -5559,6 +5713,7 @@ function abrirModalEquipo(id) {
   set('eq-categoria', target?.categoria);
   set('eq-cantidad', target?.cantidad ?? 1);
   set('eq-ubicacion', target?.ubicacion_abordo);
+  llenarSelectorHorasDe(target);
   set('eq-fabricante', target?.fabricante);
   set('eq-modelo', target?.modelo);
   set('eq-serie', target?.numero_serie);
@@ -5585,6 +5740,26 @@ function abrirModalEquipo(id) {
   document.getElementById('modal-equipo').classList.add('show');
 }
 
+// Opciones de "Toma las horas de": otros equipos del barco, salvo los que ya toman (directa o
+// indirectamente) las horas de este, porque se armaría un círculo (la base también lo rechaza)
+function llenarSelectorHorasDe(equipo) {
+  const excluidos = new Set();
+  if (equipo) {
+    excluidos.add(equipo.id);
+    let frente = [equipo.id];
+    while (frente.length) {
+      const hijos = equipos.filter(e => frente.includes(e.horas_de_id) && !excluidos.has(e.id));
+      hijos.forEach(h => excluidos.add(h.id));
+      frente = hijos.map(h => h.id);
+    }
+  }
+  const sel = document.getElementById('eq-horas-de');
+  sel.innerHTML = '<option value="">— Sus propias horas —</option>' +
+    equipos.filter(e => !excluidos.has(e.id))
+      .map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join('');
+  sel.value = equipo && equipo.horas_de_id ? String(equipo.horas_de_id) : '';
+}
+
 function cerrarModalEquipo() {
   document.getElementById('modal-equipo').classList.remove('show');
 }
@@ -5602,6 +5777,7 @@ async function guardarEquipo() {
     categoria: txt('eq-categoria'),
     cantidad: parseInt(document.getElementById('eq-cantidad').value) || 1,
     ubicacion_abordo: txt('eq-ubicacion'),
+    horas_de_id: parseInt(document.getElementById('eq-horas-de').value) || null,
     fabricante: txt('eq-fabricante'),
     modelo: txt('eq-modelo'),
     numero_serie: txt('eq-serie'),
@@ -5630,7 +5806,7 @@ async function guardarEquipo() {
       if (error) throw error;
       toast('✓ Equipo actualizado');
     } else {
-      const { error } = await sb.from('mant_equipos').insert(data);
+      const { error } = await sb.from('mant_equipos').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Equipo creado');
     }
@@ -5642,7 +5818,7 @@ async function guardarEquipo() {
       if (equipoActualFicha) renderFichaEquipo();
     }
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -5667,13 +5843,14 @@ async function borrarEquipo() {
     volverAEquipos();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
 
 function mostrarLogin() {
   document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('sin-barcos').style.display = 'none';
   document.querySelector('header.top').style.display = 'none';
   document.querySelector('nav.tabs').style.display = 'none';
   document.querySelector('main').style.display = 'none';
@@ -5701,10 +5878,8 @@ async function iniciarSesion(e) {
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if (error) throw error;
     // Login OK
-    ocultarLogin();
-    document.getElementById('header-user').textContent = data.user.email;
     document.getElementById('login-pass').value = '';
-    await cargarTodo();
+    await iniciarApp(data.user);
   } catch (err) {
     errDiv.textContent = err.message === 'Invalid login credentials'
       ? 'Email o contraseña incorrectos'
@@ -5723,15 +5898,28 @@ async function cerrarSesion() {
   // Limpiar estado
   tareas = []; tareasTodas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
   buque = null; equipos = [];
+  usuarioId = null; barcosDisponibles = []; barcoActual = null;
+  renderEncabezado();
   mostrarLogin();
+}
+
+// Después del login: barcos y rol del usuario, y los datos del barco elegido
+async function iniciarApp(user) {
+  usuarioId = user.id;
+  ocultarLogin();
+  document.getElementById('header-user').textContent = user.email;
+  try {
+    if (await cargarBarcos()) await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error cargando datos: ' + textoError(err), true);
+  }
 }
 
 async function chequearSesion() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
-    ocultarLogin();
-    document.getElementById('header-user').textContent = session.user.email;
-    await cargarTodo();
+    await iniciarApp(session.user);
   } else {
     mostrarLogin();
   }

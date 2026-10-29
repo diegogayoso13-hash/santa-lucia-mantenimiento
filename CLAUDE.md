@@ -198,13 +198,14 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
 `prueba/index.html` is a separate copy of the app, published at `/prueba/`, for trying out changes without touching the real one. Changes to the root `index.html` are **not** copied to it (or back) automatically.
 
 - **Backend:** it points to a different Supabase project, "Mantenimiento Naval" (`ncughlkgdgigwkggnxri`), which holds a copy of the data. The real app and its project (`zfoetyauhauztkkltjaz`) must never be touched when working on the test version.
-- **Separation:** it shows a fixed orange banner ("VERSIÓN DE PRUEBA – no cargar datos reales") and a `[PRUEBA]` tab title, and its `localStorage` keys carry a `prueba-` prefix (`prueba-nav`, `prueba-cert-solapa`).
-- **Several ships:** the test database is being adapted for several ships. Its schema is documented in `docs/esquema_prueba.sql`, and `docs/esquema.sql` still describes the real project.
+- **Separation:** it shows a fixed orange banner ("VERSIÓN DE PRUEBA – no cargar datos reales") and a `[PRUEBA]` tab title, and its `localStorage` keys carry a `prueba-` prefix (`prueba-nav`, `prueba-cert-solapa`, `prueba-barco`).
+- **Several ships:** the test database holds several ships. Its schema is documented in `docs/esquema_prueba.sql`, and `docs/esquema.sql` still describes the real project.
   - **Ships table:** `mant_buque` is the ships table, one row per ship (id 1 = B/M Santa Lucía).
   - **`barco_id`:** every other `mant_*` table has `barco_id not null` → `mant_buque(id)`.
   - **Mixing ships is blocked:** child tables reference their parent by `(barco_id, id)` composite foreign keys, so the database rejects rows that mix ships.
   - **Deficiency numbering** is per ship and per year.
-  - **Temporary default:** `barco_id` defaults to 1, so the test app still works without sending it. That default is to be removed in a later step, once the app sends `barco_id` itself.
+  - **No default:** `barco_id` has no default, so a row the app forgets to tag fails instead of landing on the wrong ship.
+  - **Gearboxes:** "Toma las horas de" (`mant_equipos.horas_de_id`) replaces the old hard-coded `CAJAS_POR_MP`. A piece of equipment can take its hours from another one on the same ship (enforced by a composite FK), and a trigger rejects loops and self-references.
 - **Companies, users and roles:** the test database no longer uses the "only my email" policy.
   - **Companies:** every ship belongs to a company (`mant_buque.empresa_id` → `mant_empresas`), and data never crosses companies.
   - **Access:** `mant_accesos` gives a user (`auth.users`) a role. `admin_empresa` is per company (no ship) and covers all its ships; `jefe`, `operador` and `lectura` are per ship.
@@ -218,6 +219,17 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
   - **Authorship:** `creado_por` (history, hour readings, movements, deficiencies) and `cerrada_por` (deficiencies) are set by triggers from `auth.uid()`, so the app can't fake them. Rows written straight from SQL or the dashboard (no app session) keep whatever is sent.
   - **New users:** sign-ups are meant to be off. Users are created in the dashboard (Authentication → Users), then given a `mant_accesos` row.
   - The full rules are in `docs/esquema_prueba.sql`.
+- **The test app works per ship** (section `BARCOS Y ROLES` in `prueba/index.html`):
+  - **Startup:** after login, `iniciarApp()` → `cargarBarcos()` reads the user's own `mant_accesos` rows and the ships they can see. It builds `barcosDisponibles` (each with the user's highest role there) and picks `barcoActual`, the last one used (`prueba-barco`) or the first. A user with no ships sees `#sin-barcos` and nothing else.
+  - **Header:** the ship name comes from its ficha. With more than one ship it becomes a `<select id="sel-barco">`. Next to it is the role badge (`#header-rol`), and the tab title follows the ship. `cambiarBarco()` closes open modals and the equipment ficha, then reloads everything.
+  - **Reads and writes:**
+    - Every read in `cargarTodo()` filters `.eq('barco_id', B)` (`mant_buque` by `id`) and ignores a late answer for a ship that's no longer selected.
+    - Every insert wraps its data in `conBarco()`.
+    - The hour updates by equipment name also filter by `barco_id`.
+  - **Hour cascading:** `equiposQueTomanHorasDe(nombre)` gives the equipment that receives a piece of equipment's hours (also down a chain), and `equiposOcultosCarga()` hides those from the hours form. The "Toma las horas de" select (`llenarSelectorHorasDe()`) leaves out the equipment itself and anything that already takes its hours.
+  - **Excel names** carry the ship (`nombreBarcoArchivo()`), e.g. `Stock_BM_Santa_Lucía_2026-10-29.xlsx`.
+  - **Buttons by role:** `body` gets `puede-registrar` (operador and up) and `puede-editar` (jefe and up) in `renderEncabezado()`. Elements marked `.solo-operador` (register, hours form, deficiencies, stock movements) or `.solo-jefe` (everything that changes the plan, fichas, history fixes, postponing, renewing) are hidden by CSS otherwise. New action buttons need one of these classes. The database still enforces everything.
+  - **Errors:** `textoError(err)` turns permission rejections (code `42501`, RLS messages) into "No tenés permiso para esto". Use it in every error toast.
 
 ## Conventions
 

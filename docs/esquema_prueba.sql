@@ -6,8 +6,8 @@
 --
 -- VARIOS BARCOS:
 -- - mant_buque es la tabla de barcos: una fila por barco (id 1 = B/M Santa Lucía).
--- - Todas las demás tablas mant_* tienen barco_id NOT NULL -> mant_buque(id).
---   El DEFAULT 1 (Santa Lucía) es TEMPORAL, para que la app siga andando sin mandar barco_id; se saca en el Paso 5.
+-- - Todas las demás tablas mant_* tienen barco_id NOT NULL -> mant_buque(id), sin valor por defecto:
+--   la app filtra todo por el barco elegido y manda siempre su barco_id al guardar.
 -- - Las tablas que tienen hijas tienen UNIQUE (barco_id, id) y las hijas las referencian por (barco_id, x_id),
 --   así la base rechaza mezclar barcos (p. ej. una tarea de un barco con un equipo de otro).
 --
@@ -30,7 +30,7 @@ CREATE TABLE public.mant_empresas (
 CREATE TABLE public.mant_buque (
   id SERIAL PRIMARY KEY,
   empresa_id INTEGER NOT NULL REFERENCES public.mant_empresas(id),  -- no se puede cambiar desde la app (trigger)
-  nombre TEXT NOT NULL DEFAULT 'B/M Santa Lucía',
+  nombre TEXT NOT NULL,
   tipo TEXT,
   astillero TEXT,
   pais_origen TEXT,
@@ -88,7 +88,7 @@ CREATE TABLE public.mant_accesos (
 -- Los equipos no se borran: se marcan activo = false.
 CREATE TABLE public.mant_equipos (
   id SERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   nombre TEXT NOT NULL,
   categoria TEXT,
   cantidad INTEGER DEFAULT 1,
@@ -114,15 +114,21 @@ CREATE TABLE public.mant_equipos (
   notas TEXT,
   activo BOOLEAN DEFAULT true,
   critico BOOLEAN NOT NULL DEFAULT false,   -- su falla genera riesgo de seguridad
+  -- "Toma las horas de": equipo sin horómetro propio (p. ej. una caja reductora) que recibe las mismas horas
+  -- que otro del mismo barco cuando se cargan las horas de ese. Sin círculos (trigger mant_equipos_horas_sin_circulo).
+  horas_de_id INTEGER,
   creado_en TIMESTAMPTZ DEFAULT now(),
   actualizado_en TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT mant_equipos_barco_id_id_key UNIQUE (barco_id, id)
+  CONSTRAINT mant_equipos_barco_id_id_key UNIQUE (barco_id, id),
+  CONSTRAINT mant_equipos_horas_de_fkey FOREIGN KEY (barco_id, horas_de_id)
+    REFERENCES public.mant_equipos(barco_id, id) ON DELETE SET NULL (horas_de_id),  -- solo del mismo barco
+  CONSTRAINT mant_equipos_horas_de_propio_check CHECK (horas_de_id IS NULL OR horas_de_id <> id)
 );
 
 -- =============== TAREAS DE MANTENIMIENTO ===============
 CREATE TABLE public.mant_tareas (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   equipo TEXT NOT NULL,                     -- nombre del equipo (texto libre; filtros y carga de horas usan esto)
   equipo_id INTEGER,                        -- equipo del mismo barco (FK compuesta abajo)
   tarea TEXT NOT NULL,
@@ -167,7 +173,7 @@ CREATE TABLE public.mant_tareas (
 -- =============== HISTORIAL ===============
 CREATE TABLE public.mant_historial (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   tarea_id BIGINT NOT NULL,
   fecha_realizado DATE NOT NULL,
   hrs_equipo NUMERIC,
@@ -182,7 +188,7 @@ CREATE TABLE public.mant_historial (
 -- =============== REPUESTOS ===============
 CREATE TABLE public.mant_repuestos (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   nombre TEXT NOT NULL,
   codigo TEXT,
   categoria TEXT,
@@ -201,7 +207,7 @@ CREATE TABLE public.mant_repuestos (
 -- =============== MOVIMIENTOS DE STOCK ===============
 CREATE TABLE public.mant_movimientos (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   repuesto_id BIGINT NOT NULL,
   tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'salida', 'ajuste')),
   cantidad NUMERIC NOT NULL,
@@ -218,7 +224,7 @@ CREATE TABLE public.mant_movimientos (
 -- =============== VÍNCULO TAREA-REPUESTOS ===============
 CREATE TABLE public.mant_tarea_repuestos (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   tarea_id BIGINT NOT NULL,
   repuesto_id BIGINT NOT NULL,
   cantidad_usada NUMERIC NOT NULL DEFAULT 1,
@@ -232,7 +238,7 @@ CREATE TABLE public.mant_tarea_repuestos (
 -- =============== HERRAMIENTAS ===============
 CREATE TABLE public.mant_herramientas (
   id BIGSERIAL PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   nombre TEXT NOT NULL,
   marca TEXT,
   cantidad NUMERIC NOT NULL DEFAULT 1,
@@ -247,7 +253,7 @@ CREATE TABLE public.mant_herramientas (
 -- Se identifica el equipo por NOMBRE, no por id.
 CREATE TABLE public.mant_lecturas_horas (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   equipo TEXT NOT NULL,
   fecha DATE NOT NULL,
   horas_mes NUMERIC,                        -- horas sumadas en el mes
@@ -261,7 +267,7 @@ CREATE TABLE public.mant_lecturas_horas (
 -- Número consecutivo por barco y por año (2026-001, 2026-002...), asignado por el trigger mant_deficiencias_numerar.
 CREATE TABLE public.mant_deficiencias (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   anio INT NOT NULL,                        -- lo completa el trigger (año de fecha_detectada)
   numero INT NOT NULL,                      -- lo completa el trigger (último del barco y del año + 1)
   equipo_id INT NOT NULL,                   -- equipo del mismo barco (FK compuesta abajo)
@@ -286,7 +292,7 @@ CREATE TABLE public.mant_deficiencias (
 -- Tripulación del barco. No se borran: se marcan activo = false (la app oculta sus documentos).
 CREATE TABLE public.mant_tripulantes (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   nombre TEXT NOT NULL,
   cargo TEXT,
   departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),  -- lo heredan sus documentos
@@ -303,7 +309,7 @@ CREATE TABLE public.mant_tripulantes (
 -- Con tripulante_id es un documento personal (categoría 'Tripulación'); sin él, es del barco.
 CREATE TABLE public.mant_certificados (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   nombre TEXT NOT NULL,
   categoria TEXT NOT NULL CONSTRAINT mant_certificados_categoria_check
     CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros', 'Tripulación')),
@@ -330,7 +336,7 @@ CREATE TABLE public.mant_certificados (
 -- Una fila por renovación; la escribe la función mant_certificados_renovar
 CREATE TABLE public.mant_certificados_historial (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  barco_id INTEGER NOT NULL DEFAULT 1 REFERENCES public.mant_buque(id),  -- DEFAULT temporal (Paso 5)
+  barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
   certificado_id BIGINT NOT NULL,
   fecha_renovacion DATE NOT NULL,
   vencimiento_anterior DATE NOT NULL,
@@ -346,6 +352,7 @@ CREATE INDEX idx_mant_cert_hist_certificado ON public.mant_certificados_historia
 CREATE INDEX idx_mant_certificados_tripulante ON public.mant_certificados (tripulante_id);
 CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
 CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
+CREATE INDEX idx_mant_equipos_barco_horas_de ON public.mant_equipos (barco_id, horas_de_id);
 CREATE INDEX idx_mant_tareas_activa ON public.mant_tareas (activa);
 CREATE INDEX idx_mant_tareas_equipo ON public.mant_tareas (equipo);
 CREATE INDEX idx_mant_tareas_equipo_id ON public.mant_tareas (equipo_id);
@@ -682,6 +689,31 @@ END;
 $$;
 CREATE TRIGGER mant_buque_empresa_fija BEFORE UPDATE ON public.mant_buque
   FOR EACH ROW EXECUTE FUNCTION mant_priv.buque_empresa_fija();
+
+-- "Toma las horas de" sin círculos: siguiendo la cadena desde el equipo elegido nunca se vuelve a este
+CREATE FUNCTION mant_priv.equipos_horas_sin_circulo() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF NEW.horas_de_id IS NULL THEN RETURN NEW; END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('mant_equipos_horas_de'), NEW.barco_id);
+  IF EXISTS (
+    WITH RECURSIVE cadena (id, paso) AS (
+      SELECT e.horas_de_id, 1 FROM public.mant_equipos e WHERE e.id = NEW.horas_de_id
+      UNION ALL
+      SELECT e.horas_de_id, c.paso + 1
+        FROM public.mant_equipos e JOIN cadena c ON e.id = c.id
+       WHERE c.id IS NOT NULL AND c.id <> NEW.id AND c.paso < 1000
+    )
+    SELECT 1 FROM cadena WHERE id = NEW.id
+  ) THEN
+    RAISE EXCEPTION 'Círculo en "Toma las horas de": ese equipo ya toma (directa o indirectamente) las horas de este'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER mant_equipos_horas_sin_circulo BEFORE INSERT OR UPDATE OF horas_de_id ON public.mant_equipos
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.equipos_horas_sin_circulo();
 
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv FROM public;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv TO authenticated, service_role;
