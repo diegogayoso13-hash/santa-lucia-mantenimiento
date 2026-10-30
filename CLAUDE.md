@@ -236,6 +236,20 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
     - **Filter selects:** they're rebuilt on every render through `llenarSelectConservando()` so the choice survives (before, the stock category and the tool location and brand filters reset themselves and never filtered).
   - **Buttons by role:** `body` gets `puede-registrar` (operador and up) and `puede-editar` (jefe and up) in `renderEncabezado()`. Elements marked `.solo-operador` (register, hours form, deficiencies, stock movements) or `.solo-jefe` (everything that changes the plan, fichas, history fixes, postponing, renewing) are hidden by CSS otherwise. New action buttons need one of these classes. The database still enforces everything.
   - **Errors:** `textoError(err)` turns permission rejections (code `42501`, RLS messages) into "No tenés permiso para esto". Use it in every error toast.
+- **Administration (section `ADMINISTRACIÓN`, only `admin_empresa`):** a fifth top section "⚙️ Admin" (`.solo-admin`, body class `puede-administrar`) with sub-tabs `admin-barcos` and `admin-usuarios`. It works on the company of the selected ship. `cambiarTab()` sends non-admins back to the dashboard.
+  - **Adding a ship:** it reuses `#modal-buque` (`buqueNuevo = true`, `abrirNuevoBarco()`) plus "Copiar desde otro barco". `crearBarco()` calls the RPC `mant_barco_crear(p_empresa, p_ficha, p_origen, p_copiar)`, which creates everything or nothing.
+    - **Copied:** active equipment, with no serial number, years, state or notes; "Toma las horas de" is remapped to the new equipment.
+    - **Copied with values reset:** active tasks without last date or hours (so "sin registrar"); spare parts with stock 0; tools with quantity 0; ship certificates without an expiry date.
+    - **Never copied:** history, readings, deficiencies, movements, crew or stock.
+  - **Certificates without a date:** `fecha_vencimiento` can be null. `estadoCert()` gives `SIN_FECHA`, shown as "📅 Falta cargar el vencimiento". It counts in the tab badge, has no "Renovar" button, and `mant_certificados_renovar` rejects it.
+  - **Users:** the list comes from `mant_accesos` plus `mant_perfiles` (`cargarUsuariosEmpresa()`).
+    - Role and ships are saved at once with the RPC `mant_accesos_guardar`. "Quitar acceso" deletes the user's rows for the company.
+    - Sign-ups, temporary passwords and "change my password" go through the Edge Function `mant-usuarios` (`llamarUsuarios()`, source in `supabase/functions/mant-usuarios/index.ts`). It checks the caller with their session and writes `mant_accesos` through `mant_accesos_guardar` with the caller's session, so RLS applies.
+    - **Temporary password:** shown once (`#modal-clave-temp`). A temporary password for someone else is only allowed for users who belong solely to the admin's companies.
+    - **First login:** `mant_perfiles.debe_cambiar_clave` forces the change (`chequearClaveObligatoria()`, `#modal-clave`, which can't be dismissed, only "Salir").
+    - **🔑 in the header:** "Cambiar mi contraseña" for everyone; it asks for the current password.
+    - The admin's own row has no actions.
+  - **Service role:** the project's `service_role` had no table grants. It only gets `select` on `mant_accesos` and `select, insert, update` on `mant_perfiles`.
 
 ## Conventions
 

@@ -17,6 +17,10 @@
 --   o jefe / operador / lectura (por barco). Los usuarios se dan de alta desde el panel (no hay registro libre).
 -- - Las reglas RLS de todas las tablas usan funciones de mant_priv (esquema que la API no expone).
 -- - Quién hizo cada cosa (creado_por, cerrada_por) lo pone la base con auth.uid(); la app no lo puede falsear.
+-- - Administración (admin_empresa): mant_barco_crear crea barcos (copiando de otro de la empresa, todo o nada) y
+--   mant_accesos_guardar cambia rol y barcos de un usuario. Las altas de usuarios, las contraseñas temporales y
+--   "cambiar mi contraseña" las hace la Edge Function mant-usuarios (supabase/functions/mant-usuarios/index.ts),
+--   que usa la service role y escribe mant_perfiles.
 
 -- =============== EMPRESAS ===============
 -- Se crean desde la base (al sumar un cliente); el admin de la empresa solo puede renombrarla.
@@ -82,6 +86,16 @@ CREATE TABLE public.mant_accesos (
   CONSTRAINT mant_accesos_barco_id_fkey FOREIGN KEY (empresa_id, barco_id)
     REFERENCES public.mant_buque(empresa_id, id) ON DELETE CASCADE,
   CONSTRAINT mant_accesos_unico UNIQUE NULLS NOT DISTINCT (user_id, empresa_id, barco_id)
+);
+
+-- =============== PERFILES ===============
+-- Email de cada usuario (la app no puede leer auth.users) y si tiene que cambiar la contraseña
+-- (entró con una temporal). Solo los escribe la Edge Function mant-usuarios; la app los lee.
+CREATE TABLE public.mant_perfiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  debe_cambiar_clave BOOLEAN NOT NULL DEFAULT false,
+  creado_en TIMESTAMPTZ DEFAULT now()
 );
 
 -- =============== EQUIPOS (fichas) ===============
@@ -315,7 +329,7 @@ CREATE TABLE public.mant_certificados (
     CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros', 'Tripulación')),
   tripulante_id BIGINT,                     -- tripulante del mismo barco (FK compuesta abajo)
   departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),  -- en documentos personales, el del tripulante (trigger)
-  fecha_vencimiento DATE NOT NULL,
+  fecha_vencimiento DATE,                   -- NULL = falta cargarlo (certificados copiados al crear un barco)
   dias_aviso INTEGER NOT NULL DEFAULT 30 CHECK (dias_aviso >= 0),
   observaciones TEXT,
   activo BOOLEAN NOT NULL DEFAULT true,
@@ -492,6 +506,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Certificado no encontrado';
   END IF;
+  IF v_anterior IS NULL THEN
+    RAISE EXCEPTION 'El certificado no tiene vencimiento: cargalo primero con Editar' USING ERRCODE = '22023';
+  END IF;
   IF p_fecha_renovacion IS NULL OR p_vencimiento_nuevo IS NULL THEN
     RAISE EXCEPTION 'Faltan la fecha de renovación o el nuevo vencimiento';
   END IF;
@@ -576,6 +593,13 @@ CREATE FUNCTION mant_priv.empresas_admin() RETURNS INTEGER[]
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT coalesce(array_agg(DISTINCT a.empresa_id), '{}') FROM public.mant_accesos a
    WHERE a.user_id = auth.uid() AND a.rol = 'admin_empresa';
+$$;
+
+-- Usuarios con algún acceso en las empresas donde el usuario actual es admin (para ver sus perfiles)
+CREATE FUNCTION mant_priv.usuarios_admin() RETURNS UUID[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT a.user_id), '{}') FROM public.mant_accesos a
+   WHERE a.empresa_id = ANY (mant_priv.empresas_admin());
 $$;
 
 -- Nivel del usuario actual en un barco (lo usan los triggers de control)
@@ -835,3 +859,146 @@ CREATE POLICY mant_accesos_borrar ON public.mant_accesos FOR DELETE TO authentic
 -- Permisos de tabla: anon no tiene ninguno; authenticated, los cuatro (RLS decide)
 REVOKE ALL ON public.mant_empresas, public.mant_accesos FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mant_empresas, public.mant_accesos TO authenticated;
+
+-- Perfiles: cada uno ve el suyo; el admin, los de los usuarios de su empresa. Nadie los escribe desde la app.
+ALTER TABLE public.mant_perfiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY mant_perfiles_ver ON public.mant_perfiles FOR SELECT TO authenticated
+  USING (user_id = (SELECT auth.uid()) OR user_id = ANY ((SELECT mant_priv.usuarios_admin())::UUID[]));
+REVOKE ALL ON public.mant_perfiles FROM anon, authenticated;
+GRANT SELECT ON public.mant_perfiles TO authenticated;
+
+-- La Edge Function mant-usuarios usa la service role, que en este proyecto no tiene permisos de tabla:
+-- solo lo que necesita (saber quién es admin y escribir perfiles)
+GRANT SELECT ON public.mant_accesos TO service_role;
+GRANT SELECT, INSERT, UPDATE ON public.mant_perfiles TO service_role;
+
+-- =============== ADMINISTRACIÓN: FUNCIONES QUE LLAMA LA APP ===============
+-- Las dos son SECURITY INVOKER: además de sus controles, las reglas RLS de quien llama vuelven a aplicar.
+
+-- Guardar los accesos de un usuario en una empresa de una sola vez (rol + barcos). Nunca el propio.
+CREATE FUNCTION public.mant_accesos_guardar(p_user UUID, p_empresa INTEGER, p_rol TEXT, p_barcos INTEGER[] DEFAULT '{}')
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  IF p_empresa IS NULL OR NOT (p_empresa = ANY (mant_priv.empresas_admin())) THEN
+    RAISE EXCEPTION 'Solo el administrador de la empresa puede cambiar accesos' USING ERRCODE = '42501';
+  END IF;
+  IF p_user = auth.uid() THEN
+    RAISE EXCEPTION 'No podés cambiar tu propio acceso' USING ERRCODE = '42501';
+  END IF;
+  IF p_rol IS NULL OR p_rol NOT IN ('admin_empresa', 'jefe', 'operador', 'lectura') THEN
+    RAISE EXCEPTION 'Rol no válido' USING ERRCODE = '22023';
+  END IF;
+  IF p_rol <> 'admin_empresa' AND coalesce(cardinality(p_barcos), 0) = 0 THEN
+    RAISE EXCEPTION 'Elegí al menos un barco' USING ERRCODE = '22023';
+  END IF;
+  IF p_rol <> 'admin_empresa' AND EXISTS (
+       SELECT 1 FROM unnest(p_barcos) b(id)
+        WHERE NOT EXISTS (SELECT 1 FROM public.mant_buque x WHERE x.id = b.id AND x.empresa_id = p_empresa)) THEN
+    RAISE EXCEPTION 'Alguno de los barcos no es de tu empresa' USING ERRCODE = '42501';
+  END IF;
+  DELETE FROM public.mant_accesos WHERE user_id = p_user AND empresa_id = p_empresa;
+  IF p_rol = 'admin_empresa' THEN
+    INSERT INTO public.mant_accesos (user_id, empresa_id, rol) VALUES (p_user, p_empresa, p_rol);
+  ELSE
+    INSERT INTO public.mant_accesos (user_id, empresa_id, barco_id, rol)
+    SELECT DISTINCT p_user, p_empresa, b, p_rol FROM unnest(p_barcos) b;
+  END IF;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[]) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[]) TO authenticated;
+
+-- Crear un barco, opcionalmente copiando de otro de la misma empresa (todo o nada). Devuelve el id nuevo.
+-- p_copiar: 'equipos' (activos; sin n° de serie, años, estado ni notas; "Toma las horas de" apunta a los nuevos),
+-- 'tareas' (activas, sin últimas fechas ni horas: "sin registrar"), 'repuestos' (stock 0), 'herramientas' (cantidad 0),
+-- 'certificados' (del barco, no de tripulantes, sin vencimiento).
+-- Nunca copia historial, horas, lecturas, deficiencias, movimientos, tripulantes ni stock.
+CREATE FUNCTION public.mant_barco_crear(p_empresa INTEGER, p_ficha JSONB, p_origen INTEGER DEFAULT NULL, p_copiar TEXT[] DEFAULT '{}')
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_id INTEGER;
+  v_nuevo INTEGER;
+  v_mapa JSONB := '{}';
+  e RECORD;
+BEGIN
+  IF p_empresa IS NULL OR NOT (p_empresa = ANY (mant_priv.empresas_admin())) THEN
+    RAISE EXCEPTION 'Solo el administrador de la empresa puede agregar barcos' USING ERRCODE = '42501';
+  END IF;
+  IF nullif(trim(p_ficha ->> 'nombre'), '') IS NULL THEN
+    RAISE EXCEPTION 'Falta el nombre del barco' USING ERRCODE = '22023';
+  END IF;
+  IF p_origen IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.mant_buque WHERE id = p_origen AND empresa_id = p_empresa) THEN
+    RAISE EXCEPTION 'El barco desde el que se copia no es de tu empresa' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO public.mant_buque (empresa_id, nombre, tipo, astillero, pais_origen, anio_construccion, fecha_botadura,
+      casco_nro, registro_nro, matricula, senal_distintiva, bandera, eslora_m, eslora_total_m, eslora_zdl_m, manga_m,
+      puntal_m, calado_min_m, calado_max_m, capacidad_dw_t, velocidad_nudos, sobre_estacas_t, tonelaje_total_t,
+      desplazamiento_tm, trb, trn, rango_accion_millas, material_casco, tipo_navegacion, clase_buque, clase_maquina, notas)
+  SELECT p_empresa, trim(r.nombre), r.tipo, r.astillero, r.pais_origen, r.anio_construccion, r.fecha_botadura,
+      r.casco_nro, r.registro_nro, r.matricula, r.senal_distintiva, r.bandera, r.eslora_m, r.eslora_total_m, r.eslora_zdl_m, r.manga_m,
+      r.puntal_m, r.calado_min_m, r.calado_max_m, r.capacidad_dw_t, r.velocidad_nudos, r.sobre_estacas_t, r.tonelaje_total_t,
+      r.desplazamiento_tm, r.trb, r.trn, r.rango_accion_millas, r.material_casco, r.tipo_navegacion, r.clase_buque, r.clase_maquina, r.notas
+    FROM jsonb_populate_record(NULL::public.mant_buque, p_ficha) r
+  RETURNING id INTO v_id;
+
+  IF p_origen IS NULL THEN RETURN v_id; END IF;
+
+  IF 'equipos' = ANY (p_copiar) THEN
+    FOR e IN SELECT * FROM public.mant_equipos WHERE barco_id = p_origen AND activo ORDER BY id LOOP
+      INSERT INTO public.mant_equipos (barco_id, nombre, categoria, cantidad, ubicacion_abordo, fabricante, modelo,
+          datos_tecnicos, potencia_kw, potencia_hp, consumo_lh, rpm_nominal, voltaje, amperaje, combustible,
+          tipo_refrigeracion, aceite_tipo, capacidad_aceite_l, proveedor_local, critico)
+      VALUES (v_id, e.nombre, e.categoria, e.cantidad, e.ubicacion_abordo, e.fabricante, e.modelo,
+          e.datos_tecnicos, e.potencia_kw, e.potencia_hp, e.consumo_lh, e.rpm_nominal, e.voltaje, e.amperaje, e.combustible,
+          e.tipo_refrigeracion, e.aceite_tipo, e.capacidad_aceite_l, e.proveedor_local, e.critico)
+      RETURNING id INTO v_nuevo;
+      v_mapa := v_mapa || jsonb_build_object(e.id::TEXT, v_nuevo);
+    END LOOP;
+    UPDATE public.mant_equipos n
+       SET horas_de_id = (v_mapa ->> o.horas_de_id::TEXT)::INTEGER
+      FROM public.mant_equipos o
+     WHERE o.barco_id = p_origen AND o.activo AND o.horas_de_id IS NOT NULL
+       AND v_mapa ? o.horas_de_id::TEXT
+       AND n.id = (v_mapa ->> o.id::TEXT)::INTEGER;
+  END IF;
+
+  IF 'tareas' = ANY (p_copiar) THEN
+    INSERT INTO public.mant_tareas (barco_id, equipo, equipo_id, tarea, periodicidad, unidad, cada_hrs, cada_meses, prioridad, tipo_trabajo)
+    SELECT v_id, t.equipo, (v_mapa ->> t.equipo_id::TEXT)::INTEGER, t.tarea, t.periodicidad, t.unidad, t.cada_hrs, t.cada_meses,
+           t.prioridad, t.tipo_trabajo
+      FROM public.mant_tareas t WHERE t.barco_id = p_origen AND t.activa ORDER BY t.id;
+  END IF;
+
+  IF 'repuestos' = ANY (p_copiar) THEN
+    INSERT INTO public.mant_repuestos (barco_id, nombre, codigo, categoria, subcategoria, cantidad, minimo, unidad, proveedor, ubicacion, notas)
+    SELECT v_id, r.nombre, r.codigo, r.categoria, r.subcategoria, 0, r.minimo, r.unidad, r.proveedor, r.ubicacion, r.notas
+      FROM public.mant_repuestos r WHERE r.barco_id = p_origen ORDER BY r.id;
+  END IF;
+
+  IF 'herramientas' = ANY (p_copiar) THEN
+    INSERT INTO public.mant_herramientas (barco_id, nombre, marca, cantidad, ubicacion, notas)
+    SELECT v_id, h.nombre, h.marca, 0, h.ubicacion, h.notas
+      FROM public.mant_herramientas h WHERE h.barco_id = p_origen ORDER BY h.id;
+  END IF;
+
+  IF 'certificados' = ANY (p_copiar) THEN
+    INSERT INTO public.mant_certificados (barco_id, nombre, categoria, departamento, fecha_vencimiento, dias_aviso)
+    SELECT v_id, c.nombre, c.categoria, c.departamento, NULL, c.dias_aviso
+      FROM public.mant_certificados c
+     WHERE c.barco_id = p_origen AND c.activo AND c.tripulante_id IS NULL ORDER BY c.id;
+  END IF;
+
+  RETURN v_id;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.mant_barco_crear(INTEGER, JSONB, INTEGER, TEXT[]) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.mant_barco_crear(INTEGER, JSONB, INTEGER, TEXT[]) TO authenticated;

@@ -71,7 +71,26 @@
     border: 1px solid var(--gris-2); border-radius: 12px; color: var(--texto-suave); }
   /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan) */
   body:not(.puede-registrar) .solo-operador,
-  body:not(.puede-editar) .solo-jefe { display: none !important; }
+  body:not(.puede-editar) .solo-jefe,
+  body:not(.puede-administrar) .solo-admin { display: none !important; }
+  .btn-header {
+    background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3);
+    padding: 7px 13px; border-radius: 7px; font: inherit; font-size: 13px; cursor: pointer; font-weight: 500;
+  }
+  /* Administración: barcos y usuarios de la empresa */
+  .admin-item {
+    background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+    display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+  .admin-item.actual { border-left: 4px solid var(--acento); }
+  .admin-item .titulo { font-weight: 600; color: var(--azul-profundo); }
+  .admin-item .detalle { font-size: 13px; color: var(--texto-suave); margin-top: 2px; }
+  .admin-item .acciones { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge-aviso { display: inline-block; background: #fdf0d8; color: #8a5a00; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .clave-temp { font-family: ui-monospace, Consolas, monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.06em;
+    text-align: center; background: var(--gris-1); border: 1px dashed var(--gris-3); border-radius: 10px; padding: 14px; margin: 10px 0;
+    color: var(--azul-profundo); user-select: all; word-break: break-all; }
 
   /* Navegación: fila de secciones + fila de sub-pestañas, las dos fijas arriba */
   nav.tabs {
@@ -927,7 +946,8 @@
     <div style="display:flex;align-items:center;gap:10px;font-size:13px">
       <span id="header-user" style="opacity:0.85"></span>
       <span id="header-rol" class="header-rol"></span>
-      <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:7px 13px;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;font-weight:500">Salir</button>
+      <button class="btn-header" id="btn-mi-clave" onclick="abrirCambiarClave(false)" title="Cambiar mi contraseña">🔑</button>
+      <button class="btn-header" onclick="cerrarSesion()">Salir</button>
     </div>
   </div>
 </header>
@@ -947,6 +967,7 @@
     <button class="seccion" data-seccion="mantenimiento"><span class="ico">🔧</span><span class="txt">Mantenimiento</span><span id="badge-sec-mantenimiento" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="barco"><span class="ico">⚓</span><span class="txt">Barco</span><span id="badge-sec-barco" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="panol"><span class="ico">📦</span><span class="txt">Pañol</span><span id="badge-sec-panol" class="badge" style="display:none">0</span></button>
+    <button class="seccion solo-admin" data-seccion="admin"><span class="ico">⚙️</span><span class="txt">Admin</span></button>
   </div>
   <div class="subtabs" id="subtabs">
     <div class="tabs-inner">
@@ -960,6 +981,8 @@
       <button class="tab" data-tab="certificados" data-seccion="barco">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="stock" data-seccion="panol">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
+      <button class="tab solo-admin" data-tab="admin-barcos" data-seccion="admin">🚢 Barcos</button>
+      <button class="tab solo-admin" data-tab="admin-usuarios" data-seccion="admin">👥 Usuarios</button>
     </div>
   </div>
 </nav>
@@ -1198,6 +1221,22 @@
     </div>
     <div id="historial-lista"></div>
   </section>
+  <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
+  <section class="section" id="sec-admin-barcos">
+    <h2 class="panel-titulo">Barcos de la empresa</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-admin" onclick="abrirNuevoBarco()">➕ Agregar barco</button>
+    </div>
+    <div id="admin-barcos-lista"></div>
+  </section>
+
+  <section class="section" id="sec-admin-usuarios">
+    <h2 class="panel-titulo">Usuarios de la empresa</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-admin" onclick="abrirModalUsuario(null)">➕ Agregar usuario</button>
+    </div>
+    <div id="admin-usuarios-lista"></div>
+  </section>
 </main>
 
 <!-- MODAL: registrar varias (chequeos por fecha) -->
@@ -1407,7 +1446,7 @@
 <!-- MODAL: editar ficha del buque -->
 <div class="modal-bg" id="modal-buque">
   <div class="modal" style="max-width:700px">
-    <h2>Editar ficha del buque</h2>
+    <h2 id="modal-buque-titulo">Editar ficha del buque</h2>
     <div class="modal-sub">Datos generales del barco</div>
 
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1475,9 +1514,98 @@
       <textarea id="bq-notas" rows="2"></textarea>
     </div>
 
+    <!-- Solo al agregar un barco: copiar desde otro de la empresa -->
+    <div id="bq-copiar" style="display:none">
+      <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Copiar desde otro barco</h3>
+      <div class="field">
+        <label>Barco de origen</label>
+        <select id="bq-origen"></select>
+      </div>
+      <div class="field" id="bq-copiar-que">
+        <label>Qué copiar</label>
+        <div style="display:grid;gap:6px">
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="equipos" checked> Equipos (con "Toma las horas de")</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="tareas" checked> Plan de tareas, sin registrar (sin fechas ni horas)</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="repuestos" checked> Catálogo de repuestos, con stock en 0</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="herramientas" checked> Herramientas, con cantidad en 0</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="certificados" checked> Certificados del barco, sin fecha de vencimiento</label>
+        </div>
+        <div style="font-size:12px;color:var(--texto-suave);margin-top:8px">Nunca se copian historial, horas, deficiencias, movimientos, tripulantes ni stock.</div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalBuque()">Cancelar</button>
-      <button class="btn" onclick="guardarBuque()">✓ Guardar</button>
+      <button class="btn" id="bq-btn-guardar" onclick="guardarBuque()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: alta o cambio de acceso de un usuario (Administración) -->
+<div class="modal-bg" id="modal-usuario">
+  <div class="modal" style="max-width:520px">
+    <h2 id="modal-usuario-titulo">Agregar usuario</h2>
+    <div class="modal-sub" id="modal-usuario-sub">Se crea con una contraseña temporal que vas a ver una sola vez</div>
+    <div class="field">
+      <label>Email *</label>
+      <input type="email" id="u-email" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Rol *</label>
+      <select id="u-rol">
+        <option value="lectura">Lectura — solo ve</option>
+        <option value="operador">Operador — ve todo y registra (tareas, horas, deficiencias, stock)</option>
+        <option value="jefe">Jefe — todo en sus barcos</option>
+        <option value="admin_empresa">Admin de la empresa — todo, en todos los barcos, y administra barcos y usuarios</option>
+      </select>
+    </div>
+    <div class="field" id="u-barcos-campo">
+      <label>Barcos *</label>
+      <div id="u-barcos" style="display:grid;gap:6px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalUsuario()">Cancelar</button>
+      <button class="btn" id="u-btn-guardar" onclick="guardarUsuario()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: contraseña temporal recién generada (se muestra una sola vez) -->
+<div class="modal-bg" id="modal-clave-temp">
+  <div class="modal" style="max-width:460px">
+    <h2>🔑 Contraseña temporal</h2>
+    <div class="modal-sub" id="ct-para"></div>
+    <div class="clave-temp" id="ct-clave"></div>
+    <p style="font-size:13px;color:var(--texto-suave)">
+      <strong>Anotala o copiala ahora: no se vuelve a mostrar.</strong> Pasásela a la persona; al entrar por primera vez la app le va a pedir que la cambie.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="copiarClaveTemp()">📋 Copiar</button>
+      <button class="btn" onclick="cerrarClaveTemp()">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: cambiar mi contraseña (obligatorio en el primer ingreso) -->
+<div class="modal-bg" id="modal-clave">
+  <div class="modal" style="max-width:440px">
+    <h2 id="mc-titulo">🔑 Cambiar mi contraseña</h2>
+    <div class="modal-sub" id="mc-sub">Mínimo 8 caracteres</div>
+    <div class="field" id="mc-actual-campo">
+      <label>Contraseña actual</label>
+      <input type="password" id="mc-actual" autocomplete="current-password">
+    </div>
+    <div class="field">
+      <label>Contraseña nueva</label>
+      <input type="password" id="mc-nueva" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Repetí la contraseña nueva</label>
+      <input type="password" id="mc-repetir" autocomplete="new-password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="mc-cancelar" onclick="cerrarCambiarClave()">Cancelar</button>
+      <button class="btn" id="mc-guardar" onclick="guardarMiClave()">✓ Cambiar contraseña</button>
     </div>
   </div>
 </div>
@@ -2156,6 +2284,7 @@ const NOMBRE_ROL = { lectura: 'Lectura', operador: 'Operador', jefe: 'Jefe', adm
 function nivelActual() { return barcoActual ? NIVEL_ROL[barcoActual.rol] : 0; }
 function puedeRegistrar() { return nivelActual() >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
 function puedeEditar() { return nivelActual() >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
+function puedeAdministrar() { return nivelActual() >= NIVEL_ROL.admin_empresa; }  // barcos y usuarios de la empresa
 
 // Lee los accesos del usuario y los barcos que puede ver; elige el último usado. false si no tiene ninguno.
 async function cargarBarcos() {
@@ -2189,6 +2318,10 @@ function renderEncabezado() {
   const cont = document.getElementById('header-barco');
   document.body.classList.toggle('puede-registrar', puedeRegistrar());
   document.body.classList.toggle('puede-editar', puedeEditar());
+  document.body.classList.toggle('puede-administrar', puedeAdministrar());
+  // Si estaba en Administración y en este barco no es admin, vuelve al inicio
+  const tabActiva = document.querySelector('.tab.active');
+  if (barcoActual && !puedeAdministrar() && tabActiva && SECCION_DE_TAB[tabActiva.dataset.tab] === 'admin') cambiarTab('dashboard');
   if (!barcoActual) {
     cont.textContent = 'Sin barco asignado';
     document.getElementById('header-rol').textContent = '';
@@ -2212,7 +2345,7 @@ async function cambiarBarco(id) {
   barcoActual = b;
   try { localStorage.setItem('prueba-barco', String(b.id)); } catch (e) {}
   // Nada de lo abierto pertenece al barco nuevo
-  document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
+  document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
   repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null;
   if (equipoActualFicha) volverAEquipos();
@@ -2310,6 +2443,7 @@ async function cargarTodo() {
     certificadosBaja = (ce || []).filter(c => c.tripulante_id && !tripActivos.has(c.tripulante_id));
     certHistorial = ch || [];
     renderTodo();
+    await cargarUsuariosEmpresa();
   } catch (err) {
     console.error(err);
     toast('Error cargando datos: ' + textoError(err), true);
@@ -2317,6 +2451,7 @@ async function cargarTodo() {
 }
 
 function renderTodo() {
+  renderAdminBarcos();
   llenarFiltros();
   renderDashboard();
   renderLista();
@@ -4625,11 +4760,13 @@ const CATEGORIA_TRIP = 'Tripulación';
 const DIAS_AVISO_CERT = 30;
 // Sugerencias al agregar un documento a un tripulante (se puede escribir otro)
 const DOCUMENTOS_TRIP = ['Libreta de embarque', 'Carné de salud', 'Título/Patente', 'Curso de seguridad básica', 'Pasaporte'];
-const ORDEN_ESTADO_CERT = { VENCIDO: 0, PROXIMO: 1, OK: 2 };
+const ORDEN_ESTADO_CERT = { SIN_FECHA: 0, VENCIDO: 0, PROXIMO: 1, OK: 2 };
 
+// SIN_FECHA si todavía no tiene vencimiento (p. ej. copiado al crear un barco),
 // VENCIDO si la fecha ya pasó (el día del vencimiento todavía es vigente),
 // PROXIMO si faltan dias_aviso días o menos, OK en otro caso
 function estadoCert(c) {
+  if (!c.fecha_vencimiento) return 'SIN_FECHA';
   if (c.fecha_vencimiento < hoyLocalISO()) return 'VENCIDO';
   if (diasEntre(c.fecha_vencimiento) <= c.dias_aviso) return 'PROXIMO';
   return 'OK';
@@ -4719,7 +4856,8 @@ function certFiltrados() {
                      (t && (t.nombre.toLowerCase().includes(texto) || (t.cargo || '').toLowerCase().includes(texto))))) return false;
       return true;
     })
-    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento) || a.nombre.localeCompare(b.nombre));
+    // Los que no tienen vencimiento van primero
+    .sort((a, b) => (a.fecha_vencimiento || '').localeCompare(b.fecha_vencimiento || '') || a.nombre.localeCompare(b.nombre));
 }
 
 // Solapa Tripulación: un grupo por tripulante con sus documentos filtrados.
@@ -4813,12 +4951,13 @@ function renderGrupoTrip({ t, docs }) {
 
 function renderCertCard(c) {
   const est = estadoCert(c);
-  const cls = { VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
-  const icono = { VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
+  const cls = { SIN_FECHA: 'proximo', VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
+  const icono = { SIN_FECHA: '📅', VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
   const dias = diasEntre(c.fecha_vencimiento);
 
   let valor, unidad;
-  if (dias < 0) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencido`; }
+  if (est === 'SIN_FECHA') { valor = '—'; unidad = 'sin fecha'; }
+  else if (dias < 0) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencido`; }
   else if (dias === 0) { valor = 'Hoy'; unidad = 'vence'; }
   else { valor = dias; unidad = `día${dias!==1?'s':''} restantes`; }
 
@@ -4836,7 +4975,7 @@ function renderCertCard(c) {
       <div class="task-info">
         <div class="equipo">${escape(c.nombre)}</div>
         ${segundaLinea}
-        <div class="meta">Vence: ${fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
+        <div class="meta">${est === 'SIN_FECHA' ? '<strong style="color:var(--ambar)">📅 Falta cargar el vencimiento</strong>' : 'Vence: ' + fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
         ${htmlPostergacion(c)}
         ${obsHtml}
       </div>
@@ -4845,7 +4984,7 @@ function renderCertCard(c) {
         <div class="unidad">${unidad}</div>
       </div>
       <div class="def-acciones">
-        <button class="btn solo-jefe" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>
+        ${est === 'SIN_FECHA' ? '' : `<button class="btn solo-jefe" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>`}
         <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
       </div>
     </div>`;
@@ -4883,7 +5022,7 @@ function abrirModalCert(id, tripulanteId) {
     document.getElementById('c-observaciones').value = certActual.observaciones || '';
     document.getElementById('c-btn-baja').style.display = '';
     document.getElementById('c-postergacion').innerHTML =
-      htmlBotonPostergar('cert', certActual, estadoCert(certActual) !== 'OK');
+      htmlBotonPostergar('cert', certActual, ['VENCIDO', 'PROXIMO'].includes(estadoCert(certActual)));
 
     const renov = renovacionesCert(certActual.id);
     document.getElementById('c-historial').innerHTML = renov.length
@@ -5113,10 +5252,10 @@ function exportarCertExcel() {
                   : (trip ? 'No hay documentos de tripulación para exportar' : 'No hay certificados para exportar'));
     return;
   }
-  const nombreEstado = { VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
+  const nombreEstado = { SIN_FECHA: 'Falta cargar el vencimiento', VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
   const comunes = c => ({
-    Vencimiento: c.fecha_vencimiento,
-    'Días restantes': diasEntre(c.fecha_vencimiento),
+    Vencimiento: c.fecha_vencimiento || '',
+    'Días restantes': c.fecha_vencimiento ? diasEntre(c.fecha_vencimiento) : '',
     Estado: nombreEstado[estadoCert(c)],
     'Días de aviso': c.dias_aviso,
     'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
@@ -5380,6 +5519,8 @@ let ultimaTabDeSeccion = {};  // sección -> última sub-pestaña abierta en ell
 
 function cambiarTab(name) {
   if (!SECCION_DE_TAB[name]) name = 'dashboard';
+  // Administración solo para el admin de la empresa (antes de entrar todavía no se sabe el rol)
+  if (SECCION_DE_TAB[name] === 'admin' && barcoActual && !puedeAdministrar()) name = 'dashboard';
   const seccion = SECCION_DE_TAB[name];
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === name);
@@ -5556,8 +5697,14 @@ function renderBarco() {
   `;
 }
 
+let buqueNuevo = false;  // true: la ventana de la ficha está agregando un barco (Administración)
+
 function abrirModalBuque() {
   if (!buque) return;
+  buqueNuevo = false;
+  document.getElementById('modal-buque-titulo').textContent = 'Editar ficha del buque';
+  document.getElementById('bq-btn-guardar').textContent = '✓ Guardar';
+  document.getElementById('bq-copiar').style.display = 'none';
   const set = (id, val) => document.getElementById(id).value = val ?? '';
   set('bq-nombre', buque.nombre);
   set('bq-tipo', buque.tipo);
@@ -5637,6 +5784,7 @@ async function guardarBuque() {
     clase_maquina: txt('bq-clase-m'),
     notas: txt('bq-notas'),
   };
+  if (buqueNuevo) { await crearBarco(data); return; }
   try {
     const { error } = await sb.from('mant_buque').update(data).eq('id', buque.id);
     if (error) throw error;
@@ -6139,6 +6287,288 @@ async function borrarEquipo() {
 }
 
 
+// ============ ADMINISTRACIÓN ============
+// Solo admin_empresa, sobre la empresa del barco elegido. Agregar barcos usa la función de la base
+// mant_barco_crear (todo o nada); los usuarios, la Edge Function mant-usuarios (alta, contraseña temporal,
+// cambiar mi contraseña) y la función mant_accesos_guardar (rol y barcos de una vez). La base controla todo.
+let usuariosEmpresa = [];   // [{ user_id, email, debe_cambiar_clave, rol, barcos: [id] }]
+let usuarioEditando = null; // usuario de la lista que se está cambiando (null = alta)
+
+// Mensaje para errores de las funciones de la base: sus textos ya están en español
+function textoErrorClaro(err) {
+  const msg = (err && err.message) || '';
+  if (err && ['42501', '22023'].includes(err.code) && !/row-level security|permission denied|violates/i.test(msg)) return msg;
+  return textoError(err);
+}
+
+// Llama a la Edge Function mant-usuarios; devuelve sus datos o tira un Error con el mensaje en español
+async function llamarUsuarios(cuerpo) {
+  const { data, error } = await sb.functions.invoke('mant-usuarios', { body: cuerpo });
+  if (error) {
+    let msg = 'No se pudo completar la operación. Probá de nuevo.';
+    try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+function barcosDeMiEmpresa() {
+  return barcoActual ? barcosDisponibles.filter(b => b.empresa_id === barcoActual.empresa_id) : [];
+}
+
+function renderAdminBarcos() {
+  const div = document.getElementById('admin-barcos-lista');
+  if (!puedeAdministrar()) { div.innerHTML = ''; return; }
+  div.innerHTML = barcosDeMiEmpresa().map(b => `
+    <div class="admin-item${b.id === barcoActual.id ? ' actual' : ''}">
+      <div>
+        <div class="titulo">⚓ ${escape(b.nombre)}</div>
+        <div class="detalle">${b.id === barcoActual.id ? 'Es el barco que estás viendo' : ''}</div>
+      </div>
+      <div class="acciones">
+        ${b.id === barcoActual.id ? '' : `<button class="btn btn-sec btn-pequeno" onclick="cambiarBarco(${b.id})">Ver este barco</button>`}
+      </div>
+    </div>`).join('');
+}
+
+function abrirNuevoBarco() {
+  if (!puedeAdministrar()) return;
+  buqueNuevo = true;
+  document.getElementById('modal-buque-titulo').textContent = 'Agregar barco';
+  document.getElementById('bq-btn-guardar').textContent = '✓ Crear barco';
+  document.querySelectorAll('#modal-buque input, #modal-buque textarea').forEach(i => { if (i.type !== 'checkbox') i.value = ''; });
+  document.getElementById('bq-bandera').value = 'Uruguay';
+  document.getElementById('bq-origen').innerHTML = '<option value="">— No copiar nada (barco vacío) —</option>' +
+    barcosDeMiEmpresa().map(b => `<option value="${b.id}">${escape(b.nombre)}</option>`).join('');
+  document.querySelectorAll('input[name="bq-copiar"]').forEach(c => { c.checked = true; });
+  document.getElementById('bq-copiar').style.display = '';
+  actualizarCopiarBarco();
+  document.getElementById('modal-buque').classList.add('show');
+}
+function actualizarCopiarBarco() {
+  const hayOrigen = !!document.getElementById('bq-origen').value;
+  document.getElementById('bq-copiar-que').style.display = hayOrigen ? '' : 'none';
+}
+
+async function crearBarco(ficha) {
+  const origen = parseInt(document.getElementById('bq-origen').value) || null;
+  const copiar = origen ? [...document.querySelectorAll('input[name="bq-copiar"]:checked')].map(c => c.value) : [];
+  const btn = document.getElementById('bq-btn-guardar');
+  btn.disabled = true;
+  try {
+    const { data: id, error } = await sb.rpc('mant_barco_crear', {
+      p_empresa: barcoActual.empresa_id, p_ficha: ficha, p_origen: origen, p_copiar: copiar });
+    if (error) throw error;
+    try { localStorage.setItem('prueba-barco', String(id)); } catch (e) {}
+    cerrarModalBuque();
+    toast(`✓ Barco "${ficha.nombre}" creado`);
+    // Aparece en el selector y queda elegido
+    if (await cargarBarcos()) await cargarTodo();
+  } catch (err) {
+    toast(textoErrorClaro(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function cargarUsuariosEmpresa() {
+  if (!puedeAdministrar()) { usuariosEmpresa = []; renderAdminUsuarios(); return; }
+  const E = barcoActual.empresa_id;
+  const [{ data: acc, error: e1 }, { data: perf, error: e2 }] = await Promise.all([
+    sb.from('mant_accesos').select('user_id, barco_id, rol').eq('empresa_id', E),
+    sb.from('mant_perfiles').select('user_id, email, debe_cambiar_clave'),
+  ]);
+  if (e1 || e2) { toast('No se pudo cargar la lista de usuarios', true); return; }
+  const porUsuario = {};
+  (acc || []).forEach(a => {
+    const u = porUsuario[a.user_id] = porUsuario[a.user_id] || { user_id: a.user_id, rol: a.rol, barcos: [] };
+    if (NIVEL_ROL[a.rol] > NIVEL_ROL[u.rol]) u.rol = a.rol;
+    if (a.barco_id) u.barcos.push(a.barco_id);
+  });
+  const perfiles = Object.fromEntries((perf || []).map(p => [p.user_id, p]));
+  usuariosEmpresa = Object.values(porUsuario)
+    .map(u => ({ ...u, email: perfiles[u.user_id]?.email || '(sin email)', debe_cambiar_clave: !!perfiles[u.user_id]?.debe_cambiar_clave }))
+    .sort((a, b) => NIVEL_ROL[b.rol] - NIVEL_ROL[a.rol] || a.email.localeCompare(b.email));
+  renderAdminUsuarios();
+}
+
+function renderAdminUsuarios() {
+  const div = document.getElementById('admin-usuarios-lista');
+  if (!puedeAdministrar()) { div.innerHTML = ''; return; }
+  const nombreBarco = id => (barcosDisponibles.find(b => b.id === id) || {}).nombre || `Barco ${id}`;
+  div.innerHTML = usuariosEmpresa.map(u => {
+    const yo = u.user_id === usuarioId;
+    const barcos = u.rol === 'admin_empresa' ? 'Todos los barcos de la empresa' : u.barcos.map(nombreBarco).map(escape).join(', ');
+    return `
+      <div class="admin-item">
+        <div>
+          <div class="titulo">${escape(u.email)}${yo ? ' <span style="font-weight:400;color:var(--texto-suave)">(vos)</span>' : ''}${u.debe_cambiar_clave ? '<span class="badge-aviso">Tiene que cambiar la contraseña</span>' : ''}</div>
+          <div class="detalle">${NOMBRE_ROL[u.rol]} · ${barcos}</div>
+        </div>
+        <div class="acciones">
+          ${yo ? '' : `
+          <button class="btn btn-sec btn-pequeno" onclick="abrirModalUsuario('${u.user_id}')">✏️ Cambiar</button>
+          <button class="btn btn-sec btn-pequeno" onclick="claveTemporalUsuario('${u.user_id}')">🔑 Nueva contraseña temporal</button>
+          <button class="btn btn-sec btn-pequeno" style="color:var(--rojo)" onclick="quitarAccesoUsuario('${u.user_id}')">🗑 Quitar acceso</button>`}
+        </div>
+      </div>`;
+  }).join('') || '<div class="empty"><div class="big">👥</div>No hay usuarios</div>';
+}
+
+// userId = cambiar un usuario de la lista; null = alta
+function abrirModalUsuario(userId) {
+  usuarioEditando = userId ? usuariosEmpresa.find(u => u.user_id === userId) : null;
+  if (usuarioEditando && usuarioEditando.user_id === usuarioId) return;  // el propio acceso no se cambia
+  const nuevo = !usuarioEditando;
+  document.getElementById('modal-usuario-titulo').textContent = nuevo ? 'Agregar usuario' : 'Cambiar acceso';
+  document.getElementById('modal-usuario-sub').textContent = nuevo
+    ? 'Si el email no tiene cuenta, se crea con una contraseña temporal que vas a ver una sola vez'
+    : 'Cambiá el rol o los barcos de este usuario';
+  const email = document.getElementById('u-email');
+  email.value = nuevo ? '' : usuarioEditando.email;
+  email.disabled = !nuevo;
+  document.getElementById('u-rol').value = nuevo ? 'operador' : usuarioEditando.rol;
+  const elegidos = new Set(nuevo ? (barcosDeMiEmpresa().length === 1 ? [barcoActual.id] : []) : usuarioEditando.barcos);
+  document.getElementById('u-barcos').innerHTML = barcosDeMiEmpresa().map(b =>
+    `<label class="exp-op"><input type="checkbox" name="u-barco" value="${b.id}"${elegidos.has(b.id) ? ' checked' : ''}> ${escape(b.nombre)}</label>`).join('');
+  actualizarCampoBarcosUsuario();
+  document.getElementById('modal-usuario').classList.add('show');
+}
+function actualizarCampoBarcosUsuario() {
+  document.getElementById('u-barcos-campo').style.display = document.getElementById('u-rol').value === 'admin_empresa' ? 'none' : '';
+}
+function cerrarModalUsuario() {
+  document.getElementById('modal-usuario').classList.remove('show');
+  usuarioEditando = null;
+}
+
+async function guardarUsuario() {
+  const rol = document.getElementById('u-rol').value;
+  const barcos = rol === 'admin_empresa' ? [] : [...document.querySelectorAll('input[name="u-barco"]:checked')].map(c => Number(c.value));
+  const email = document.getElementById('u-email').value.trim();
+  if (!usuarioEditando && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Poné un email válido', true); return; }
+  if (rol !== 'admin_empresa' && !barcos.length) { toast('Elegí al menos un barco', true); return; }
+  const btn = document.getElementById('u-btn-guardar');
+  btn.disabled = true;
+  try {
+    if (usuarioEditando) {
+      const { error } = await sb.rpc('mant_accesos_guardar', {
+        p_user: usuarioEditando.user_id, p_empresa: barcoActual.empresa_id, p_rol: rol, p_barcos: barcos });
+      if (error) throw error;
+      cerrarModalUsuario();
+      toast('✓ Acceso actualizado');
+    } else {
+      const r = await llamarUsuarios({ accion: 'crear', empresa_id: barcoActual.empresa_id, email, rol, barcos });
+      cerrarModalUsuario();
+      if (r.clave_temporal) mostrarClaveTemp(r.email, r.clave_temporal);
+      else toast(`✓ ${r.email} ya tenía cuenta: se le dio acceso con su contraseña de siempre`);
+    }
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(err instanceof Error && !err.code ? err.message : textoErrorClaro(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function claveTemporalUsuario(userId) {
+  const u = usuariosEmpresa.find(x => x.user_id === userId);
+  if (!u || userId === usuarioId) return;
+  if (!confirm(`¿Generar una contraseña temporal nueva para ${u.email}?\n\nLa que tiene ahora deja de funcionar y al entrar va a tener que cambiarla.`)) return;
+  try {
+    const r = await llamarUsuarios({ accion: 'clave_temporal', user_id: userId });
+    mostrarClaveTemp(u.email, r.clave_temporal);
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function quitarAccesoUsuario(userId) {
+  const u = usuariosEmpresa.find(x => x.user_id === userId);
+  if (!u || userId === usuarioId) return;
+  if (!confirm(`¿Quitarle el acceso a ${u.email}?\n\nYa no va a ver nada de la empresa. Su cuenta no se borra: se le puede volver a dar acceso.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_accesos').delete()
+      .eq('user_id', userId).eq('empresa_id', barcoActual.empresa_id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) { toast('No tenés permiso para esto', true); return; }
+    toast(`✓ ${u.email} ya no tiene acceso`);
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(textoErrorClaro(err), true);
+  }
+}
+
+function mostrarClaveTemp(email, clave) {
+  document.getElementById('ct-para').textContent = `Para ${email}`;
+  document.getElementById('ct-clave').textContent = clave;
+  document.getElementById('modal-clave-temp').classList.add('show');
+}
+async function copiarClaveTemp() {
+  try {
+    await navigator.clipboard.writeText(document.getElementById('ct-clave').textContent);
+    toast('✓ Copiada');
+  } catch (e) {
+    toast('No se pudo copiar: anotala a mano', true);
+  }
+}
+function cerrarClaveTemp() {
+  document.getElementById('modal-clave-temp').classList.remove('show');
+  document.getElementById('ct-clave').textContent = '';  // que no quede en pantalla
+}
+
+// ---- Cambiar mi contraseña (cualquier usuario); obligatorio si entró con una temporal ----
+let claveObligatoria = false;
+function abrirCambiarClave(obligatoria) {
+  claveObligatoria = !!obligatoria;
+  ['mc-actual', 'mc-nueva', 'mc-repetir'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('mc-titulo').textContent = obligatoria ? '🔑 Elegí tu contraseña' : '🔑 Cambiar mi contraseña';
+  document.getElementById('mc-sub').textContent = obligatoria
+    ? 'Entraste con una contraseña temporal: elegí una nueva para seguir (mínimo 8 caracteres)'
+    : 'Mínimo 8 caracteres';
+  document.getElementById('mc-actual-campo').style.display = obligatoria ? 'none' : '';
+  // En el primer ingreso no se puede cancelar, pero sí salir
+  document.getElementById('mc-cancelar').textContent = obligatoria ? 'Salir' : 'Cancelar';
+  document.getElementById('modal-clave').classList.add('show');
+}
+function cerrarCambiarClave() {
+  if (claveObligatoria) { cerrarSesion(); return; }
+  document.getElementById('modal-clave').classList.remove('show');
+}
+async function guardarMiClave() {
+  const actual = document.getElementById('mc-actual').value;
+  const nueva = document.getElementById('mc-nueva').value;
+  const repetir = document.getElementById('mc-repetir').value;
+  if (!claveObligatoria && !actual) { toast('Poné tu contraseña actual', true); return; }
+  if (nueva.length < 8) { toast('La contraseña nueva tiene que tener al menos 8 caracteres', true); return; }
+  if (nueva !== repetir) { toast('Las dos contraseñas nuevas no coinciden', true); return; }
+  const btn = document.getElementById('mc-guardar');
+  btn.disabled = true;
+  try {
+    await llamarUsuarios({ accion: 'cambiar_mi_clave', actual, nueva });
+    claveObligatoria = false;
+    document.getElementById('modal-clave').classList.remove('show');
+    toast('✓ Contraseña cambiada');
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ¿Entró con una contraseña temporal? Entonces tiene que cambiarla antes de seguir
+async function chequearClaveObligatoria() {
+  const { data } = await sb.from('mant_perfiles').select('debe_cambiar_clave').eq('user_id', usuarioId).maybeSingle();
+  if (data && data.debe_cambiar_clave) abrirCambiarClave(true);
+}
+
+document.getElementById('bq-origen').addEventListener('change', actualizarCopiarBarco);
+document.getElementById('u-rol').addEventListener('change', actualizarCampoBarcosUsuario);
+document.getElementById('modal-usuario').addEventListener('click', e => { if (e.target.id === 'modal-usuario') cerrarModalUsuario(); });
+document.getElementById('modal-clave').addEventListener('click', e => { if (e.target.id === 'modal-clave' && !claveObligatoria) cerrarCambiarClave(); });
+
 function mostrarLogin() {
   document.getElementById('login-overlay').style.display = 'flex';
   document.getElementById('sin-barcos').style.display = 'none';
@@ -6189,7 +6619,9 @@ async function cerrarSesion() {
   // Limpiar estado
   tareas = []; tareasTodas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
   buque = null; equipos = [];
-  usuarioId = null; barcosDisponibles = []; barcoActual = null;
+  usuarioId = null; barcosDisponibles = []; barcoActual = null; usuariosEmpresa = [];
+  claveObligatoria = false;
+  document.getElementById('modal-clave').classList.remove('show');
   renderEncabezado();
   mostrarLogin();
 }
@@ -6200,6 +6632,7 @@ async function iniciarApp(user) {
   ocultarLogin();
   document.getElementById('header-user').textContent = user.email;
   try {
+    await chequearClaveObligatoria();
     if (await cargarBarcos()) await cargarTodo();
   } catch (err) {
     console.error(err);
