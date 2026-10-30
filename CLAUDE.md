@@ -248,6 +248,7 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
     - **Temporary password:** shown once (`#modal-clave-temp`). A temporary password for someone else is only allowed for users who belong solely to the admin's companies.
     - **First login:** `mant_perfiles.debe_cambiar_clave` forces the change (`chequearClaveObligatoria()`, `#modal-clave`, which can't be dismissed, only "Salir").
     - **🔑 in the header:** "Cambiar mi contraseña" for everyone; it asks for the current password.
+    - **After a password change:** Supabase closes every session, so `guardarMiClave()` signs in again by itself with the new password (`usuarioEmail`). `cambiandoClave` makes `onAuthStateChange` ignore `SIGNED_OUT` only during those seconds; "Salir" and a really expired session still go to the login. If the automatic sign-in fails, it shows "Contraseña cambiada: entrá de nuevo con la nueva" and the login.
     - The admin's own row has no actions.
   - **Service role:** the project's `service_role` had no table grants. It only gets `select` on `mant_accesos` and `select, insert, update` on `mant_perfiles`.
 

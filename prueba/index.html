@@ -2097,6 +2097,7 @@ let herramientas = [];
 let tareaRepuestos = [];
 let buque = null;          // ficha del barco elegido (fila de mant_buque)
 let usuarioId = null;      // auth.uid() de la sesión
+let usuarioEmail = null;   // email de la sesión (para volver a entrar solo después de cambiar la contraseña)
 let barcosDisponibles = []; // [{ id, nombre, empresa_id, rol }]: barcos que el usuario puede ver y su rol en cada uno
 let barcoActual = null;    // barco elegido: todo se lee filtrado por él y todo lo nuevo se guarda con su barco_id
 let equipos = [];          // fichas de equipos
@@ -6548,14 +6549,32 @@ async function guardarMiClave() {
   btn.disabled = true;
   try {
     await llamarUsuarios({ accion: 'cambiar_mi_clave', actual, nueva });
-    claveObligatoria = false;
-    document.getElementById('modal-clave').classList.remove('show');
-    toast('✓ Contraseña cambiada');
   } catch (err) {
     toast(err.message, true);
+    btn.disabled = false;
+    return;
+  }
+  // Supabase cierra todas las sesiones al cambiar la contraseña: se vuelve a entrar solo con la nueva.
+  // Solo durante estos segundos se ignora el aviso de "sesión cerrada" (ver onAuthStateChange).
+  cambiandoClave = true;
+  let reingreso;
+  try {
+    reingreso = await sb.auth.signInWithPassword({ email: usuarioEmail, password: nueva });
+  } catch (e) {
+    reingreso = { error: e };
   } finally {
+    cambiandoClave = false;
     btn.disabled = false;
   }
+  claveObligatoria = false;
+  document.getElementById('modal-clave').classList.remove('show');
+  if (reingreso.error || !reingreso.data?.session) {
+    await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+    mostrarLogin();
+    toast('Contraseña cambiada: entrá de nuevo con la nueva');
+    return;
+  }
+  toast('✓ Contraseña cambiada');
 }
 
 // ¿Entró con una contraseña temporal? Entonces tiene que cambiarla antes de seguir
@@ -6619,7 +6638,7 @@ async function cerrarSesion() {
   // Limpiar estado
   tareas = []; tareasTodas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
   buque = null; equipos = [];
-  usuarioId = null; barcosDisponibles = []; barcoActual = null; usuariosEmpresa = [];
+  usuarioId = null; usuarioEmail = null; barcosDisponibles = []; barcoActual = null; usuariosEmpresa = [];
   claveObligatoria = false;
   document.getElementById('modal-clave').classList.remove('show');
   renderEncabezado();
@@ -6629,6 +6648,7 @@ async function cerrarSesion() {
 // Después del login: barcos y rol del usuario, y los datos del barco elegido
 async function iniciarApp(user) {
   usuarioId = user.id;
+  usuarioEmail = user.email;
   ocultarLogin();
   document.getElementById('header-user').textContent = user.email;
   try {
@@ -6649,9 +6669,11 @@ async function chequearSesion() {
   }
 }
 
-// Si la sesión expira o se cierra desde otro lado
+// Si la sesión expira o se cierra desde otro lado. Mientras se vuelve a entrar después de cambiar la
+// contraseña (cambiandoClave, unos segundos) el aviso se ignora; en cualquier otro momento se respeta.
+let cambiandoClave = false;
 sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_OUT') {
+  if (event === 'SIGNED_OUT' && !cambiandoClave) {
     mostrarLogin();
   }
 });
