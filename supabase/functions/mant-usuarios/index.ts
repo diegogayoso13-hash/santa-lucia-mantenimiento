@@ -1,4 +1,4 @@
-// Edge Function "mant-usuarios" (proyecto de PRUEBA ncughlkgdgigwkggnxri).
+// Edge Function "mant-usuarios" (proyecto ncughlkgdgigwkggnxri).
 // Lo que la app no puede hacer con su clave pública, porque necesita la service role:
 //   crear      -> el admin_empresa da de alta a alguien (email, rol, barcos). Si el email es nuevo se crea la
 //                 cuenta con una contraseña temporal que se devuelve UNA vez; si ya tenía cuenta, solo se le da acceso.

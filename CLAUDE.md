@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A single-page web app for managing shipboard maintenance on the B/M Santa Lucía (a tugboat), replacing a monthly Excel-sheet workflow. No framework, no build step: the entire app (markup, CSS, JS) lives in `index.html`. Backend is Supabase (Postgres + Auth), loaded via CDN `<script>` tags (`@supabase/supabase-js@2`, `xlsx@0.18.5` for Excel export, `chart.js@4.4.1` for the equipment charts).
 
+The Supabase project is "Mantenimiento Naval" (`ncughlkgdgigwkggnxri`), which supports several ships, companies and roles (see "Several ships, companies and roles" below). The app moved there on 2026-11-01 (`docs/mudanza.md`, git tag `antes-mudanza`). The old project (`zfoetyauhauztkkltjaz`) is shared with another app in use and kept as a backup: **never write to it, change it or touch its permissions**. There is no separate test version any more.
+
 ## Running / developing
 
 There is no build, bundle, lint, or test tooling in this repo — it's plain HTML/CSS/JS.
@@ -101,13 +103,13 @@ The top bar has four sections, each with its sub-tabs underneath:
 
 The "Horas" sub-tab (`sec-horas`) has the monthly hours entry on top (`renderCarga()`) and the per-equipment history below (`renderHoras()`). "Chequeos por fecha" — registering several date-based tasks at once (`renderChequeosFecha()` / `aplicarChequeos()`) — lives in the `#modal-chequeos` modal, opened by "✓ Registrar varias" in the Tareas tab; it closes itself after a successful apply.
 
-Monthly hours are entered per top-level equipment. `CAJAS_POR_MP` maps each main engine (`Motor Principal Babor/Estribor`) to its reduction gearbox (`Caja Reductora Babor/Estribor`); when hours are saved for an engine, the paired gearbox silently receives the same hours (`guardarCarga()`), and gearboxes are hidden from the manual entry form (`EQUIPOS_OCULTOS_CARGA`). Saving hours also finds tasks that just became `VENCIDO`/`PROXIMO` as a side effect and prompts the user to confirm which were actually completed (`abrirConfirm`/`aplicarConfirm`) before writing `mant_historial` rows.
+Monthly hours are entered per top-level equipment. Equipment with "Toma las horas de" (`mant_equipos.horas_de_id`, e.g. each `Caja Reductora Babor/Estribor` takes its `Motor Principal`'s hours) silently receives the same hours when hours are saved for its source (`guardarCarga()`, `equiposQueTomanHorasDe()`), and is hidden from the manual entry form (`equiposOcultosCarga()`). Saving hours also finds tasks that just became `VENCIDO`/`PROXIMO` as a side effect and prompts the user to confirm which were actually completed (`abrirConfirm`/`aplicarConfirm`) before writing `mant_historial` rows.
 
 Each save also inserts one `mant_lecturas_horas` row per equipment (including the cascaded gearbox) with `horas_mes` (hours added this month) and `hrs_total` (cumulative). Readings are keyed by the equipment **name** (`equipo` text), not by `equipo_id`. They're only read by the history part of the Horas tab (`renderHoras()`).
 
 ### Ship & equipment fichas ("Mi Barco" / "Equipos" tabs)
 
-`mant_buque` (a single row) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Tasks can optionally link to an equipment row via `tarea.equipo_id`, which makes the equipment name clickable to jump to its ficha. Note that tasks also carry the equipment name as free text (`tarea.equipo`), and the Tareas filters, hour cascading and `mant_lecturas_horas` match on that name, not on `equipo_id`.
+`mant_buque` (one row per ship; the app shows the selected ship's) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Tasks can optionally link to an equipment row via `tarea.equipo_id`, which makes the equipment name clickable to jump to its ficha. Note that tasks also carry the equipment name as free text (`tarea.equipo`), and the Tareas filters, hour cascading and `mant_lecturas_horas` match on that name, not on `equipo_id`.
 
 ### Critical equipment
 
@@ -179,34 +181,32 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 ## Database schema
 
-`docs/esquema.sql` documents all thirteen `mant_*` tables plus their indexes, functions/triggers and RLS policies, matching the live project as of 2026-10-19 (it uses a placeholder owner email). **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six:
+`docs/esquema.sql` documents all `mant_*` tables of `ncughlkgdgigwkggnxri` plus their indexes, functions/triggers and RLS policies, as of 2026-11-01. **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six (besides `mant_empresas`, `mant_accesos` and `mant_perfiles`, described below):
 
-- `mant_buque` — single row of vessel particulars.
+- `mant_buque` — the ships table, one row per ship.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
 - `mant_lecturas_horas` — `equipo` (text name), `fecha`, `horas_mes`, `hrs_total`.
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.
 - `mant_tripulantes` — `nombre`, `cargo`, `departamento` (`'Cubierta'|'Máquinas'`, inherited by their documents), `activo`.
-- `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (not null), `dias_aviso` (default 30), `observaciones`, `activo`.
+- `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (nullable, see "Certificates without a date"), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
 
-Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for all to authenticated using/with check ((auth.jwt() ->> 'email') = '<owner email>')`. New `mant_*` tables must copy that policy. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warnings: `mant_update_timestamp` and `mant_update_timestamp_masc` have a mutable `search_path`, and Auth's leaked password protection is disabled.
+Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 
-## Test version (`prueba/`)
+## Several ships, companies and roles
 
-`prueba/index.html` is a separate copy of the app, published at `/prueba/`, for trying out changes without touching the real one. Changes to the root `index.html` are **not** copied to it (or back) automatically.
+`localStorage` keys: `nav`, `cert-solapa`, `barco` (last ship) and `exportar-plan`.
 
-- **Backend:** it points to a different Supabase project, "Mantenimiento Naval" (`ncughlkgdgigwkggnxri`), which holds a copy of the data. The real app and its project (`zfoetyauhauztkkltjaz`) must never be touched when working on the test version.
-- **Separation:** it shows a fixed orange banner ("VERSIÓN DE PRUEBA – no cargar datos reales") and a `[PRUEBA]` tab title, and its `localStorage` keys carry a `prueba-` prefix (`prueba-nav`, `prueba-cert-solapa`, `prueba-barco`).
-- **Several ships:** the test database holds several ships. Its schema is documented in `docs/esquema_prueba.sql`, and `docs/esquema.sql` still describes the real project.
+- **Several ships:**
   - **Ships table:** `mant_buque` is the ships table, one row per ship (id 1 = B/M Santa Lucía).
   - **`barco_id`:** every other `mant_*` table has `barco_id not null` → `mant_buque(id)`.
   - **Mixing ships is blocked:** child tables reference their parent by `(barco_id, id)` composite foreign keys, so the database rejects rows that mix ships.
   - **Deficiency numbering** is per ship and per year.
   - **No default:** `barco_id` has no default, so a row the app forgets to tag fails instead of landing on the wrong ship.
-  - **Gearboxes:** "Toma las horas de" (`mant_equipos.horas_de_id`) replaces the old hard-coded `CAJAS_POR_MP`. A piece of equipment can take its hours from another one on the same ship (enforced by a composite FK), and a trigger rejects loops and self-references.
-- **Companies, users and roles:** the test database no longer uses the "only my email" policy.
+  - **Gearboxes:** "Toma las horas de" (`mant_equipos.horas_de_id`) replaced the old hard-coded `CAJAS_POR_MP`. A piece of equipment can take its hours from another one on the same ship (enforced by a composite FK), and a trigger rejects loops and self-references.
+- **Companies, users and roles:** the database no longer uses the old "only my email" policy.
   - **Companies:** every ship belongs to a company (`mant_buque.empresa_id` → `mant_empresas`), and data never crosses companies.
   - **Access:** `mant_accesos` gives a user (`auth.users`) a role. `admin_empresa` is per company (no ship) and covers all its ships; `jefe`, `operador` and `lectura` are per ship.
   - **What each role can do:**
@@ -218,9 +218,9 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
   - **RLS:** every table's policies call `SECURITY DEFINER` helpers in the `mant_priv` schema, which the API doesn't expose. `mant_priv.barcos(nivel)` returns the user's ships at that level or higher, with levels 1 lectura, 2 operador, 3 jefe. Policies wrap the helpers as `(select …)::integer[]` so they run once per query.
   - **Authorship:** `creado_por` (history, hour readings, movements, deficiencies) and `cerrada_por` (deficiencies) are set by triggers from `auth.uid()`, so the app can't fake them. Rows written straight from SQL or the dashboard (no app session) keep whatever is sent.
   - **New users:** sign-ups are meant to be off. Users are created in the dashboard (Authentication → Users), then given a `mant_accesos` row.
-  - The full rules are in `docs/esquema_prueba.sql`.
-- **The test app works per ship** (section `BARCOS Y ROLES` in `prueba/index.html`):
-  - **Startup:** after login, `iniciarApp()` → `cargarBarcos()` reads the user's own `mant_accesos` rows and the ships they can see. It builds `barcosDisponibles` (each with the user's highest role there) and picks `barcoActual`, the last one used (`prueba-barco`) or the first. A user with no ships sees `#sin-barcos` and nothing else.
+  - The full rules are in `docs/esquema.sql`.
+- **The app works per ship** (section `BARCOS Y ROLES` in `index.html`):
+  - **Startup:** after login, `iniciarApp()` → `cargarBarcos()` reads the user's own `mant_accesos` rows and the ships they can see. It builds `barcosDisponibles` (each with the user's highest role there) and picks `barcoActual`, the last one used (`barco`) or the first. A user with no ships sees `#sin-barcos` and nothing else.
   - **Header:** the ship name comes from its ficha. With more than one ship it becomes a `<select id="sel-barco">`. Next to it is the role badge (`#header-rol`), and the tab title follows the ship. `cambiarBarco()` closes open modals and the equipment ficha, then reloads everything.
   - **Reads and writes:**
     - Every read in `cargarTodo()` filters `.eq('barco_id', B)` (`mant_buque` by `id`) and ignores a late answer for a ship that's no longer selected.
@@ -230,7 +230,7 @@ Every `mant_*` table has RLS enabled with a single `<tabla>_owner` policy: `for 
   - **Excel files:**
     - **Names** carry the ship (`nombreBarcoArchivo()`) and go through `textoArchivo()`, so they have no accents, ñ, signs or spaces (`Stock_BM_Santa_Lucia_2026-10-29.xlsx`). `busquedaArchivo()` adds the search text.
     - **Plan export:** the Tareas tab's "📥 Exportar Excel" opens `#modal-export-plan` (`abrirExportarPlan()` / `exportarPlan()`). It offers all equipment or a choice grouped by ficha category, plan and/or history, all tasks or only overdue and upcoming ones (postponed included), and full history or a date range.
-      - The last choice is kept in `prueba-exportar-plan`.
+      - The last choice is kept in `exportar-plan`.
       - The name reflects the choice, e.g. `BM_Santa_Lucia_3_equipos_Plan_vencidas_2026-10-29.xlsx`.
     - **Other exports:** Stock, Herramientas and Deficiencias export exactly what's on screen (`stockFiltrado()`, `herrFiltradas()`, `defFiltradas()` are shared with the lists), and the name carries the filters.
     - **Filter selects:** they're rebuilt on every render through `llenarSelectConservando()` so the choice survives (before, the stock category and the tool location and brand filters reset themselves and never filtered).

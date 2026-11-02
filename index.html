@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>B/M Santa Lucía · Mantenimientos</title>
+<title>Plan de Mantenimiento</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -59,6 +59,42 @@
   header.top h1 { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; }
   header.top h1 .accent { color: var(--acento); }
   header.top .sub { opacity: 0.75; font-size: 13px; margin-top: 2px; letter-spacing: 0.02em; }
+  /* Selector de barco en el encabezado (solo si el usuario tiene más de uno) */
+  .sel-barco {
+    font: inherit; color: white; background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.35); border-radius: 8px;
+    padding: 2px 8px; max-width: 100%; cursor: pointer;
+  }
+  .sel-barco option { color: var(--texto); background: white; font-family: 'Inter', sans-serif; font-size: 15px; }
+  .header-rol {
+    background: var(--acento); color: var(--azul-profundo); font-weight: 700; font-size: 11px;
+    padding: 3px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .header-rol:empty { display: none; }
+  .sin-barcos { max-width: 560px; margin: 40px auto; padding: 24px; text-align: center; background: white;
+    border: 1px solid var(--gris-2); border-radius: 12px; color: var(--texto-suave); }
+  /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan) */
+  body:not(.puede-registrar) .solo-operador,
+  body:not(.puede-editar) .solo-jefe,
+  body:not(.puede-administrar) .solo-admin { display: none !important; }
+  .btn-header {
+    background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3);
+    padding: 7px 13px; border-radius: 7px; font: inherit; font-size: 13px; cursor: pointer; font-weight: 500;
+  }
+  /* Administración: barcos y usuarios de la empresa */
+  .admin-item {
+    background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+    display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+  .admin-item.actual { border-left: 4px solid var(--acento); }
+  .admin-item .titulo { font-weight: 600; color: var(--azul-profundo); }
+  .admin-item .detalle { font-size: 13px; color: var(--texto-suave); margin-top: 2px; }
+  .admin-item .acciones { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge-aviso { display: inline-block; background: #fdf0d8; color: #8a5a00; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .clave-temp { font-family: ui-monospace, Consolas, monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.06em;
+    text-align: center; background: var(--gris-1); border: 1px dashed var(--gris-3); border-radius: 10px; padding: 14px; margin: 10px 0;
+    color: var(--azul-profundo); user-select: all; word-break: break-all; }
 
   /* Navegación: fila de secciones + fila de sub-pestañas, las dos fijas arriba */
   nav.tabs {
@@ -394,6 +430,21 @@
     outline: none; border-color: var(--azul-profundo); background: white;
   }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  /* Ventana "Exportar plan de mantenimiento" */
+  .modal .exp-opciones { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .modal label.exp-op {
+    display: flex; align-items: center; gap: 8px; margin: 0;
+    text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; color: var(--texto); cursor: pointer;
+  }
+  .modal label.exp-op input { width: auto; margin: 0; flex: none; }
+  .modal .exp-bloque.apagado { opacity: 0.45; }
+  .exp-lista { margin-top: 10px; max-height: 260px; overflow-y: auto; border: 1px solid var(--gris-2); border-radius: 8px; padding: 6px 10px; background: var(--gris-1); }
+  .exp-grupo + .exp-grupo { border-top: 1px solid var(--gris-2); margin-top: 6px; padding-top: 6px; }
+  .modal .exp-grupo > label.exp-op { font-weight: 700; color: var(--azul-profundo); }
+  .exp-grupo .exp-items { padding-left: 24px; display: grid; gap: 4px; margin-top: 4px; }
+  .exp-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .exp-resumen { font-size: 13px; color: var(--texto-suave); background: var(--gris-1); border-radius: 8px; padding: 10px 12px; }
+  .exp-resumen.aviso { color: var(--rojo); }
 
   /* CARGA MENSUAL */
   .carga-form {
@@ -844,6 +895,7 @@
     .equipos-grid { grid-template-columns: 1fr; }
     .ficha-grid { grid-template-columns: 1fr; }
   }
+
 </style>
 </head>
 <body>
@@ -853,8 +905,8 @@
   <div style="background:white;border-radius:14px;padding:36px 32px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:48px;margin-bottom:8px">⚓</div>
-      <h2 style="font-family:'Fraunces',serif;color:var(--azul-profundo);font-size:24px">B/M Santa Lucía</h2>
-      <p style="color:var(--texto-suave);font-size:13px;margin-top:4px">Plan de Mantenimiento</p>
+      <h2 style="font-family:'Fraunces',serif;color:var(--azul-profundo);font-size:24px">Plan de Mantenimiento</h2>
+      <p style="color:var(--texto-suave);font-size:13px;margin-top:4px">Ingresá con tu usuario</p>
     </div>
     <form id="login-form" onsubmit="return iniciarSesion(event)">
       <div style="margin-bottom:14px">
@@ -874,15 +926,25 @@
 <header class="top">
   <div class="header-inner" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
     <div>
-      <h1>⚓ B/M Santa Lucía <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
+      <!-- El nombre sale de la ficha del barco elegido; con más de un barco es un selector (renderEncabezado) -->
+      <h1>⚓ <span id="header-barco"></span> <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
       <p class="sub">Gestión integral del mantenimiento de a bordo</p>
     </div>
     <div style="display:flex;align-items:center;gap:10px;font-size:13px">
       <span id="header-user" style="opacity:0.85"></span>
-      <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:7px 13px;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;font-weight:500">Salir</button>
+      <span id="header-rol" class="header-rol"></span>
+      <button class="btn-header" id="btn-mi-clave" onclick="abrirCambiarClave(false)" title="Cambiar mi contraseña">🔑</button>
+      <button class="btn-header" onclick="cerrarSesion()">Salir</button>
     </div>
   </div>
 </header>
+
+<!-- Usuario sin ningún barco asignado (mant_accesos) -->
+<div id="sin-barcos" class="sin-barcos" style="display:none">
+  <div style="font-size:40px;margin-bottom:8px">⚓</div>
+  <p><strong>Tu usuario todavía no tiene barcos asignados.</strong></p>
+  <p style="margin-top:6px">Pedile acceso al administrador de tu empresa.</p>
+</div>
 
 <!-- Navegación en dos niveles: secciones arriba, sub-pestañas de la sección elegida abajo.
      Cada sub-pestaña (data-tab) abre su <section id="sec-..."> como antes; data-seccion la agrupa. -->
@@ -892,6 +954,7 @@
     <button class="seccion" data-seccion="mantenimiento"><span class="ico">🔧</span><span class="txt">Mantenimiento</span><span id="badge-sec-mantenimiento" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="barco"><span class="ico">⚓</span><span class="txt">Barco</span><span id="badge-sec-barco" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="panol"><span class="ico">📦</span><span class="txt">Pañol</span><span id="badge-sec-panol" class="badge" style="display:none">0</span></button>
+    <button class="seccion solo-admin" data-seccion="admin"><span class="ico">⚙️</span><span class="txt">Admin</span></button>
   </div>
   <div class="subtabs" id="subtabs">
     <div class="tabs-inner">
@@ -905,6 +968,8 @@
       <button class="tab" data-tab="certificados" data-seccion="barco">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="stock" data-seccion="panol">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
+      <button class="tab solo-admin" data-tab="admin-barcos" data-seccion="admin">🚢 Barcos</button>
+      <button class="tab solo-admin" data-tab="admin-usuarios" data-seccion="admin">👥 Usuarios</button>
     </div>
   </div>
 </nav>
@@ -975,9 +1040,9 @@
   <section class="section" id="sec-tareas">
     <h2 class="panel-titulo">Todas las tareas</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalTarea()">➕ Agregar tarea</button>
-      <button class="btn btn-sec" onclick="abrirModalChequeos()">✓ Registrar varias</button>
-      <button class="btn btn-acento" onclick="exportarExcel()">📥 Exportar Excel</button>
+      <button class="btn solo-jefe" onclick="abrirModalTarea()">➕ Agregar tarea</button>
+      <button class="btn btn-sec solo-operador" onclick="abrirModalChequeos()">✓ Registrar varias</button>
+      <button class="btn btn-acento" onclick="abrirExportarPlan()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
       <input type="text" id="buscador" placeholder="🔎 Buscar equipo o tarea...">
@@ -1008,9 +1073,9 @@
     <div id="banner-stock"></div>
     <h2 class="panel-titulo">Stock de repuestos</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
+      <button class="btn solo-jefe" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
       <button class="btn btn-acento" onclick="exportarStockExcel()">📥 Exportar Excel</button>
-      <button class="btn btn-sec" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
+      <button class="btn btn-sec solo-jefe" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
     </div>
 
     <div class="carga-form" id="minimos-bar" style="display:none">
@@ -1046,7 +1111,7 @@
   <section class="section" id="sec-deficiencias">
     <h2 class="panel-titulo">Registro de deficiencias</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
+      <button class="btn solo-operador" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
       <button class="btn btn-acento" onclick="exportarDefExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1068,8 +1133,8 @@
       <button class="cert-solapa" data-solapa="tripulacion" onclick="cambiarSolapaCert('tripulacion')">👥 Tripulación <span id="badge-cert-trip" class="badge" style="display:none">0</span></button>
     </div>
     <div class="acciones-globales">
-      <button class="btn" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
-      <button class="btn" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
+      <button class="btn solo-jefe" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn solo-jefe" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
       <button class="btn btn-acento" onclick="exportarCertExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1090,7 +1155,7 @@
   <section class="section" id="sec-herramientas">
     <h2 class="panel-titulo">Inventario de herramientas</h2>
     <div class="acciones-globales">
-      <button class="btn" onclick="abrirModalHerr()">➕ Agregar herramienta</button>
+      <button class="btn solo-jefe" onclick="abrirModalHerr()">➕ Agregar herramienta</button>
       <button class="btn btn-acento" onclick="exportarHerrExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1103,11 +1168,11 @@
 
   <!-- HORAS: carga mensual arriba, histórico abajo -->
   <section class="section" id="sec-horas">
-    <h2 class="panel-titulo">Cargar horas del mes</h2>
-    <div class="carga-form">
+    <h2 class="panel-titulo solo-operador">Cargar horas del mes</h2>
+    <div class="carga-form solo-operador">
       <h3>Actualización mensual de horas por equipo</h3>
       <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
-        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Las cajas reductoras se actualizan solas junto con su motor.
+        Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Los equipos que toman las horas de otro (por ejemplo, las cajas reductoras) se actualizan solos junto con él.
       </p>
       <div class="field" style="max-width:220px;margin-bottom:16px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Fecha de la carga</label>
@@ -1142,6 +1207,22 @@
       <button class="btn btn-acento" onclick="exportarHistExcel()">📥 Exportar Excel</button>
     </div>
     <div id="historial-lista"></div>
+  </section>
+  <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
+  <section class="section" id="sec-admin-barcos">
+    <h2 class="panel-titulo">Barcos de la empresa</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-admin" onclick="abrirNuevoBarco()">➕ Agregar barco</button>
+    </div>
+    <div id="admin-barcos-lista"></div>
+  </section>
+
+  <section class="section" id="sec-admin-usuarios">
+    <h2 class="panel-titulo">Usuarios de la empresa</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-admin" onclick="abrirModalUsuario(null)">➕ Agregar usuario</button>
+    </div>
+    <div id="admin-usuarios-lista"></div>
   </section>
 </main>
 
@@ -1179,6 +1260,58 @@
   </div>
 </div>
 
+<!-- MODAL: exportar el plan de mantenimiento a Excel (abrirExportarPlan / exportarPlan) -->
+<div class="modal-bg" id="modal-export-plan">
+  <div class="modal" style="max-width:560px">
+    <h2>📥 Exportar plan de mantenimiento</h2>
+    <div class="modal-sub">Elegí qué querés bajar al Excel</div>
+
+    <div class="field">
+      <label>Equipos</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-equipos" value="todos"> Todos</label>
+        <label class="exp-op"><input type="radio" name="exp-equipos" value="elegir"> Elegir</label>
+      </div>
+      <div id="exp-lista-equipos" class="exp-lista"></div>
+    </div>
+
+    <div class="field">
+      <label>Qué incluir</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="checkbox" id="exp-plan"> Plan de tareas</label>
+        <label class="exp-op"><input type="checkbox" id="exp-hist"> Historial</label>
+      </div>
+    </div>
+
+    <div class="field exp-bloque" id="exp-bloque-tareas">
+      <label>Tareas</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-tareas" value="todas"> Todas</label>
+        <label class="exp-op"><input type="radio" name="exp-tareas" value="vencidas"> Solo vencidas y próximas</label>
+      </div>
+    </div>
+
+    <div class="field exp-bloque" id="exp-bloque-hist">
+      <label>Historial</label>
+      <div class="exp-opciones">
+        <label class="exp-op"><input type="radio" name="exp-hist-rango" value="todo"> Todo</label>
+        <label class="exp-op"><input type="radio" name="exp-hist-rango" value="fechas"> Entre fechas</label>
+      </div>
+      <div class="exp-fechas" id="exp-fechas">
+        <div><label>Desde</label><input type="date" id="exp-desde"></div>
+        <div><label>Hasta</label><input type="date" id="exp-hasta"></div>
+      </div>
+    </div>
+
+    <div id="exp-resumen" class="exp-resumen"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarExportarPlan()">Cancelar</button>
+      <button class="btn" id="exp-btn-exportar" onclick="exportarPlan()">📥 Exportar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: registrar mantenimiento -->
 <div class="modal-bg" id="modal">
   <div class="modal">
@@ -1204,15 +1337,15 @@
       <label>Tipo de trabajo</label>
       <div style="display:flex;gap:8px;align-items:center">
         <select id="m-tipo-trabajo" class="sel-tipo-trabajo" style="flex:1"></select>
-        <button type="button" class="btn btn-pequeno btn-sec" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
+        <button type="button" class="btn btn-pequeno btn-sec solo-jefe" onclick="guardarSoloTipo()" title="Cambia solo el tipo, sin registrar un mantenimiento">Guardar solo el tipo</button>
       </div>
     </div>
     <div class="field" id="m-postergacion"></div>
     <div class="modal-actions">
-      <button class="btn btn-sec" id="m-btn-baja" onclick="bajaOBorrarTarea()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
-      <button class="btn btn-sec" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
+      <button class="btn btn-sec solo-jefe" id="m-btn-baja" onclick="bajaOBorrarTarea()" style="background:#fde0df;color:var(--rojo)">🗑 Borrar tarea</button>
+      <button class="btn btn-sec solo-jefe" onclick="abrirEditarTarea()" style="margin-right:auto">✏️ Editar tarea</button>
       <button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn" onclick="guardarMant()">✓ Guardar</button>
+      <button class="btn solo-operador" onclick="guardarMant()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -1300,11 +1433,11 @@
 <!-- MODAL: editar ficha del buque -->
 <div class="modal-bg" id="modal-buque">
   <div class="modal" style="max-width:700px">
-    <h2>Editar ficha del buque</h2>
-    <div class="modal-sub">Datos generales del Santa Lucía</div>
+    <h2 id="modal-buque-titulo">Editar ficha del buque</h2>
+    <div class="modal-sub">Datos generales del barco</div>
 
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Nombre</label><input type="text" id="bq-nombre"></div>
+      <div><label>Nombre *</label><input type="text" id="bq-nombre"></div>
       <div><label>Tipo</label><input type="text" id="bq-tipo" placeholder="Remolcador"></div>
     </div>
 
@@ -1368,9 +1501,98 @@
       <textarea id="bq-notas" rows="2"></textarea>
     </div>
 
+    <!-- Solo al agregar un barco: copiar desde otro de la empresa -->
+    <div id="bq-copiar" style="display:none">
+      <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Copiar desde otro barco</h3>
+      <div class="field">
+        <label>Barco de origen</label>
+        <select id="bq-origen"></select>
+      </div>
+      <div class="field" id="bq-copiar-que">
+        <label>Qué copiar</label>
+        <div style="display:grid;gap:6px">
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="equipos" checked> Equipos (con "Toma las horas de")</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="tareas" checked> Plan de tareas, sin registrar (sin fechas ni horas)</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="repuestos" checked> Catálogo de repuestos, con stock en 0</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="herramientas" checked> Herramientas, con cantidad en 0</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="certificados" checked> Certificados del barco, sin fecha de vencimiento</label>
+        </div>
+        <div style="font-size:12px;color:var(--texto-suave);margin-top:8px">Nunca se copian historial, horas, deficiencias, movimientos, tripulantes ni stock.</div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalBuque()">Cancelar</button>
-      <button class="btn" onclick="guardarBuque()">✓ Guardar</button>
+      <button class="btn" id="bq-btn-guardar" onclick="guardarBuque()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: alta o cambio de acceso de un usuario (Administración) -->
+<div class="modal-bg" id="modal-usuario">
+  <div class="modal" style="max-width:520px">
+    <h2 id="modal-usuario-titulo">Agregar usuario</h2>
+    <div class="modal-sub" id="modal-usuario-sub">Se crea con una contraseña temporal que vas a ver una sola vez</div>
+    <div class="field">
+      <label>Email *</label>
+      <input type="email" id="u-email" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Rol *</label>
+      <select id="u-rol">
+        <option value="lectura">Lectura — solo ve</option>
+        <option value="operador">Operador — ve todo y registra (tareas, horas, deficiencias, stock)</option>
+        <option value="jefe">Jefe — todo en sus barcos</option>
+        <option value="admin_empresa">Admin de la empresa — todo, en todos los barcos, y administra barcos y usuarios</option>
+      </select>
+    </div>
+    <div class="field" id="u-barcos-campo">
+      <label>Barcos *</label>
+      <div id="u-barcos" style="display:grid;gap:6px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalUsuario()">Cancelar</button>
+      <button class="btn" id="u-btn-guardar" onclick="guardarUsuario()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: contraseña temporal recién generada (se muestra una sola vez) -->
+<div class="modal-bg" id="modal-clave-temp">
+  <div class="modal" style="max-width:460px">
+    <h2>🔑 Contraseña temporal</h2>
+    <div class="modal-sub" id="ct-para"></div>
+    <div class="clave-temp" id="ct-clave"></div>
+    <p style="font-size:13px;color:var(--texto-suave)">
+      <strong>Anotala o copiala ahora: no se vuelve a mostrar.</strong> Pasásela a la persona; al entrar por primera vez la app le va a pedir que la cambie.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="copiarClaveTemp()">📋 Copiar</button>
+      <button class="btn" onclick="cerrarClaveTemp()">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: cambiar mi contraseña (obligatorio en el primer ingreso) -->
+<div class="modal-bg" id="modal-clave">
+  <div class="modal" style="max-width:440px">
+    <h2 id="mc-titulo">🔑 Cambiar mi contraseña</h2>
+    <div class="modal-sub" id="mc-sub">Mínimo 8 caracteres</div>
+    <div class="field" id="mc-actual-campo">
+      <label>Contraseña actual</label>
+      <input type="password" id="mc-actual" autocomplete="current-password">
+    </div>
+    <div class="field">
+      <label>Contraseña nueva</label>
+      <input type="password" id="mc-nueva" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Repetí la contraseña nueva</label>
+      <input type="password" id="mc-repetir" autocomplete="new-password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="mc-cancelar" onclick="cerrarCambiarClave()">Cancelar</button>
+      <button class="btn" id="mc-guardar" onclick="guardarMiClave()">✓ Cambiar contraseña</button>
     </div>
   </div>
 </div>
@@ -1388,6 +1610,11 @@
     </div>
     <datalist id="lista-cat-eq"></datalist>
     <div class="field"><label>Ubicación a bordo</label><input type="text" id="eq-ubicacion" placeholder="Sala de máquinas, Pañol..."></div>
+    <div class="field">
+      <label>Toma las horas de</label>
+      <select id="eq-horas-de"></select>
+      <div style="font-size:12px;color:var(--texto-suave);margin-top:4px">Para un equipo sin horómetro propio (por ejemplo, una caja reductora): recibe las mismas horas que el equipo elegido y no se carga aparte en Horas.</div>
+    </div>
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Fabricante</h3>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1835,8 +2062,8 @@
 
 <script>
 // ============ CONFIGURACIÓN SUPABASE ============
-const SUPABASE_URL = 'https://zfoetyauhauztkkltjaz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_v46DhQgi48QpamiqYzMfwQ_7wrKKLc0';
+const SUPABASE_URL = 'https://ncughlkgdgigwkggnxri.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_PLXGwtiKpWiKjfLCfUv21Q_uLGtZR5q';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============ SEMÁFORO DE TAREAS ============
@@ -1855,7 +2082,11 @@ let lecturas = [];
 let repuestos = [];
 let herramientas = [];
 let tareaRepuestos = [];
-let buque = null;          // datos del barco (1 fila)
+let buque = null;          // ficha del barco elegido (fila de mant_buque)
+let usuarioId = null;      // auth.uid() de la sesión
+let usuarioEmail = null;   // email de la sesión (para volver a entrar solo después de cambiar la contraseña)
+let barcosDisponibles = []; // [{ id, nombre, empresa_id, rol }]: barcos que el usuario puede ver y su rol en cada uno
+let barcoActual = null;    // barco elegido: todo se lee filtrado por él y todo lo nuevo se guarda con su barco_id
 let equipos = [];          // fichas de equipos
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
 let defActual = null;      // deficiencia en edición o cierre
@@ -1894,6 +2125,12 @@ function toast(msg, error = false) {
   t.textContent = msg;
   t.className = 'toast show' + (error ? ' error' : '');
   setTimeout(() => t.className = 'toast', 2500);
+}
+// Texto para mostrar un error de Supabase; los rechazos por permisos (RLS o triggers de control) salen en criollo
+function textoError(err) {
+  const msg = (err && err.message) || String(err || '');
+  if ((err && err.code === '42501') || /row-level security|permission denied/i.test(msg)) return 'No tenés permiso para esto';
+  return 'Error: ' + msg;
 }
 function diasEntre(fechaStr) {
   if (!fechaStr) return null;
@@ -2027,7 +2264,108 @@ async function traerTodo(armarConsulta) {
   }
 }
 
+// ============ BARCOS Y ROLES ============
+// mant_accesos: admin_empresa vale para todos los barcos de su empresa; jefe/operador/lectura, para un barco.
+const NIVEL_ROL = { lectura: 1, operador: 2, jefe: 3, admin_empresa: 4 };
+const NOMBRE_ROL = { lectura: 'Lectura', operador: 'Operador', jefe: 'Jefe', admin_empresa: 'Admin' };
+
+function nivelActual() { return barcoActual ? NIVEL_ROL[barcoActual.rol] : 0; }
+function puedeRegistrar() { return nivelActual() >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
+function puedeEditar() { return nivelActual() >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
+function puedeAdministrar() { return nivelActual() >= NIVEL_ROL.admin_empresa; }  // barcos y usuarios de la empresa
+
+// Lee los accesos del usuario y los barcos que puede ver; elige el último usado. false si no tiene ninguno.
+async function cargarBarcos() {
+  const [{ data: acc, error: e1 }, { data: bqs, error: e2 }] = await Promise.all([
+    sb.from('mant_accesos').select('empresa_id, barco_id, rol').eq('user_id', usuarioId),
+    sb.from('mant_buque').select('id, nombre, empresa_id').order('nombre').order('id')
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  barcosDisponibles = (bqs || []).map(b => {
+    const roles = (acc || [])
+      .filter(a => a.barco_id === b.id || (a.rol === 'admin_empresa' && a.empresa_id === b.empresa_id))
+      .map(a => a.rol);
+    const rol = roles.sort((x, y) => NIVEL_ROL[y] - NIVEL_ROL[x])[0];
+    return rol ? { ...b, rol } : null;
+  }).filter(Boolean);
+
+  let guardado = null;
+  try { guardado = Number(localStorage.getItem('barco')); } catch (e) {}
+  barcoActual = barcosDisponibles.find(b => b.id === guardado) || barcosDisponibles[0] || null;
+
+  const hay = !!barcoActual;
+  document.getElementById('sin-barcos').style.display = hay ? 'none' : '';
+  document.querySelector('nav.tabs').style.display = hay ? '' : 'none';
+  document.querySelector('main').style.display = hay ? '' : 'none';
+  renderEncabezado();
+  return hay;
+}
+
+function renderEncabezado() {
+  const cont = document.getElementById('header-barco');
+  document.body.classList.toggle('puede-registrar', puedeRegistrar());
+  document.body.classList.toggle('puede-editar', puedeEditar());
+  document.body.classList.toggle('puede-administrar', puedeAdministrar());
+  // Si estaba en Administración y en este barco no es admin, vuelve al inicio
+  const tabActiva = document.querySelector('.tab.active');
+  if (barcoActual && !puedeAdministrar() && tabActiva && SECCION_DE_TAB[tabActiva.dataset.tab] === 'admin') cambiarTab('dashboard');
+  if (!barcoActual) {
+    cont.textContent = 'Sin barco asignado';
+    document.getElementById('header-rol').textContent = '';
+    document.title = 'Plan de Mantenimiento';
+    return;
+  }
+  if (barcosDisponibles.length > 1) {
+    cont.innerHTML = `<select id="sel-barco" class="sel-barco" aria-label="Barco" onchange="cambiarBarco(this.value)">` +
+      barcosDisponibles.map(b => `<option value="${b.id}"${b.id === barcoActual.id ? ' selected' : ''}>${escape(b.nombre)}</option>`).join('') +
+      `</select>`;
+  } else {
+    cont.textContent = barcoActual.nombre;
+  }
+  document.getElementById('header-rol').textContent = NOMBRE_ROL[barcoActual.rol];
+  document.title = `${barcoActual.nombre} · Mantenimientos`;
+}
+
+async function cambiarBarco(id) {
+  const b = barcosDisponibles.find(x => x.id === Number(id));
+  if (!b || b === barcoActual) return;
+  barcoActual = b;
+  try { localStorage.setItem('barco', String(b.id)); } catch (e) {}
+  // Nada de lo abierto pertenece al barco nuevo
+  document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
+  tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null;
+  if (equipoActualFicha) volverAEquipos();
+  renderEncabezado();
+  await cargarTodo();
+}
+
+// Agrega el barco elegido a lo que se guarda nuevo (uno o varios registros)
+function conBarco(datos) {
+  return Array.isArray(datos)
+    ? datos.map(d => ({ ...d, barco_id: barcoActual.id }))
+    : { ...datos, barco_id: barcoActual.id };
+}
+
+// Texto apto para nombres de archivo: sin tildes, ñ, signos ni espacios ("B/M Santa Lucía" -> "BM_Santa_Lucia")
+function textoArchivo(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9\s_-]/g, '').trim().replace(/[\s_]+/g, '_');
+}
+// "busqueda-<texto>" para el nombre del archivo, cortado a 30 caracteres; '' si no hay búsqueda
+function busquedaArchivo(buscar) {
+  const b = textoArchivo(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
+  return b ? 'busqueda-' + b : '';
+}
+// Nombre del barco para los archivos que se descargan (Stock_BM_Santa_Lucia_2026-10-29.xlsx)
+function nombreBarcoArchivo() {
+  return textoArchivo(barcoActual ? barcoActual.nombre : '') || 'Barco';
+}
+
 async function cargarTodo() {
+  if (!barcoActual) return;
+  const B = barcoActual.id;
   try {
     const [
       {data: tt, error: e1},
@@ -2043,20 +2381,22 @@ async function cargarTodo() {
       {data: ch, error: e11},
       {data: tp, error: e12}
     ] = await Promise.all([
-      // Todas las tareas (también las dadas de baja); abajo se separan las activas
-      traerTodo(() => sb.from('mant_tareas').select('*').order('id')),
-      traerTodo(() => sb.from('mant_historial').select('*').order('fecha_realizado', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_repuestos').select('*').order('nombre').order('id')),
-      traerTodo(() => sb.from('mant_tarea_repuestos').select('*').order('id')),
-      traerTodo(() => sb.from('mant_herramientas').select('*').order('nombre').order('id')),
-      sb.from('mant_buque').select('*').limit(1),
-      traerTodo(() => sb.from('mant_equipos').select('*').eq('activo', true).order('nombre').order('id')),
-      traerTodo(() => sb.from('mant_lecturas_horas').select('*').order('fecha', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').order('anio').order('numero')),
-      traerTodo(() => sb.from('mant_certificados').select('*').eq('activo', true).order('fecha_vencimiento').order('id')),
-      traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_tripulantes').select('*').order('nombre').order('id'))
+      // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
+      traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
+      traerTodo(() => sb.from('mant_historial').select('*').eq('barco_id', B).order('fecha_realizado', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_repuestos').select('*').eq('barco_id', B).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_tarea_repuestos').select('*').eq('barco_id', B).order('id')),
+      traerTodo(() => sb.from('mant_herramientas').select('*').eq('barco_id', B).order('nombre').order('id')),
+      sb.from('mant_buque').select('*').eq('id', B),
+      traerTodo(() => sb.from('mant_equipos').select('*').eq('barco_id', B).eq('activo', true).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_lecturas_horas').select('*').eq('barco_id', B).order('fecha', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B).order('anio').order('numero').order('id')),
+      traerTodo(() => sb.from('mant_certificados').select('*').eq('barco_id', B).eq('activo', true).order('fecha_vencimiento').order('id')),
+      traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').eq('barco_id', B).order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_tripulantes').select('*').eq('barco_id', B).order('nombre').order('id'))
     ]);
+    // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
+    if (!barcoActual || barcoActual.id !== B) return;
     if (e1) throw e1;
     if (e2) throw e2;
     if (e3) throw e3;
@@ -2076,6 +2416,11 @@ async function cargarTodo() {
     tareaRepuestos = tr || [];
     herramientas = he || [];
     buque = (bq && bq[0]) || null;
+    // El nombre del encabezado sale de la ficha (puede haber cambiado al editarla)
+    if (buque && buque.nombre !== barcoActual.nombre) {
+      barcoActual.nombre = buque.nombre;
+      renderEncabezado();
+    }
     equipos = eq || [];
     lecturas = lh || [];
     deficiencias = df || [];
@@ -2086,13 +2431,15 @@ async function cargarTodo() {
     certificadosBaja = (ce || []).filter(c => c.tripulante_id && !tripActivos.has(c.tripulante_id));
     certHistorial = ch || [];
     renderTodo();
+    await cargarUsuariosEmpresa();
   } catch (err) {
     console.error(err);
-    toast('Error cargando datos: ' + err.message, true);
+    toast('Error cargando datos: ' + textoError(err), true);
   }
 }
 
 function renderTodo() {
+  renderAdminBarcos();
   llenarFiltros();
   renderDashboard();
   renderLista();
@@ -2312,7 +2659,7 @@ function htmlBotonPostergar(tipo, item, enAlerta) {
     ? `<div class="meta" style="margin-top:6px">${activa ? '⏸ Postergada' : 'Postergación vencida'} hasta ${fmtFecha(item.postergada_hasta)} · ${escape(item.motivo_postergacion)}</div>`
     : '';
   return `
-    <button type="button" class="btn btn-sec btn-pequeno" onclick="abrirModalPost('${tipo}', ${item.id})">
+    <button type="button" class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalPost('${tipo}', ${item.id})">
       ⏸ ${item.postergada_hasta ? 'Editar postergación' : 'Postergar'}
     </button>${info}`;
 }
@@ -2362,7 +2709,7 @@ async function guardarPost() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2376,7 +2723,7 @@ async function quitarPost() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2437,7 +2784,7 @@ function renderTaskCard(t) {
         <div class="unidad">${est.unidad}</div>
         ${est.otro ? `<div class="otro">${est.otro.mostrar} ${est.otro.unidad}</div>` : ''}
       </div>
-      <button class="btn" onclick="abrirModal(${t.id})">✓ Registrar</button>
+      <button class="btn solo-operador" onclick="abrirModal(${t.id})">✓ Registrar</button>
     </div>`;
 }
 
@@ -2498,7 +2845,7 @@ function renderTaskCardBaja(t) {
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · ${nHist} registro${nHist === 1 ? '' : 's'} en el historial</div>
       </div>
       <div class="proxima-box"></div>
-      <button class="btn btn-sec" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
+      <button class="btn btn-sec solo-jefe" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
     </div>`;
 }
 
@@ -2559,7 +2906,7 @@ async function bajaOBorrarTarea() {
     if (equipoActualFicha) renderFichaEquipo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2575,7 +2922,7 @@ async function reactivarTarea(id) {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2613,20 +2960,20 @@ async function guardarMant() {
   try {
     const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tareaActual.id);
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_historial').insert({
+    const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
       tarea_id: tareaActual.id,
       fecha_realizado: fecha,
       hrs_equipo: isNaN(hrs) ? null : hrs,
       realizado_por: quien || null,
       notas: notasConTraza(notas, tareaActual)
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Mantenimiento registrado');
     cerrarModal();
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2645,7 +2992,7 @@ async function guardarSoloTipo() {
     toast('✓ Tipo de trabajo actualizado');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2818,22 +3165,22 @@ async function guardarTarea() {
   if (fechaUlt) data.fecha_ult = fechaUlt;
 
   try {
-    const { data: nueva, error: e1 } = await sb.from('mant_tareas').insert(data).select().single();
+    const { data: nueva, error: e1 } = await sb.from('mant_tareas').insert(conBarco(data)).select().single();
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_historial').insert({
+    const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
       tarea_id: nueva.id,
       fecha_realizado: fechaUlt || new Date().toISOString().split('T')[0],
       hrs_equipo: hrsActual,
       realizado_por: quien,
       notas: notas || 'Tarea creada y registrada como realizada'
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Tarea creada y registrada');
     cerrarModalTarea();
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2881,7 +3228,7 @@ async function guardarEdicionTarea() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -2889,23 +3236,40 @@ async function guardarEdicionTarea() {
   document.getElementById(id).addEventListener('input', toggleTipoTarea));
 
 // ============ CARGA MENSUAL DE HORAS ============
-// Cada caja reductora tiene las mismas horas que su motor principal:
-// se cargan solas cuando se cargan las horas del motor.
-const CAJAS_POR_MP = {
-  'Motor Principal Babor': 'Caja Reductora Babor',
-  'Motor Principal Estribor': 'Caja Reductora Estribor'
-};
-const EQUIPOS_OCULTOS_CARGA = new Set(Object.values(CAJAS_POR_MP));
+// Un equipo puede tomar las horas de otro del mismo barco ("Toma las horas de", mant_equipos.horas_de_id),
+// p. ej. cada caja reductora las de su motor principal: no se carga a mano y recibe las mismas horas
+// cuando se cargan las del equipo de origen (también en cadena). La base impide círculos.
+
+// Nombres de los equipos que reciben las horas del equipo `nombre` (directa o indirectamente)
+function equiposQueTomanHorasDe(nombre) {
+  const origen = equipos.find(e => e.nombre === nombre);
+  if (!origen) return [];
+  const res = [];
+  const vistos = new Set([origen.id]);
+  let frente = [origen.id];
+  while (frente.length) {
+    const hijos = equipos.filter(e => frente.includes(e.horas_de_id) && !vistos.has(e.id));
+    hijos.forEach(h => { vistos.add(h.id); res.push(h.nombre); });
+    frente = hijos.map(h => h.id);
+  }
+  return res;
+}
+
+// Equipos que no se cargan a mano (toman las horas de otro equipo activo)
+function equiposOcultosCarga() {
+  return new Set(equipos.filter(e => e.horas_de_id && equipos.some(o => o.id === e.horas_de_id)).map(e => e.nombre));
+}
 
 function renderCarga() {
+  const ocultos = equiposOcultosCarga();
   const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))]
-    .filter(eq => !EQUIPOS_OCULTOS_CARGA.has(eq))
+    .filter(eq => !ocultos.has(eq))
     .sort();
   const div = document.getElementById('carga-equipos');
   div.innerHTML = equipos.map(eq => {
     const hrs_actuales = Math.max(...tareas.filter(t => t.equipo === eq).map(t => Number(t.hrs_totales || 0)));
-    const caja = CAJAS_POR_MP[eq];
-    const nota = caja ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(caja)}</div>` : '';
+    const reciben = equiposQueTomanHorasDe(eq);
+    const nota = reciben.length ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(reciben.join(', '))}</div>` : '';
     return `
       <div class="equipo-row">
         <div>
@@ -3060,13 +3424,13 @@ async function aplicarChequeos() {
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', id);
       if (e1) throw e1;
 
-      const { error: e2 } = await sb.from('mant_historial').insert({
+      const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: id,
         fecha_realizado: fecha,
         hrs_equipo: null,
         realizado_por: quien,
         notas: notasConTraza('Registrado desde chequeos por fecha (lote)', t)
-      });
+      }));
       if (e2) throw e2;
       aplicadas++;
     }
@@ -3075,7 +3439,7 @@ async function aplicarChequeos() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3100,10 +3464,9 @@ async function guardarCarga() {
     const nuevoTotal = actual + mes;
     horasNuevas[eq] = nuevoTotal;
     lecturasNuevas.push({ equipo: eq, fecha, horas_mes: mes, hrs_total: nuevoTotal });
-    const caja = CAJAS_POR_MP[eq];
-    if (caja) {
-      horasNuevas[caja] = nuevoTotal;
-      lecturasNuevas.push({ equipo: caja, fecha, horas_mes: mes, hrs_total: nuevoTotal });
+    for (const recibe of equiposQueTomanHorasDe(eq)) {
+      horasNuevas[recibe] = nuevoTotal;
+      lecturasNuevas.push({ equipo: recibe, fecha, horas_mes: mes, hrs_total: nuevoTotal });
     }
   }
 
@@ -3141,7 +3504,7 @@ async function guardarCarga() {
 
 async function guardarLecturas(lecturasNuevas) {
   if (!lecturasNuevas || !lecturasNuevas.length) return;
-  const { error } = await sb.from('mant_lecturas_horas').insert(lecturasNuevas);
+  const { error } = await sb.from('mant_lecturas_horas').insert(conBarco(lecturasNuevas));
   if (error) throw error;
 }
 
@@ -3192,7 +3555,7 @@ async function aplicarSoloHoras() {
   const { horasNuevas, lecturasNuevas } = cargaPendiente;
   try {
     for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
       if (error) throw error;
     }
     await guardarLecturas(lecturasNuevas);
@@ -3202,7 +3565,7 @@ async function aplicarSoloHoras() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3222,7 +3585,7 @@ async function aplicarConfirm() {
   try {
     // 2) Actualizar horas totales de todos los equipos
     for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('equipo', equipo);
+      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
       if (error) throw error;
     }
     await guardarLecturas(lecturasNuevas);
@@ -3247,13 +3610,13 @@ async function aplicarConfirm() {
       const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tr.id);
       if (e1) throw e1;
 
-      const { error: e2 } = await sb.from('mant_historial').insert({
+      const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: tr.id,
         fecha_realizado: fechaHoy,
         hrs_equipo: tr.hrs,
         realizado_por: quien,
         notas: notasConTraza('Registrado desde carga mensual de horas', tarea)
-      });
+      }));
       if (e2) throw e2;
     }
 
@@ -3269,7 +3632,7 @@ async function aplicarConfirm() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3323,7 +3686,7 @@ function renderHistorial() {
           ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
         </div>
         <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-        <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }).join('');
 }
@@ -3342,14 +3705,10 @@ function exportarHistExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), 'Historial');
-  // Historial_Motor_Principal_Babor_2026-10-23.xlsx / Historial_Todos_busqueda-inyectores_2026-10-23.xlsx
+  // Historial_BM_Santa_Lucia_Motor_Principal_Babor_2026-10-23.xlsx / Historial_BM_Santa_Lucia_Todos_busqueda-inyectores_2026-10-23.xlsx
   const { buscar, eq } = filtrosHist();
-  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const partes = ['Historial', eq ? limpiar(eq) : 'Todos'];
-  const busqueda = limpiar(buscar).slice(0, 30).replace(/_+$/, '');  // sin "_" colgando si el corte cae en un espacio
-  if (busqueda) partes.push('busqueda-' + busqueda);
-  partes.push(hoyLocalISO());
-  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  const partes = ['Historial', nombreBarcoArchivo(), eq ? textoArchivo(eq) : 'Todos', busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -3515,7 +3874,7 @@ async function guardarRegistroHist() {
     await despuesDeCambioHist(recalculada ? '✓ Registro corregido y tarea recalculada' : '✓ Registro corregido');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3546,7 +3905,7 @@ async function borrarRegistroHist() {
     await despuesDeCambioHist(recalculada ? '✓ Registro borrado y tarea recalculada' : '✓ Registro borrado');
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3598,19 +3957,8 @@ function renderStock() {
       </div>`;
   }
 
-  // Lista filtrada
-  const buscar = (document.getElementById('stock-buscador').value || '').toLowerCase();
-  const cat = document.getElementById('stock-filtro-cat').value;
-  const est = document.getElementById('stock-filtro-estado').value;
-
-  let filtrados = repuestos.filter(r => {
-    const e = estadoRepuesto(r);
-    if (est === 'BAJO' && e === 'OK') return false;
-    if (est === 'OK' && e !== 'OK') return false;
-    if (cat && r.categoria !== cat) return false;
-    if (buscar && !((r.nombre || '').toLowerCase().includes(buscar) || (r.codigo || '').toLowerCase().includes(buscar) || (r.categoria || '').toLowerCase().includes(buscar))) return false;
-    return true;
-  });
+  // Lista filtrada (la misma que exporta el Excel)
+  let filtrados = stockFiltrado();
 
   stockFiltradosActuales = filtrados;
 
@@ -3777,7 +4125,7 @@ async function guardarMinimosEditados() {
     const exitosos = resultados.length - fallidos.length;
     if (fallidos.length) {
       console.error(fallidos.map(f => f.error));
-      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${fallidos[0].error.message}`, true);
+      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${textoError(fallidos[0].error)}`, true);
     } else {
       toast(`✓ ${exitosos} mínimo${exitosos > 1 ? 's' : ''} actualizado${exitosos > 1 ? 's' : ''}`);
       modoEditarMinimos = false;
@@ -3788,7 +4136,7 @@ async function guardarMinimosEditados() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3806,8 +4154,8 @@ function renderRepuestoCard(r) {
         <div class="num">${r.cantidad}</div>
         <div class="min">de ${r.minimo} mín · ${r.unidad}</div>
       </div>
-      <button class="btn btn-pequeno" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
-      <button class="btn btn-pequeno btn-sec" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
+      <button class="btn btn-pequeno solo-operador" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
+      <button class="btn btn-pequeno btn-sec solo-jefe" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
     </div>`;
 }
 
@@ -3852,7 +4200,7 @@ async function guardarRepuesto() {
       if (error) throw error;
       toast('✓ Repuesto actualizado');
     } else {
-      const { error } = await sb.from('mant_repuestos').insert(data);
+      const { error } = await sb.from('mant_repuestos').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Repuesto agregado');
     }
@@ -3860,7 +4208,7 @@ async function guardarRepuesto() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3874,7 +4222,7 @@ async function borrarRepuesto() {
     cerrarModalRep();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -3908,24 +4256,48 @@ async function guardarMovimiento() {
   try {
     const { error: e1 } = await sb.from('mant_repuestos').update({ cantidad: nuevoStock }).eq('id', movRepuestoActual.id);
     if (e1) throw e1;
-    const { error: e2 } = await sb.from('mant_movimientos').insert({
+    const { error: e2 } = await sb.from('mant_movimientos').insert(conBarco({
       repuesto_id: movRepuestoActual.id,
       tipo,
       cantidad: cant,
       motivo: motivo || null
-    });
+    }));
     if (e2) throw e2;
     toast('✓ Stock actualizado');
     cerrarModalMov();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
+function filtrosStock() {
+  return {
+    buscar: (document.getElementById('stock-buscador').value || '').trim(),
+    cat: document.getElementById('stock-filtro-cat').value,
+    est: document.getElementById('stock-filtro-estado').value,
+  };
+}
+// Repuestos que pasan los filtros de la pestaña Stock (pantalla y Excel)
+function stockFiltrado() {
+  const { cat, est } = filtrosStock();
+  const buscar = filtrosStock().buscar.toLowerCase();
+  return repuestos.filter(r => {
+    const e = estadoRepuesto(r);
+    if (est === 'BAJO' && e === 'OK') return false;
+    if (est === 'OK' && e !== 'OK') return false;
+    if (cat && r.categoria !== cat) return false;
+    if (buscar && !((r.nombre || '').toLowerCase().includes(buscar) || (r.codigo || '').toLowerCase().includes(buscar) || (r.categoria || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+}
+
+// Exporta lo que se ve en pantalla: Stock_BM_Santa_Lucia_Filtros_bajo-stock_2026-10-29.xlsx
 function exportarStockExcel() {
   if (!repuestos.length) { toast('No hay repuestos para exportar'); return; }
-  const data = repuestos.map(r => ({
+  const filtrados = stockFiltrado();
+  if (!filtrados.length) { toast('No hay repuestos con esos filtros para exportar'); return; }
+  const data = filtrados.map(r => ({
     Nombre: r.nombre,
     Código: r.codigo,
     Categoría: r.categoria,
@@ -3938,7 +4310,10 @@ function exportarStockExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Stock');
-  XLSX.writeFile(wb, `Stock_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const { buscar, cat, est } = filtrosStock();
+  const partes = ['Stock', nombreBarcoArchivo(), cat && textoArchivo(cat),
+    { BAJO: 'bajo-stock', OK: 'stock-ok' }[est], busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -3952,16 +4327,7 @@ function renderHerramientas() {
   document.getElementById('lista-ubic-herr').innerHTML = ubics.map(u => `<option value="${escape(u)}">`).join('');
   document.getElementById('lista-marcas-herr').innerHTML = marcas.map(m => `<option value="${escape(m)}">`).join('');
 
-  const buscar = (document.getElementById('herr-buscador').value || '').toLowerCase();
-  const ub = document.getElementById('herr-filtro-ubic').value;
-  const mc = document.getElementById('herr-filtro-marca').value;
-
-  let filtradas = herramientas.filter(h => {
-    if (ub && h.ubicacion !== ub) return false;
-    if (mc && h.marca !== mc) return false;
-    if (buscar && !((h.nombre || '').toLowerCase().includes(buscar) || (h.marca || '').toLowerCase().includes(buscar) || (h.ubicacion || '').toLowerCase().includes(buscar))) return false;
-    return true;
-  });
+  let filtradas = herrFiltradas();
 
   // Agrupar por ubicación
   const grupos = {};
@@ -3994,7 +4360,7 @@ function renderHerramientas() {
           <div class="num">${h.cantidad}</div>
           <div class="min">unidad${h.cantidad != 1 ? 'es' : ''}</div>
         </div>
-        <button class="btn btn-pequeno btn-sec" onclick="abrirModalHerr(${h.id})">✎</button>
+        <button class="btn btn-pequeno btn-sec solo-jefe" onclick="abrirModalHerr(${h.id})">✎</button>
       </div>`).join('') + '</div>';
   }
   div.innerHTML = html;
@@ -4033,14 +4399,14 @@ async function guardarHerr() {
       if (error) throw error;
       toast('✓ Herramienta actualizada');
     } else {
-      const { error } = await sb.from('mant_herramientas').insert(data);
+      const { error } = await sb.from('mant_herramientas').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Herramienta agregada');
     }
     cerrarModalHerr();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4054,13 +4420,35 @@ async function borrarHerr() {
     cerrarModalHerr();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
+function filtrosHerr() {
+  return {
+    buscar: (document.getElementById('herr-buscador').value || '').trim(),
+    ub: document.getElementById('herr-filtro-ubic').value,
+    mc: document.getElementById('herr-filtro-marca').value,
+  };
+}
+// Herramientas que pasan los filtros de la pestaña (pantalla y Excel)
+function herrFiltradas() {
+  const { ub, mc } = filtrosHerr();
+  const buscar = filtrosHerr().buscar.toLowerCase();
+  return herramientas.filter(h => {
+    if (ub && h.ubicacion !== ub) return false;
+    if (mc && h.marca !== mc) return false;
+    if (buscar && !((h.nombre || '').toLowerCase().includes(buscar) || (h.marca || '').toLowerCase().includes(buscar) || (h.ubicacion || '').toLowerCase().includes(buscar))) return false;
+    return true;
+  });
+}
+
+// Exporta lo que se ve en pantalla: Herramientas_BM_Santa_Lucia_Panol_Bahco_2026-10-29.xlsx
 function exportarHerrExcel() {
   if (!herramientas.length) { toast('No hay herramientas para exportar'); return; }
-  const data = herramientas.map(h => ({
+  const filtradas = herrFiltradas();
+  if (!filtradas.length) { toast('No hay herramientas con esos filtros para exportar'); return; }
+  const data = filtradas.map(h => ({
     Nombre: h.nombre,
     Marca: h.marca,
     Cantidad: h.cantidad,
@@ -4069,7 +4457,9 @@ function exportarHerrExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Herramientas');
-  XLSX.writeFile(wb, `Herramientas_Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const { buscar, ub, mc } = filtrosHerr();
+  const partes = ['Herramientas', nombreBarcoArchivo(), ub && textoArchivo(ub), mc && textoArchivo(mc), busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -4103,25 +4493,24 @@ function irADeficiencias() {
   renderDeficiencias();
 }
 
-function renderDeficiencias() {
-  const abiertas = deficiencias.filter(d => d.estado === 'abierta').length;
-  const badge = document.getElementById('badge-deficiencias');
-  badge.textContent = abiertas;
-  badge.style.display = abiertas > 0 ? 'inline-block' : 'none';
-
-  const buscar = (document.getElementById('def-buscador').value || '').toLowerCase();
-  const est = document.getElementById('def-filtro-estado').value;
-
-  const filtradas = deficiencias.filter(d => {
+function filtrosDef() {
+  return {
+    buscar: (document.getElementById('def-buscador').value || '').trim(),
+    est: document.getElementById('def-filtro-estado').value,
+  };
+}
+// Deficiencias que pasan los filtros de la pestaña, en el orden de la pantalla (pantalla y Excel):
+// abiertas primero (críticas arriba, luego por fecha límite); cerradas de la más reciente a la más vieja
+function defFiltradas() {
+  const { est } = filtrosDef();
+  const buscar = filtrosDef().buscar.toLowerCase();
+  return deficiencias.filter(d => {
     if (est && d.estado !== est) return false;
     if (buscar && !(numeroDef(d).includes(buscar) ||
                     nombreEquipoDef(d).toLowerCase().includes(buscar) ||
                     (d.descripcion || '').toLowerCase().includes(buscar))) return false;
     return true;
-  });
-
-  // Abiertas primero (críticas arriba, luego por fecha límite); cerradas de la más reciente a la más vieja
-  filtradas.sort((a, b) => {
+  }).sort((a, b) => {
     if (a.estado !== b.estado) return a.estado === 'abierta' ? -1 : 1;
     if (a.estado === 'abierta') {
       if (a.critica !== b.critica) return a.critica ? -1 : 1;
@@ -4129,6 +4518,15 @@ function renderDeficiencias() {
     }
     return (b.fecha_cierre || '').localeCompare(a.fecha_cierre || '') || b.id - a.id;
   });
+}
+
+function renderDeficiencias() {
+  const abiertas = deficiencias.filter(d => d.estado === 'abierta').length;
+  const badge = document.getElementById('badge-deficiencias');
+  badge.textContent = abiertas;
+  badge.style.display = abiertas > 0 ? 'inline-block' : 'none';
+
+  const filtradas = defFiltradas();
 
   const div = document.getElementById('def-lista');
   if (!filtradas.length) {
@@ -4162,8 +4560,8 @@ function renderDefCard(d) {
     ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
   const acciones = abierta
     ? `<div class="def-acciones">
-         <button class="btn" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
-         <button class="btn btn-sec btn-pequeno" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
+         <button class="btn solo-operador" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
+         <button class="btn btn-sec btn-pequeno solo-operador" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
        </div>`
     : '<div></div>';
 
@@ -4267,7 +4665,7 @@ async function guardarDef() {
     } else {
       data.fecha_detectada = fecha;
       // anio y numero los asigna la base (trigger mant_deficiencias_numerar)
-      const { data: nueva, error } = await sb.from('mant_deficiencias').insert(data).select().single();
+      const { data: nueva, error } = await sb.from('mant_deficiencias').insert(conBarco(data)).select().single();
       if (error) throw error;
       toast(`✓ Deficiencia ${numeroDef(nueva)} registrada`);
     }
@@ -4275,7 +4673,7 @@ async function guardarDef() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4311,13 +4709,16 @@ async function guardarCierreDef() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
+// Exporta lo que se ve en pantalla: Deficiencias_BM_Santa_Lucia_Abiertas_2026-10-29.xlsx
 function exportarDefExcel() {
   if (!deficiencias.length) { toast('No hay deficiencias para exportar'); return; }
-  const data = deficiencias.map(d => ({
+  const filtradas = defFiltradas();
+  if (!filtradas.length) { toast('No hay deficiencias con esos filtros para exportar'); return; }
+  const data = filtradas.map(d => ({
     'N°': numeroDef(d),
     Equipo: nombreEquipoDef(d),
     Descripción: d.descripcion,
@@ -4332,7 +4733,10 @@ function exportarDefExcel() {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Deficiencias');
-  XLSX.writeFile(wb, `Deficiencias_Santa_Lucia_${hoyLocalISO()}.xlsx`);
+  const { buscar, est } = filtrosDef();
+  const partes = ['Deficiencias', nombreBarcoArchivo(), { abierta: 'Abiertas', cerrada: 'Cerradas' }[est] || 'Todas',
+    busquedaArchivo(buscar), hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
@@ -4344,11 +4748,13 @@ const CATEGORIA_TRIP = 'Tripulación';
 const DIAS_AVISO_CERT = 30;
 // Sugerencias al agregar un documento a un tripulante (se puede escribir otro)
 const DOCUMENTOS_TRIP = ['Libreta de embarque', 'Carné de salud', 'Título/Patente', 'Curso de seguridad básica', 'Pasaporte'];
-const ORDEN_ESTADO_CERT = { VENCIDO: 0, PROXIMO: 1, OK: 2 };
+const ORDEN_ESTADO_CERT = { SIN_FECHA: 0, VENCIDO: 0, PROXIMO: 1, OK: 2 };
 
+// SIN_FECHA si todavía no tiene vencimiento (p. ej. copiado al crear un barco),
 // VENCIDO si la fecha ya pasó (el día del vencimiento todavía es vigente),
 // PROXIMO si faltan dias_aviso días o menos, OK en otro caso
 function estadoCert(c) {
+  if (!c.fecha_vencimiento) return 'SIN_FECHA';
   if (c.fecha_vencimiento < hoyLocalISO()) return 'VENCIDO';
   if (diasEntre(c.fecha_vencimiento) <= c.dias_aviso) return 'PROXIMO';
   return 'OK';
@@ -4438,7 +4844,8 @@ function certFiltrados() {
                      (t && (t.nombre.toLowerCase().includes(texto) || (t.cargo || '').toLowerCase().includes(texto))))) return false;
       return true;
     })
-    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento) || a.nombre.localeCompare(b.nombre));
+    // Los que no tienen vencimiento van primero
+    .sort((a, b) => (a.fecha_vencimiento || '').localeCompare(b.fecha_vencimiento || '') || a.nombre.localeCompare(b.nombre));
 }
 
 // Solapa Tripulación: un grupo por tripulante con sus documentos filtrados.
@@ -4505,7 +4912,7 @@ function renderGrupoTrip({ t, docs }) {
           <span class="badge-tipo">${escape(t.departamento)}</span>
           <span class="badge-baja">DADO DE BAJA</span>
           <div class="acciones">
-            <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+            <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
           </div>
         </div>
         <div class="trip-vacio">${n ? `${n} documento${n>1?'s':''} guardado${n>1?'s':''}: vuelve${n>1?'n':''} a aparecer al reactivarlo` : 'Sin documentos cargados'}</div>
@@ -4522,8 +4929,8 @@ function renderGrupoTrip({ t, docs }) {
         ${t.cargo ? `<span class="cargo">${escape(t.cargo)}</span>` : ''}
         <span class="badge-tipo">${escape(t.departamento)}</span>
         <div class="acciones">
-          <button class="btn btn-pequeno" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
-          <button class="btn btn-sec btn-pequeno" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+          <button class="btn btn-pequeno solo-jefe" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
+          <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
         </div>
       </div>
       ${cuerpo}
@@ -4532,12 +4939,13 @@ function renderGrupoTrip({ t, docs }) {
 
 function renderCertCard(c) {
   const est = estadoCert(c);
-  const cls = { VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
-  const icono = { VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
+  const cls = { SIN_FECHA: 'proximo', VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
+  const icono = { SIN_FECHA: '📅', VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
   const dias = diasEntre(c.fecha_vencimiento);
 
   let valor, unidad;
-  if (dias < 0) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencido`; }
+  if (est === 'SIN_FECHA') { valor = '—'; unidad = 'sin fecha'; }
+  else if (dias < 0) { valor = Math.abs(dias); unidad = `día${Math.abs(dias)!==1?'s':''} vencido`; }
   else if (dias === 0) { valor = 'Hoy'; unidad = 'vence'; }
   else { valor = dias; unidad = `día${dias!==1?'s':''} restantes`; }
 
@@ -4555,7 +4963,7 @@ function renderCertCard(c) {
       <div class="task-info">
         <div class="equipo">${escape(c.nombre)}</div>
         ${segundaLinea}
-        <div class="meta">Vence: ${fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
+        <div class="meta">${est === 'SIN_FECHA' ? '<strong style="color:var(--ambar)">📅 Falta cargar el vencimiento</strong>' : 'Vence: ' + fmtFecha(c.fecha_vencimiento)} · Aviso: ${c.dias_aviso} día${c.dias_aviso!==1?'s':''} antes${ultimaHtml}</div>
         ${htmlPostergacion(c)}
         ${obsHtml}
       </div>
@@ -4564,8 +4972,8 @@ function renderCertCard(c) {
         <div class="unidad">${unidad}</div>
       </div>
       <div class="def-acciones">
-        <button class="btn" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>
-        <button class="btn btn-sec btn-pequeno" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
+        ${est === 'SIN_FECHA' ? '' : `<button class="btn solo-jefe" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>`}
+        <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
       </div>
     </div>`;
 }
@@ -4602,7 +5010,7 @@ function abrirModalCert(id, tripulanteId) {
     document.getElementById('c-observaciones').value = certActual.observaciones || '';
     document.getElementById('c-btn-baja').style.display = '';
     document.getElementById('c-postergacion').innerHTML =
-      htmlBotonPostergar('cert', certActual, estadoCert(certActual) !== 'OK');
+      htmlBotonPostergar('cert', certActual, ['VENCIDO', 'PROXIMO'].includes(estadoCert(certActual)));
 
     const renov = renovacionesCert(certActual.id);
     document.getElementById('c-historial').innerHTML = renov.length
@@ -4668,7 +5076,7 @@ async function guardarCert() {
       if (error) throw error;
       toast(trip ? '✓ Documento actualizado' : '✓ Certificado actualizado');
     } else {
-      const { error } = await sb.from('mant_certificados').insert(data);
+      const { error } = await sb.from('mant_certificados').insert(conBarco(data));
       if (error) throw error;
       toast(trip ? `✓ Documento agregado a ${trip.nombre}` : '✓ Certificado agregado');
     }
@@ -4676,7 +5084,7 @@ async function guardarCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4692,7 +5100,7 @@ async function darDeBajaCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4728,7 +5136,7 @@ async function guardarTrip() {
       if (error) throw error;
       toast('✓ Tripulante actualizado');
     } else {
-      const { error } = await sb.from('mant_tripulantes').insert(data);
+      const { error } = await sb.from('mant_tripulantes').insert(conBarco(data));
       if (error) throw error;
       toast(`✓ ${nombre} agregado a la tripulación`);
     }
@@ -4736,7 +5144,7 @@ async function guardarTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4754,7 +5162,7 @@ async function darDeBajaTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4772,7 +5180,7 @@ async function reactivarTrip() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4817,7 +5225,7 @@ async function guardarRenovacionCert() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -4832,10 +5240,10 @@ function exportarCertExcel() {
                   : (trip ? 'No hay documentos de tripulación para exportar' : 'No hay certificados para exportar'));
     return;
   }
-  const nombreEstado = { VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
+  const nombreEstado = { SIN_FECHA: 'Falta cargar el vencimiento', VENCIDO: 'Vencido', PROXIMO: 'Por vencer', OK: 'Vigente' };
   const comunes = c => ({
-    Vencimiento: c.fecha_vencimiento,
-    'Días restantes': diasEntre(c.fecha_vencimiento),
+    Vencimiento: c.fecha_vencimiento || '',
+    'Días restantes': c.fecha_vencimiento ? diasEntre(c.fecha_vencimiento) : '',
     Estado: nombreEstado[estadoCert(c)],
     'Días de aviso': c.dias_aviso,
     'Última renovación': renovacionesCert(c.id)[0]?.fecha_renovacion || '',
@@ -4862,51 +5270,209 @@ function exportarCertExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja), trip ? 'Tripulación' : 'Certificados');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(renov.length ? renov : [{ Renovaciones: 'Sin renovaciones registradas' }]), 'Renovaciones');
   // El nombre indica la solapa y los filtros:
-  // Certificados_Santa_Lucia_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_Santa_Lucia_Tripulacion_Juan_Perez_2026-10-16.xlsx
+  // Certificados_BM_Santa_Lucia_Cubierta_Navegabilidad_2026-10-13.xlsx / Certificados_BM_Santa_Lucia_Tripulacion_Juan_Perez_2026-10-16.xlsx
   const { buscar, depto, cat, tripId } = filtrosCert();
-  const limpiar = s => s.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const partes = ['Certificados_Santa_Lucia'];
+  const partes = ['Certificados', nombreBarcoArchivo()];
   if (trip) partes.push('Tripulacion');
-  if (depto) partes.push(limpiar(depto));
-  if (cat) partes.push(limpiar(cat));
+  if (depto) partes.push(textoArchivo(depto));
+  if (cat) partes.push(textoArchivo(cat));
   const tSel = tripId && tripulantes.find(t => String(t.id) === tripId);
-  if (tSel) partes.push(limpiar(tSel.nombre));
-  const busqueda = limpiar(buscar).slice(0, 30);
-  if (busqueda) partes.push('busqueda-' + busqueda);
-  partes.push(hoyLocalISO());
-  XLSX.writeFile(wb, partes.join('_') + '.xlsx');
+  if (tSel) partes.push(textoArchivo(tSel.nombre));
+  partes.push(busquedaArchivo(buscar), hoyLocalISO());
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
 
 // ============ EXPORTAR EXCEL ============
-function exportarExcel() {
-  const data = tareas.map(t => {
-    const e = calcularEstado(t);
-    return {
-      Equipo: t.equipo,
-      Tarea: t.tarea,
-      Control: { hrs: 'Por horas', fecha: 'Por fecha', ambos: 'Lo que ocurra primero', ninguna: 'Sin control' }[t.unidad] || t.unidad,
-      Periodicidad: etiquetaPeriodicidad(t),
-      'Hrs totales': t.hrs_totales,
-      'Última fecha': t.fecha_ult,
-      'Próx. hrs': t.proxima_hrs,
-      'Próx. fecha': t.proxima_fecha,
-      'Falta': e.mostrar + ' ' + e.unidad + (e.otro ? ` · ${e.otro.mostrar} ${e.otro.unidad}` : ''),
-      Estado: e.estado,
-      Prioridad: t.prioridad,
-      'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
-      'Motivo postergación': estaPostergada(t) ? t.motivo_postergacion : '',
-      'Realizado por': t.realizado_por,
-      Observaciones: t.observaciones
-    };
+// Ventana "Exportar plan de mantenimiento": equipos (todos o algunos, por categoría), plan de tareas y/o
+// historial, historial completo o entre fechas, y todas las tareas o solo vencidas y próximas.
+// La última elección se recuerda en exportar-plan.
+const EXPORT_PLAN_DEFECTO = { equipos: 'todos', elegidos: [], plan: true, hist: true, tareas: 'todas', histRango: 'todo', desde: '', hasta: '' };
+
+function exportPlanGuardado() {
+  let guardado = {};
+  try { guardado = JSON.parse(localStorage.getItem('exportar-plan') || '{}') || {}; } catch (e) {}
+  return { ...EXPORT_PLAN_DEFECTO, ...guardado };
+}
+
+// Equipos del plan y del historial (también de tareas dadas de baja), agrupados por la categoría de su ficha
+function gruposEquiposExport() {
+  const nombres = [...new Set(tareasTodas.map(t => t.equipo))].sort((a, b) => a.localeCompare(b, 'es'));
+  const grupos = {};
+  nombres.forEach(n => {
+    const ficha = equipos.find(e => e.nombre === n);
+    const cat = (ficha && ficha.categoria) || 'Sin categoría';
+    (grupos[cat] = grupos[cat] || []).push(n);
   });
-  const ws = XLSX.utils.json_to_sheet(data);
+  return Object.keys(grupos)
+    .sort((a, b) => (a === 'Sin categoría') - (b === 'Sin categoría') || a.localeCompare(b, 'es'))
+    .map(cat => ({ cat, equipos: grupos[cat] }));
+}
+
+function abrirExportarPlan() {
+  const cfg = exportPlanGuardado();
+  const grupos = gruposEquiposExport();
+  const existentes = new Set(grupos.flatMap(g => g.equipos));
+  // Equipos recordados que no existen en este barco se descartan; si no queda ninguno, "Todos"
+  const elegidos = new Set((cfg.elegidos || []).filter(n => existentes.has(n)));
+  if (cfg.equipos === 'elegir' && !elegidos.size) cfg.equipos = 'todos';
+
+  document.getElementById('exp-lista-equipos').innerHTML = grupos.map((g, i) => `
+    <div class="exp-grupo">
+      <label class="exp-op"><input type="checkbox" class="exp-chk-grupo" data-grupo="${i}"> ${escape(g.cat)}</label>
+      <div class="exp-items">
+        ${g.equipos.map(n => `<label class="exp-op"><input type="checkbox" class="exp-chk-equipo" data-grupo="${i}" value="${escape(n)}"${elegidos.has(n) ? ' checked' : ''}> ${escape(n)}</label>`).join('')}
+      </div>
+    </div>`).join('') || '<div style="font-size:13px;color:var(--texto-suave);padding:6px 0">No hay equipos con tareas</div>';
+
+  document.querySelector(`input[name="exp-equipos"][value="${cfg.equipos === 'elegir' ? 'elegir' : 'todos'}"]`).checked = true;
+  document.getElementById('exp-plan').checked = !!cfg.plan;
+  document.getElementById('exp-hist').checked = !!cfg.hist;
+  document.querySelector(`input[name="exp-tareas"][value="${cfg.tareas === 'vencidas' ? 'vencidas' : 'todas'}"]`).checked = true;
+  document.querySelector(`input[name="exp-hist-rango"][value="${cfg.histRango === 'fechas' ? 'fechas' : 'todo'}"]`).checked = true;
+  document.getElementById('exp-desde').value = cfg.desde || '';
+  document.getElementById('exp-hasta').value = cfg.hasta || '';
+  actualizarExportPlan();
+  document.getElementById('modal-export-plan').classList.add('show');
+}
+
+function cerrarExportarPlan() {
+  document.getElementById('modal-export-plan').classList.remove('show');
+}
+
+// Lo elegido en la ventana
+function leerExportPlan() {
+  return {
+    equipos: document.querySelector('input[name="exp-equipos"]:checked').value,
+    elegidos: [...document.querySelectorAll('.exp-chk-equipo:checked')].map(c => c.value),
+    plan: document.getElementById('exp-plan').checked,
+    hist: document.getElementById('exp-hist').checked,
+    tareas: document.querySelector('input[name="exp-tareas"]:checked').value,
+    histRango: document.querySelector('input[name="exp-hist-rango"]:checked').value,
+    desde: document.getElementById('exp-desde').value,
+    hasta: document.getElementById('exp-hasta').value,
+  };
+}
+
+// Problema que impide exportar, o null
+function errorExportPlan(cfg) {
+  if (!cfg.plan && !cfg.hist) return 'Marcá Plan de tareas, Historial o los dos.';
+  if (cfg.equipos === 'elegir' && !cfg.elegidos.length) return 'Elegí al menos un equipo.';
+  if (cfg.hist && cfg.histRango === 'fechas') {
+    if (!cfg.desde && !cfg.hasta) return 'Poné al menos una fecha (desde o hasta).';
+    if (cfg.desde && cfg.hasta && cfg.desde > cfg.hasta) return 'La fecha "desde" es posterior a "hasta".';
+  }
+  return null;
+}
+
+// Tareas y registros del historial que entran según lo elegido
+function datosExportPlan(cfg) {
+  const sel = cfg.equipos === 'elegir' ? new Set(cfg.elegidos) : null;
+  const tareasSel = !cfg.plan ? [] : tareas.filter(t =>
+    (!sel || sel.has(t.equipo)) &&
+    (cfg.tareas !== 'vencidas' || ['VENCIDO', 'PROXIMO'].includes(calcularEstado(t).estado)));
+  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+  const fechas = cfg.histRango === 'fechas';
+  const histSel = !cfg.hist ? [] : historial.filter(h => {
+    const t = idMap[h.tarea_id];
+    if (sel && !(t && sel.has(t.equipo))) return false;
+    if (fechas && cfg.desde && h.fecha_realizado < cfg.desde) return false;
+    if (fechas && cfg.hasta && h.fecha_realizado > cfg.hasta) return false;
+    return true;
+  });
+  return { tareasSel, histSel, idMap };
+}
+
+// Apaga lo que no aplica, marca los grupos y muestra qué se va a exportar
+function actualizarExportPlan() {
+  const cfg = leerExportPlan();
+  document.getElementById('exp-lista-equipos').style.display = cfg.equipos === 'elegir' ? '' : 'none';
+  document.querySelectorAll('.exp-chk-grupo').forEach(g => {
+    const items = [...document.querySelectorAll(`.exp-chk-equipo[data-grupo="${g.dataset.grupo}"]`)];
+    const marcados = items.filter(c => c.checked).length;
+    g.checked = marcados === items.length && marcados > 0;
+    g.indeterminate = marcados > 0 && marcados < items.length;
+  });
+  const bloqueTareas = document.getElementById('exp-bloque-tareas');
+  bloqueTareas.classList.toggle('apagado', !cfg.plan);
+  bloqueTareas.querySelectorAll('input').forEach(i => { i.disabled = !cfg.plan; });
+  const bloqueHist = document.getElementById('exp-bloque-hist');
+  bloqueHist.classList.toggle('apagado', !cfg.hist);
+  bloqueHist.querySelectorAll('input[name="exp-hist-rango"]').forEach(i => { i.disabled = !cfg.hist; });
+  const conFechas = cfg.hist && cfg.histRango === 'fechas';
+  document.getElementById('exp-fechas').style.display = cfg.histRango === 'fechas' ? '' : 'none';
+  ['exp-desde', 'exp-hasta'].forEach(id => { document.getElementById(id).disabled = !conFechas; });
+
+  const resumen = document.getElementById('exp-resumen');
+  const btn = document.getElementById('exp-btn-exportar');
+  const error = errorExportPlan(cfg);
+  if (error) {
+    resumen.textContent = error;
+    resumen.classList.add('aviso');
+    btn.disabled = true;
+    return;
+  }
+  const { tareasSel, histSel } = datosExportPlan(cfg);
+  const partes = [];
+  if (cfg.plan) partes.push(`${tareasSel.length} tarea${tareasSel.length !== 1 ? 's' : ''}`);
+  if (cfg.hist) partes.push(`${histSel.length} registro${histSel.length !== 1 ? 's' : ''} del historial`);
+  const nada = !tareasSel.length && !histSel.length;
+  resumen.textContent = nada ? 'No hay nada para exportar con esa elección.' : `Se van a exportar ${partes.join(' y ')}.`;
+  resumen.classList.toggle('aviso', nada);
+  btn.disabled = nada;
+}
+
+// Nombre: BM_Santa_Lucia[_Motor_Principal_Babor | _3_equipos][_Plan(_vencidas)][_Historial(_desde_a_hasta)]_2026-10-29.xlsx
+function nombreArchivoPlan(cfg) {
+  const partes = [nombreBarcoArchivo()];
+  if (cfg.equipos === 'elegir') {
+    partes.push(cfg.elegidos.length === 1 ? textoArchivo(cfg.elegidos[0]) : `${cfg.elegidos.length}_equipos`);
+  }
+  const vencidas = cfg.tareas === 'vencidas';
+  const fechas = cfg.histRango === 'fechas';
+  if (cfg.plan && (vencidas || !cfg.hist)) partes.push(vencidas ? 'Plan_vencidas' : 'Plan');
+  if (cfg.hist && (fechas || !cfg.plan)) {
+    partes.push(fechas ? `Historial_${cfg.desde || 'inicio'}_a_${cfg.hasta || hoyLocalISO()}` : 'Historial');
+  }
+  partes.push(hoyLocalISO());
+  return partes.join('_') + '.xlsx';
+}
+
+function exportarPlan() {
+  const cfg = leerExportPlan();
+  const error = errorExportPlan(cfg);
+  if (error) { toast(error, true); return; }
+  const { tareasSel, histSel, idMap } = datosExportPlan(cfg);
+  if (!tareasSel.length && !histSel.length) { toast('No hay nada para exportar con esa elección', true); return; }
+  try { localStorage.setItem('exportar-plan', JSON.stringify(cfg)); } catch (e) {}
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
-  // Hoja historial
-  if (historial.length) {
-    const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
-    const hd = historial.map(h => ({
+  if (cfg.plan) {
+    const data = tareasSel.map(t => {
+      const e = calcularEstado(t);
+      return {
+        Equipo: t.equipo,
+        Tarea: t.tarea,
+        Control: { hrs: 'Por horas', fecha: 'Por fecha', ambos: 'Lo que ocurra primero', ninguna: 'Sin control' }[t.unidad] || t.unidad,
+        Periodicidad: etiquetaPeriodicidad(t),
+        'Hrs totales': t.hrs_totales,
+        'Última fecha': t.fecha_ult,
+        'Próx. hrs': t.proxima_hrs,
+        'Próx. fecha': t.proxima_fecha,
+        'Falta': e.mostrar + ' ' + e.unidad + (e.otro ? ` · ${e.otro.mostrar} ${e.otro.unidad}` : ''),
+        Estado: e.estado,
+        Prioridad: t.prioridad,
+        'Postergada hasta': estaPostergada(t) ? t.postergada_hasta : '',
+        'Motivo postergación': estaPostergada(t) ? t.motivo_postergacion : '',
+        'Realizado por': t.realizado_por,
+        Observaciones: t.observaciones
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, data.length ? XLSX.utils.json_to_sheet(data)
+      : XLSX.utils.json_to_sheet([{ Tareas: 'No hay tareas con esa elección' }]), 'Tareas');
+  }
+  if (cfg.hist) {
+    const hd = histSel.map(h => ({
       Fecha: h.fecha_realizado,
       Equipo: idMap[h.tarea_id]?.equipo || '',
       Tarea: idMap[h.tarea_id] ? idMap[h.tarea_id].tarea + (idMap[h.tarea_id].activa ? '' : ' (dada de baja)') : '',
@@ -4914,11 +5480,22 @@ function exportarExcel() {
       'Realizado por': h.realizado_por,
       Notas: h.notas
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hd), 'Historial');
+    XLSX.utils.book_append_sheet(wb, hd.length ? XLSX.utils.json_to_sheet(hd)
+      : XLSX.utils.json_to_sheet([{ Historial: 'No hay registros con esa elección' }]), 'Historial');
   }
-  XLSX.writeFile(wb, `Santa_Lucia_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, nombreArchivoPlan(cfg));
+  cerrarExportarPlan();
   toast('✓ Excel descargado');
 }
+
+// Cualquier cambio en la ventana actualiza lo que se va a exportar; la casilla de un grupo marca o desmarca todo el grupo
+document.getElementById('modal-export-plan').addEventListener('change', e => {
+  if (e.target.classList.contains('exp-chk-grupo')) {
+    document.querySelectorAll(`.exp-chk-equipo[data-grupo="${e.target.dataset.grupo}"]`).forEach(c => { c.checked = e.target.checked; });
+  }
+  actualizarExportPlan();
+});
+document.getElementById('modal-export-plan').addEventListener('click', e => { if (e.target.id === 'modal-export-plan') cerrarExportarPlan(); });
 
 // ============ NAVEGACIÓN TABS ============
 // Dos niveles: secciones (Inicio, Mantenimiento, Barco, Pañol) y sub-pestañas. Cada sub-pestaña
@@ -4930,6 +5507,8 @@ let ultimaTabDeSeccion = {};  // sección -> última sub-pestaña abierta en ell
 
 function cambiarTab(name) {
   if (!SECCION_DE_TAB[name]) name = 'dashboard';
+  // Administración solo para el admin de la empresa (antes de entrar todavía no se sabe el rol)
+  if (SECCION_DE_TAB[name] === 'admin' && barcoActual && !puedeAdministrar()) name = 'dashboard';
   const seccion = SECCION_DE_TAB[name];
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === name);
@@ -5046,7 +5625,7 @@ function renderBarco() {
       <div class="tipo">${escape(buque.tipo || 'Buque')}</div>
       <h2>${escape(buque.nombre)}</h2>
       <div class="subtitle">${buque.astillero ? escape(buque.astillero) : ''}${buque.pais_origen ? ' · ' + escape(buque.pais_origen) : ''}${buque.anio_construccion ? ' · ' + buque.anio_construccion : ''}</div>
-      <div style="margin-top:14px"><button class="btn btn-acento" onclick="abrirModalBuque()">✎ Editar ficha</button></div>
+      <div style="margin-top:14px"><button class="btn btn-acento solo-jefe" onclick="abrirModalBuque()">✎ Editar ficha</button></div>
     </div>
 
     <div class="ficha-grid">
@@ -5106,8 +5685,14 @@ function renderBarco() {
   `;
 }
 
+let buqueNuevo = false;  // true: la ventana de la ficha está agregando un barco (Administración)
+
 function abrirModalBuque() {
   if (!buque) return;
+  buqueNuevo = false;
+  document.getElementById('modal-buque-titulo').textContent = 'Editar ficha del buque';
+  document.getElementById('bq-btn-guardar').textContent = '✓ Guardar';
+  document.getElementById('bq-copiar').style.display = 'none';
   const set = (id, val) => document.getElementById(id).value = val ?? '';
   set('bq-nombre', buque.nombre);
   set('bq-tipo', buque.tipo);
@@ -5153,8 +5738,9 @@ async function guardarBuque() {
     return isNaN(v) ? null : v;
   };
   const txt = id => document.getElementById(id).value.trim() || null;
+  if (!txt('bq-nombre')) { toast('Falta el nombre del barco', true); return; }
   const data = {
-    nombre: txt('bq-nombre') || 'B/M Santa Lucía',
+    nombre: txt('bq-nombre'),
     tipo: txt('bq-tipo'),
     astillero: txt('bq-astillero'),
     pais_origen: txt('bq-pais'),
@@ -5186,6 +5772,7 @@ async function guardarBuque() {
     clase_maquina: txt('bq-clase-m'),
     notas: txt('bq-notas'),
   };
+  if (buqueNuevo) { await crearBarco(data); return; }
   try {
     const { error } = await sb.from('mant_buque').update(data).eq('id', buque.id);
     if (error) throw error;
@@ -5193,7 +5780,7 @@ async function guardarBuque() {
     cerrarModalBuque();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -5343,6 +5930,8 @@ function renderFichaEquipo() {
   if (eq.numero_serie) fabPills.push(`<span class="pill">🔖 Serie ${escape(eq.numero_serie)}</span>`);
   if (eq.anio_fab) fabPills.push(`<span class="pill">📅 ${eq.anio_fab}</span>`);
   if (eq.ubicacion_abordo) fabPills.push(`<span class="pill">📍 ${escape(eq.ubicacion_abordo)}</span>`);
+  const origenHoras = eq.horas_de_id ? equipos.find(e => e.id === eq.horas_de_id) : null;
+  if (origenHoras) fabPills.push(`<span class="pill">⏱ Horas de ${escape(origenHoras.nombre)}</span>`);
   if (eq.cantidad > 1) fabPills.push(`<span class="pill">×${eq.cantidad}</span>`);
 
   // Estado del equipo
@@ -5371,7 +5960,7 @@ function renderFichaEquipo() {
         ${fabPills.join('')}
         <span class="pill ${estPillCls}">${escape(eq.estado || 'Operativo')}</span>
       </div>
-      <button class="btn btn-acento editar" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
+      <button class="btn btn-acento editar solo-jefe" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
     </div>
 
     ${quickStats.length ? `
@@ -5444,7 +6033,7 @@ function renderFichaEquipo() {
             ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
           </div>
           <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-          <button class="btn btn-pequeno btn-sec hist-editar" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+          <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
         </div>`;
     }).join('');
   }
@@ -5551,6 +6140,7 @@ function abrirModalEquipo(id) {
   set('eq-categoria', target?.categoria);
   set('eq-cantidad', target?.cantidad ?? 1);
   set('eq-ubicacion', target?.ubicacion_abordo);
+  llenarSelectorHorasDe(target);
   set('eq-fabricante', target?.fabricante);
   set('eq-modelo', target?.modelo);
   set('eq-serie', target?.numero_serie);
@@ -5577,6 +6167,26 @@ function abrirModalEquipo(id) {
   document.getElementById('modal-equipo').classList.add('show');
 }
 
+// Opciones de "Toma las horas de": otros equipos del barco, salvo los que ya toman (directa o
+// indirectamente) las horas de este, porque se armaría un círculo (la base también lo rechaza)
+function llenarSelectorHorasDe(equipo) {
+  const excluidos = new Set();
+  if (equipo) {
+    excluidos.add(equipo.id);
+    let frente = [equipo.id];
+    while (frente.length) {
+      const hijos = equipos.filter(e => frente.includes(e.horas_de_id) && !excluidos.has(e.id));
+      hijos.forEach(h => excluidos.add(h.id));
+      frente = hijos.map(h => h.id);
+    }
+  }
+  const sel = document.getElementById('eq-horas-de');
+  sel.innerHTML = '<option value="">— Sus propias horas —</option>' +
+    equipos.filter(e => !excluidos.has(e.id))
+      .map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join('');
+  sel.value = equipo && equipo.horas_de_id ? String(equipo.horas_de_id) : '';
+}
+
 function cerrarModalEquipo() {
   document.getElementById('modal-equipo').classList.remove('show');
 }
@@ -5594,6 +6204,7 @@ async function guardarEquipo() {
     categoria: txt('eq-categoria'),
     cantidad: parseInt(document.getElementById('eq-cantidad').value) || 1,
     ubicacion_abordo: txt('eq-ubicacion'),
+    horas_de_id: parseInt(document.getElementById('eq-horas-de').value) || null,
     fabricante: txt('eq-fabricante'),
     modelo: txt('eq-modelo'),
     numero_serie: txt('eq-serie'),
@@ -5622,7 +6233,7 @@ async function guardarEquipo() {
       if (error) throw error;
       toast('✓ Equipo actualizado');
     } else {
-      const { error } = await sb.from('mant_equipos').insert(data);
+      const { error } = await sb.from('mant_equipos').insert(conBarco(data));
       if (error) throw error;
       toast('✓ Equipo creado');
     }
@@ -5634,7 +6245,7 @@ async function guardarEquipo() {
       if (equipoActualFicha) renderFichaEquipo();
     }
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
@@ -5659,13 +6270,314 @@ async function borrarEquipo() {
     volverAEquipos();
     await cargarTodo();
   } catch (err) {
-    toast('Error: ' + err.message, true);
+    toast(textoError(err), true);
   }
 }
 
 
+// ============ ADMINISTRACIÓN ============
+// Solo admin_empresa, sobre la empresa del barco elegido. Agregar barcos usa la función de la base
+// mant_barco_crear (todo o nada); los usuarios, la Edge Function mant-usuarios (alta, contraseña temporal,
+// cambiar mi contraseña) y la función mant_accesos_guardar (rol y barcos de una vez). La base controla todo.
+let usuariosEmpresa = [];   // [{ user_id, email, debe_cambiar_clave, rol, barcos: [id] }]
+let usuarioEditando = null; // usuario de la lista que se está cambiando (null = alta)
+
+// Mensaje para errores de las funciones de la base: sus textos ya están en español
+function textoErrorClaro(err) {
+  const msg = (err && err.message) || '';
+  if (err && ['42501', '22023'].includes(err.code) && !/row-level security|permission denied|violates/i.test(msg)) return msg;
+  return textoError(err);
+}
+
+// Llama a la Edge Function mant-usuarios; devuelve sus datos o tira un Error con el mensaje en español
+async function llamarUsuarios(cuerpo) {
+  const { data, error } = await sb.functions.invoke('mant-usuarios', { body: cuerpo });
+  if (error) {
+    let msg = 'No se pudo completar la operación. Probá de nuevo.';
+    try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+function barcosDeMiEmpresa() {
+  return barcoActual ? barcosDisponibles.filter(b => b.empresa_id === barcoActual.empresa_id) : [];
+}
+
+function renderAdminBarcos() {
+  const div = document.getElementById('admin-barcos-lista');
+  if (!puedeAdministrar()) { div.innerHTML = ''; return; }
+  div.innerHTML = barcosDeMiEmpresa().map(b => `
+    <div class="admin-item${b.id === barcoActual.id ? ' actual' : ''}">
+      <div>
+        <div class="titulo">⚓ ${escape(b.nombre)}</div>
+        <div class="detalle">${b.id === barcoActual.id ? 'Es el barco que estás viendo' : ''}</div>
+      </div>
+      <div class="acciones">
+        ${b.id === barcoActual.id ? '' : `<button class="btn btn-sec btn-pequeno" onclick="cambiarBarco(${b.id})">Ver este barco</button>`}
+      </div>
+    </div>`).join('');
+}
+
+function abrirNuevoBarco() {
+  if (!puedeAdministrar()) return;
+  buqueNuevo = true;
+  document.getElementById('modal-buque-titulo').textContent = 'Agregar barco';
+  document.getElementById('bq-btn-guardar').textContent = '✓ Crear barco';
+  document.querySelectorAll('#modal-buque input, #modal-buque textarea').forEach(i => { if (i.type !== 'checkbox') i.value = ''; });
+  document.getElementById('bq-bandera').value = 'Uruguay';
+  document.getElementById('bq-origen').innerHTML = '<option value="">— No copiar nada (barco vacío) —</option>' +
+    barcosDeMiEmpresa().map(b => `<option value="${b.id}">${escape(b.nombre)}</option>`).join('');
+  document.querySelectorAll('input[name="bq-copiar"]').forEach(c => { c.checked = true; });
+  document.getElementById('bq-copiar').style.display = '';
+  actualizarCopiarBarco();
+  document.getElementById('modal-buque').classList.add('show');
+}
+function actualizarCopiarBarco() {
+  const hayOrigen = !!document.getElementById('bq-origen').value;
+  document.getElementById('bq-copiar-que').style.display = hayOrigen ? '' : 'none';
+}
+
+async function crearBarco(ficha) {
+  const origen = parseInt(document.getElementById('bq-origen').value) || null;
+  const copiar = origen ? [...document.querySelectorAll('input[name="bq-copiar"]:checked')].map(c => c.value) : [];
+  const btn = document.getElementById('bq-btn-guardar');
+  btn.disabled = true;
+  try {
+    const { data: id, error } = await sb.rpc('mant_barco_crear', {
+      p_empresa: barcoActual.empresa_id, p_ficha: ficha, p_origen: origen, p_copiar: copiar });
+    if (error) throw error;
+    try { localStorage.setItem('barco', String(id)); } catch (e) {}
+    cerrarModalBuque();
+    toast(`✓ Barco "${ficha.nombre}" creado`);
+    // Aparece en el selector y queda elegido
+    if (await cargarBarcos()) await cargarTodo();
+  } catch (err) {
+    toast(textoErrorClaro(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function cargarUsuariosEmpresa() {
+  if (!puedeAdministrar()) { usuariosEmpresa = []; renderAdminUsuarios(); return; }
+  const E = barcoActual.empresa_id;
+  const [{ data: acc, error: e1 }, { data: perf, error: e2 }] = await Promise.all([
+    sb.from('mant_accesos').select('user_id, barco_id, rol').eq('empresa_id', E),
+    sb.from('mant_perfiles').select('user_id, email, debe_cambiar_clave'),
+  ]);
+  if (e1 || e2) { toast('No se pudo cargar la lista de usuarios', true); return; }
+  const porUsuario = {};
+  (acc || []).forEach(a => {
+    const u = porUsuario[a.user_id] = porUsuario[a.user_id] || { user_id: a.user_id, rol: a.rol, barcos: [] };
+    if (NIVEL_ROL[a.rol] > NIVEL_ROL[u.rol]) u.rol = a.rol;
+    if (a.barco_id) u.barcos.push(a.barco_id);
+  });
+  const perfiles = Object.fromEntries((perf || []).map(p => [p.user_id, p]));
+  usuariosEmpresa = Object.values(porUsuario)
+    .map(u => ({ ...u, email: perfiles[u.user_id]?.email || '(sin email)', debe_cambiar_clave: !!perfiles[u.user_id]?.debe_cambiar_clave }))
+    .sort((a, b) => NIVEL_ROL[b.rol] - NIVEL_ROL[a.rol] || a.email.localeCompare(b.email));
+  renderAdminUsuarios();
+}
+
+function renderAdminUsuarios() {
+  const div = document.getElementById('admin-usuarios-lista');
+  if (!puedeAdministrar()) { div.innerHTML = ''; return; }
+  const nombreBarco = id => (barcosDisponibles.find(b => b.id === id) || {}).nombre || `Barco ${id}`;
+  div.innerHTML = usuariosEmpresa.map(u => {
+    const yo = u.user_id === usuarioId;
+    const barcos = u.rol === 'admin_empresa' ? 'Todos los barcos de la empresa' : u.barcos.map(nombreBarco).map(escape).join(', ');
+    return `
+      <div class="admin-item">
+        <div>
+          <div class="titulo">${escape(u.email)}${yo ? ' <span style="font-weight:400;color:var(--texto-suave)">(vos)</span>' : ''}${u.debe_cambiar_clave ? '<span class="badge-aviso">Tiene que cambiar la contraseña</span>' : ''}</div>
+          <div class="detalle">${NOMBRE_ROL[u.rol]} · ${barcos}</div>
+        </div>
+        <div class="acciones">
+          ${yo ? '' : `
+          <button class="btn btn-sec btn-pequeno" onclick="abrirModalUsuario('${u.user_id}')">✏️ Cambiar</button>
+          <button class="btn btn-sec btn-pequeno" onclick="claveTemporalUsuario('${u.user_id}')">🔑 Nueva contraseña temporal</button>
+          <button class="btn btn-sec btn-pequeno" style="color:var(--rojo)" onclick="quitarAccesoUsuario('${u.user_id}')">🗑 Quitar acceso</button>`}
+        </div>
+      </div>`;
+  }).join('') || '<div class="empty"><div class="big">👥</div>No hay usuarios</div>';
+}
+
+// userId = cambiar un usuario de la lista; null = alta
+function abrirModalUsuario(userId) {
+  usuarioEditando = userId ? usuariosEmpresa.find(u => u.user_id === userId) : null;
+  if (usuarioEditando && usuarioEditando.user_id === usuarioId) return;  // el propio acceso no se cambia
+  const nuevo = !usuarioEditando;
+  document.getElementById('modal-usuario-titulo').textContent = nuevo ? 'Agregar usuario' : 'Cambiar acceso';
+  document.getElementById('modal-usuario-sub').textContent = nuevo
+    ? 'Si el email no tiene cuenta, se crea con una contraseña temporal que vas a ver una sola vez'
+    : 'Cambiá el rol o los barcos de este usuario';
+  const email = document.getElementById('u-email');
+  email.value = nuevo ? '' : usuarioEditando.email;
+  email.disabled = !nuevo;
+  document.getElementById('u-rol').value = nuevo ? 'operador' : usuarioEditando.rol;
+  const elegidos = new Set(nuevo ? (barcosDeMiEmpresa().length === 1 ? [barcoActual.id] : []) : usuarioEditando.barcos);
+  document.getElementById('u-barcos').innerHTML = barcosDeMiEmpresa().map(b =>
+    `<label class="exp-op"><input type="checkbox" name="u-barco" value="${b.id}"${elegidos.has(b.id) ? ' checked' : ''}> ${escape(b.nombre)}</label>`).join('');
+  actualizarCampoBarcosUsuario();
+  document.getElementById('modal-usuario').classList.add('show');
+}
+function actualizarCampoBarcosUsuario() {
+  document.getElementById('u-barcos-campo').style.display = document.getElementById('u-rol').value === 'admin_empresa' ? 'none' : '';
+}
+function cerrarModalUsuario() {
+  document.getElementById('modal-usuario').classList.remove('show');
+  usuarioEditando = null;
+}
+
+async function guardarUsuario() {
+  const rol = document.getElementById('u-rol').value;
+  const barcos = rol === 'admin_empresa' ? [] : [...document.querySelectorAll('input[name="u-barco"]:checked')].map(c => Number(c.value));
+  const email = document.getElementById('u-email').value.trim();
+  if (!usuarioEditando && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Poné un email válido', true); return; }
+  if (rol !== 'admin_empresa' && !barcos.length) { toast('Elegí al menos un barco', true); return; }
+  const btn = document.getElementById('u-btn-guardar');
+  btn.disabled = true;
+  try {
+    if (usuarioEditando) {
+      const { error } = await sb.rpc('mant_accesos_guardar', {
+        p_user: usuarioEditando.user_id, p_empresa: barcoActual.empresa_id, p_rol: rol, p_barcos: barcos });
+      if (error) throw error;
+      cerrarModalUsuario();
+      toast('✓ Acceso actualizado');
+    } else {
+      const r = await llamarUsuarios({ accion: 'crear', empresa_id: barcoActual.empresa_id, email, rol, barcos });
+      cerrarModalUsuario();
+      if (r.clave_temporal) mostrarClaveTemp(r.email, r.clave_temporal);
+      else toast(`✓ ${r.email} ya tenía cuenta: se le dio acceso con su contraseña de siempre`);
+    }
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(err instanceof Error && !err.code ? err.message : textoErrorClaro(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function claveTemporalUsuario(userId) {
+  const u = usuariosEmpresa.find(x => x.user_id === userId);
+  if (!u || userId === usuarioId) return;
+  if (!confirm(`¿Generar una contraseña temporal nueva para ${u.email}?\n\nLa que tiene ahora deja de funcionar y al entrar va a tener que cambiarla.`)) return;
+  try {
+    const r = await llamarUsuarios({ accion: 'clave_temporal', user_id: userId });
+    mostrarClaveTemp(u.email, r.clave_temporal);
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function quitarAccesoUsuario(userId) {
+  const u = usuariosEmpresa.find(x => x.user_id === userId);
+  if (!u || userId === usuarioId) return;
+  if (!confirm(`¿Quitarle el acceso a ${u.email}?\n\nYa no va a ver nada de la empresa. Su cuenta no se borra: se le puede volver a dar acceso.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_accesos').delete()
+      .eq('user_id', userId).eq('empresa_id', barcoActual.empresa_id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) { toast('No tenés permiso para esto', true); return; }
+    toast(`✓ ${u.email} ya no tiene acceso`);
+    await cargarUsuariosEmpresa();
+  } catch (err) {
+    toast(textoErrorClaro(err), true);
+  }
+}
+
+function mostrarClaveTemp(email, clave) {
+  document.getElementById('ct-para').textContent = `Para ${email}`;
+  document.getElementById('ct-clave').textContent = clave;
+  document.getElementById('modal-clave-temp').classList.add('show');
+}
+async function copiarClaveTemp() {
+  try {
+    await navigator.clipboard.writeText(document.getElementById('ct-clave').textContent);
+    toast('✓ Copiada');
+  } catch (e) {
+    toast('No se pudo copiar: anotala a mano', true);
+  }
+}
+function cerrarClaveTemp() {
+  document.getElementById('modal-clave-temp').classList.remove('show');
+  document.getElementById('ct-clave').textContent = '';  // que no quede en pantalla
+}
+
+// ---- Cambiar mi contraseña (cualquier usuario); obligatorio si entró con una temporal ----
+let claveObligatoria = false;
+function abrirCambiarClave(obligatoria) {
+  claveObligatoria = !!obligatoria;
+  ['mc-actual', 'mc-nueva', 'mc-repetir'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('mc-titulo').textContent = obligatoria ? '🔑 Elegí tu contraseña' : '🔑 Cambiar mi contraseña';
+  document.getElementById('mc-sub').textContent = obligatoria
+    ? 'Entraste con una contraseña temporal: elegí una nueva para seguir (mínimo 8 caracteres)'
+    : 'Mínimo 8 caracteres';
+  document.getElementById('mc-actual-campo').style.display = obligatoria ? 'none' : '';
+  // En el primer ingreso no se puede cancelar, pero sí salir
+  document.getElementById('mc-cancelar').textContent = obligatoria ? 'Salir' : 'Cancelar';
+  document.getElementById('modal-clave').classList.add('show');
+}
+function cerrarCambiarClave() {
+  if (claveObligatoria) { cerrarSesion(); return; }
+  document.getElementById('modal-clave').classList.remove('show');
+}
+async function guardarMiClave() {
+  const actual = document.getElementById('mc-actual').value;
+  const nueva = document.getElementById('mc-nueva').value;
+  const repetir = document.getElementById('mc-repetir').value;
+  if (!claveObligatoria && !actual) { toast('Poné tu contraseña actual', true); return; }
+  if (nueva.length < 8) { toast('La contraseña nueva tiene que tener al menos 8 caracteres', true); return; }
+  if (nueva !== repetir) { toast('Las dos contraseñas nuevas no coinciden', true); return; }
+  const btn = document.getElementById('mc-guardar');
+  btn.disabled = true;
+  try {
+    await llamarUsuarios({ accion: 'cambiar_mi_clave', actual, nueva });
+  } catch (err) {
+    toast(err.message, true);
+    btn.disabled = false;
+    return;
+  }
+  // Supabase cierra todas las sesiones al cambiar la contraseña: se vuelve a entrar solo con la nueva.
+  // Solo durante estos segundos se ignora el aviso de "sesión cerrada" (ver onAuthStateChange).
+  cambiandoClave = true;
+  let reingreso;
+  try {
+    reingreso = await sb.auth.signInWithPassword({ email: usuarioEmail, password: nueva });
+  } catch (e) {
+    reingreso = { error: e };
+  } finally {
+    cambiandoClave = false;
+    btn.disabled = false;
+  }
+  claveObligatoria = false;
+  document.getElementById('modal-clave').classList.remove('show');
+  if (reingreso.error || !reingreso.data?.session) {
+    await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+    mostrarLogin();
+    toast('Contraseña cambiada: entrá de nuevo con la nueva');
+    return;
+  }
+  toast('✓ Contraseña cambiada');
+}
+
+// ¿Entró con una contraseña temporal? Entonces tiene que cambiarla antes de seguir
+async function chequearClaveObligatoria() {
+  const { data } = await sb.from('mant_perfiles').select('debe_cambiar_clave').eq('user_id', usuarioId).maybeSingle();
+  if (data && data.debe_cambiar_clave) abrirCambiarClave(true);
+}
+
+document.getElementById('bq-origen').addEventListener('change', actualizarCopiarBarco);
+document.getElementById('u-rol').addEventListener('change', actualizarCampoBarcosUsuario);
+document.getElementById('modal-usuario').addEventListener('click', e => { if (e.target.id === 'modal-usuario') cerrarModalUsuario(); });
+document.getElementById('modal-clave').addEventListener('click', e => { if (e.target.id === 'modal-clave' && !claveObligatoria) cerrarCambiarClave(); });
+
 function mostrarLogin() {
   document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('sin-barcos').style.display = 'none';
   document.querySelector('header.top').style.display = 'none';
   document.querySelector('nav.tabs').style.display = 'none';
   document.querySelector('main').style.display = 'none';
@@ -5693,10 +6605,8 @@ async function iniciarSesion(e) {
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if (error) throw error;
     // Login OK
-    ocultarLogin();
-    document.getElementById('header-user').textContent = data.user.email;
     document.getElementById('login-pass').value = '';
-    await cargarTodo();
+    await iniciarApp(data.user);
   } catch (err) {
     errDiv.textContent = err.message === 'Invalid login credentials'
       ? 'Email o contraseña incorrectos'
@@ -5715,23 +6625,42 @@ async function cerrarSesion() {
   // Limpiar estado
   tareas = []; tareasTodas = []; historial = []; repuestos = []; herramientas = []; tareaRepuestos = [];
   buque = null; equipos = [];
+  usuarioId = null; usuarioEmail = null; barcosDisponibles = []; barcoActual = null; usuariosEmpresa = [];
+  claveObligatoria = false;
+  document.getElementById('modal-clave').classList.remove('show');
+  renderEncabezado();
   mostrarLogin();
+}
+
+// Después del login: barcos y rol del usuario, y los datos del barco elegido
+async function iniciarApp(user) {
+  usuarioId = user.id;
+  usuarioEmail = user.email;
+  ocultarLogin();
+  document.getElementById('header-user').textContent = user.email;
+  try {
+    await chequearClaveObligatoria();
+    if (await cargarBarcos()) await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast('Error cargando datos: ' + textoError(err), true);
+  }
 }
 
 async function chequearSesion() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
-    ocultarLogin();
-    document.getElementById('header-user').textContent = session.user.email;
-    await cargarTodo();
+    await iniciarApp(session.user);
   } else {
     mostrarLogin();
   }
 }
 
-// Si la sesión expira o se cierra desde otro lado
+// Si la sesión expira o se cierra desde otro lado. Mientras se vuelve a entrar después de cambiar la
+// contraseña (cambiandoClave, unos segundos) el aviso se ignora; en cualquier otro momento se respeta.
+let cambiandoClave = false;
 sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_OUT') {
+  if (event === 'SIGNED_OUT' && !cambiandoClave) {
     mostrarLogin();
   }
 });
