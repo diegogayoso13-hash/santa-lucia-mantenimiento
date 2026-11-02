@@ -177,7 +177,7 @@ Overdue or upcoming tasks and certificates that were already reported to the com
 
 ### Combustible (fuel)
 
-Stage 1 of 3 (section `============ COMBUSTIBLE ============`). Fuel is tracked per ship by **period** (`mant_combustible_periodos`), each with its supplier loads (`mant_combustible_cargas`, deleted with the period).
+Stages 1 and 2 of 3 (section `============ COMBUSTIBLE ============`). Fuel is tracked per ship by **period** (`mant_combustible_periodos`), each with its supplier loads (`mant_combustible_cargas`, deleted with the period), plus transfers (`mant_combustible_trasvases`).
 
 - **Periods:**
   - `desde`/`hasta` default to the calendar month after the last period, or to "15 to 15" if the last one didn't end on a month's last day (`fechasNuevoPeriodoComb()`). Both are editable.
@@ -185,10 +185,18 @@ Stage 1 of 3 (section `============ COMBUSTIBLE ============`). Fuel is tracked 
   - `fin_litros` null means the period is "en curso".
 - **Inicio:** `inicio_litros` is prefilled from the previous period's `fin_litros` (`periodoAnteriorComb()`: latest `hasta` ≤ this `desde`) and stored. Without a previous period it's typed in. When it differs from the previous end, `avisoInicioComb()` shows a warning, both in the modal and in the list.
 - **Calculated, never stored:**
-  - consumo = inicio + cargado − trasvase − fin (`consumoComb()`). "Recibido de otro barco" comes in stage 2.
+  - consumo = inicio + cargado + recibido − entregado − fin (`consumoComb()`); `datosPeriodoComb()` adds the period's transfers.
   - l/h = consumo / `horas_navegacion` (`promedioComb()`), shown as "—" with 0 or no hours.
   - A negative consumption shows a warning.
-- **Trasvases:** stage 1 only has the single `trasvase_litros` field. Stage 2 will add a transfers table linked to the other ship of the system (by id, not by name), so a transfer is entered once and shows on both ships.
+- **Trasvases (stage 2):**
+  - A transfer is entered once, with `origen_barco_id` (gives) and `destino_barco_id` (receives).
+  - Between two ships of the system, both sides are set, and it shows and counts on both ships. They must be different ships of the same company (check + trigger `mant_priv.combustible_trasvase_misma_empresa`).
+  - With a ship outside the system (e.g. RIA, SFR), the other side is null and `otro_buque` holds its name. It counts only on the system ship.
+  - **Which period counts it:** it isn't tied to a period. Each ship counts it in its own period by date. On a shared boundary day it goes to the period that **starts** that day: `periodoDeFechaEn()` in the app, `mant_priv.periodo_combustible` in the database, same rule. A transfer that falls in no period shows "⚠️ Sin período" and counts nowhere.
+  - **In the app:** the period modal no longer has a transfer field. It shows the transfers of its dates (`trasvasesDeRangoComb()`), and they're entered with "➕ Trasvase" (`#modal-trasv`, `abrirModalTrasv()` / `guardarTrasv()` / `borrarTrasv()`). The list is `renderTrasvasesComb()`.
+  - **Names of the other ship** come from the RPC `mant_combustible_barcos()`: id and name of the company's ships, even ones the user can't access. It's `security invoker` and calls `mant_priv.barcos_empresa()`. They're loaded into `combBarcos` and resolved with `otroBuqueTrasv()`.
+  - **Permissions:** `mant_priv.trasvase_permitido(origen, destino, fecha)` is used for insert, update (old and new row) and delete. The user must be operador+ on at least one side, and for each system side the period of that date must be en curso or not exist yet, or the user must be jefe/admin there. Nobody changes a closed period of a ship where they aren't jefe.
+  - The app only knows its own side (`puedeEditarTrasvUI()`); it uses `.select()` on update/delete to detect a silent RLS refusal and show "No tenés permiso".
 - **Permissions (enforced by RLS too):**
   - lectura sees.
   - operador adds and edits only periods en curso, and their loads. It can type the end, which closes the period for it, and can't insert an already-closed period: the modal disables "fin" on a new period for non-jefes.
@@ -196,7 +204,9 @@ Stage 1 of 3 (section `============ COMBUSTIBLE ============`). Fuel is tracked 
   - `guardarComb()` saves the loads before the period update, so an operador closing a period can still save its loads.
 - **Visibility:** for now the tab is only for `admin_empresa`. `puedeVerCombustible()` is the single switch (body class `puede-combustible`, elements `.solo-combustible`); the database rules are already per role.
 - **Authorship:** `creado_por` comes from `mant_priv.registrar_autor`, and `actualizado_por`/`actualizado_en` from `mant_priv.combustible_actualizado`. The modal shows them through `nombreUsuarioComb()`, which only knows emails of the admin's company users.
-- **Excel:** `exportarCombExcel()` writes, in this order: Período, Inicio, Consumo, Trasvase a otro buque, Cargado, Fin, MMPP, MGAs, Millas, Hr navegación, Consumo promedio (l/h). The file is `Combustible_<barco>_<fecha>.xlsx`.
+- **Excel:** `exportarCombExcel()` writes two sheets to `Combustible_<barco>_<fecha>.xlsx`:
+  - "Combustible": Período, Inicio, Consumo, Trasvase a otro buque (= entregado), Recibido de otro buque, Cargado, Fin, MMPP, MGAs, Millas, Hr navegación, Consumo promedio (l/h).
+  - "Trasvases": Fecha, Tipo, Otro buque, Fuera del sistema, Litros, Período, Notas.
 
 ### Dates
 
@@ -219,8 +229,9 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
-- `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `trasvase_litros` (default 0), `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
+- `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
 - `mant_combustible_cargas` — `periodo_id` → `mant_combustible_periodos(barco_id, id)` on delete cascade, `fecha`, `litros` (> 0), `proveedor`, `creado_en/por`.
+- `mant_combustible_trasvases` — `origen_barco_id` / `destino_barco_id` → `mant_buque(id)` (one may be null), `otro_buque` (name, only when one side is null), `fecha`, `litros` (> 0), `notas`, `creado_en/por`, `actualizado_en/por`. It has no `barco_id`: it belongs to both ships.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 

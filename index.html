@@ -1225,9 +1225,12 @@
     <h2 class="panel-titulo">Combustible</h2>
     <div class="acciones-globales">
       <button class="btn solo-operador" onclick="abrirModalComb()">➕ Agregar período</button>
+      <button class="btn solo-operador" onclick="abrirModalTrasv()">➕ Trasvase</button>
       <button class="btn btn-acento" onclick="exportarCombExcel()">📥 Exportar Excel</button>
     </div>
     <div id="comb-lista"></div>
+    <h2 class="panel-titulo" style="margin-top:28px">Trasvases</h2>
+    <div class="task-list" id="comb-trasvases"></div>
   </section>
 
   <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
@@ -1787,16 +1790,14 @@
       <div id="cb-cargas"></div>
       <button class="btn btn-sec btn-pequeno" type="button" onclick="combAgregarCarga()">➕ Agregar carga</button>
     </div>
-    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>
-        <label>Trasvase a otro buque (litros)</label>
-        <input type="number" id="cb-trasvase" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
-      </div>
-      <div>
-        <label>Fin del período (litros, sonda)</label>
-        <input type="number" id="cb-fin" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
-        <div class="comb-nota" id="cb-fin-nota"></div>
-      </div>
+    <div class="field">
+      <label>Trasvases</label>
+      <div class="comb-nota" id="cb-trasvases-nota" style="margin-top:0"></div>
+    </div>
+    <div class="field">
+      <label>Fin del período (litros, sonda)</label>
+      <input type="number" id="cb-fin" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
+      <div class="comb-nota" id="cb-fin-nota"></div>
     </div>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
@@ -1827,6 +1828,50 @@
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalComb()">Cancelar</button>
       <button class="btn" id="cb-btn-guardar" onclick="guardarComb()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: nuevo/editar trasvase de combustible -->
+<div class="modal-bg" id="modal-trasv">
+  <div class="modal">
+    <h2 id="modal-trasv-titulo">Nuevo trasvase</h2>
+    <div class="modal-sub">Se carga una sola vez: si el otro barco está en el sistema, aparece también en el suyo.</div>
+    <div class="field">
+      <label>Tipo *</label>
+      <select id="tv-tipo" onchange="trasvActualizarNota()">
+        <option value="entregado">➡️ Entregado a otro buque</option>
+        <option value="recibido">⬅️ Recibido de otro buque</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Otro buque *</label>
+      <select id="tv-barco" onchange="trasvActualizarNota()"></select>
+    </div>
+    <div class="field" id="tv-externo-campo">
+      <label>Nombre del buque fuera del sistema *</label>
+      <input type="text" id="tv-externo" list="tv-externos" placeholder="ej: RIA">
+      <datalist id="tv-externos"></datalist>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Fecha *</label>
+        <input type="date" id="tv-fecha" onchange="trasvActualizarNota()">
+      </div>
+      <div>
+        <label>Litros *</label>
+        <input type="number" id="tv-litros" min="0" step="any" inputmode="decimal">
+      </div>
+    </div>
+    <div class="comb-nota" id="tv-periodo-nota" style="margin:-6px 0 12px"></div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="tv-notas" rows="2"></textarea>
+    </div>
+    <div class="comb-nota" id="tv-autor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalTrasv()">Cancelar</button>
+      <button class="btn" id="tv-btn-guardar" onclick="guardarTrasv()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -2429,7 +2474,7 @@ async function cambiarBarco(id) {
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
-  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null;
   if (equipoActualFicha) volverAEquipos();
   renderEncabezado();
   await cargarTodo();
@@ -2475,7 +2520,9 @@ async function cargarTodo() {
       {data: ch, error: e11},
       {data: tp, error: e12},
       {data: cp, error: e13},
-      {data: cc, error: e14}
+      {data: cc, error: e14},
+      {data: ct, error: e15},
+      {data: cb, error: e16}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2491,7 +2538,11 @@ async function cargarTodo() {
       traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').eq('barco_id', B).order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
       traerTodo(() => sb.from('mant_tripulantes').select('*').eq('barco_id', B).order('nombre').order('id')),
       traerTodo(() => sb.from('mant_combustible_periodos').select('*').eq('barco_id', B).order('desde', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_combustible_cargas').select('*').eq('barco_id', B).order('fecha').order('id'))
+      traerTodo(() => sb.from('mant_combustible_cargas').select('*').eq('barco_id', B).order('fecha').order('id')),
+      // Trasvases que entregó o recibió este barco; y los nombres de los barcos de la empresa (para el otro lado)
+      traerTodo(() => sb.from('mant_combustible_trasvases').select('*').or(`origen_barco_id.eq.${B},destino_barco_id.eq.${B}`)
+        .order('fecha', { ascending: false }).order('id', { ascending: false })),
+      sb.rpc('mant_combustible_barcos')
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -2509,6 +2560,8 @@ async function cargarTodo() {
     if (e12) throw e12;
     if (e13) throw e13;
     if (e14) throw e14;
+    if (e15) throw e15;
+    if (e16) throw e16;
     tareasTodas = tt || [];
     tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
@@ -2532,6 +2585,8 @@ async function cargarTodo() {
     certHistorial = ch || [];
     combPeriodos = cp || [];
     combCargas = cc || [];
+    combTrasvases = ct || [];
+    combBarcos = cb || [];
     renderTodo();
     await cargarUsuariosEmpresa();
   } catch (err) {
@@ -5601,13 +5656,19 @@ document.getElementById('modal-export-plan').addEventListener('change', e => {
 document.getElementById('modal-export-plan').addEventListener('click', e => { if (e.target.id === 'modal-export-plan') cerrarExportarPlan(); });
 
 // ============ COMBUSTIBLE ============
-// Períodos por barco (mant_combustible_periodos) con sus cargas de proveedor (mant_combustible_cargas).
-// Consumo = inicio + cargado + recibido − trasvasado − fin (recibido de otro barco llega en la etapa 2: hoy 0).
+// Períodos por barco (mant_combustible_periodos) con sus cargas de proveedor (mant_combustible_cargas) y los
+// trasvases (mant_combustible_trasvases), que no se atan a un período: cada barco los cuenta en el suyo por la fecha.
+// Consumo = inicio + cargado + recibido − entregado − fin.
 // Permisos (los controla la base): operador agrega y edita solo períodos en curso (sin fin); jefe y admin, cualquiera;
 // borrar, jefe y admin. Un operador no puede crear un período ya cerrado: primero lo guarda y después carga el fin.
+// Un trasvase se toca si, en cada barco del sistema, el período de esa fecha está en curso (o no existe) o el
+// usuario es jefe/admin de ese barco (mant_priv.trasvase_permitido).
 let combPeriodos = [];   // del más nuevo al más viejo
 let combCargas = [];
+let combTrasvases = [];  // los que entregó o recibió el barco elegido, del más nuevo al más viejo
+let combBarcos = [];     // [{ id, nombre }] barcos de la empresa (mant_combustible_barcos), para el otro lado
 let combActual = null;   // período en edición (null = nuevo)
+let trasvActual = null;  // trasvase en edición (null = nuevo)
 
 function fmtLitros(n) {
   return n == null ? '—' : Number(n).toLocaleString('es-UY', { maximumFractionDigits: 2 });
@@ -5628,9 +5689,34 @@ function cargasDePeriodo(id) { return combCargas.filter(c => c.periodo_id === id
 function cargadoPeriodo(id) { return cargasDePeriodo(id).reduce((s, c) => s + Number(c.litros), 0); }
 // Redondeo a centésimos para que las sumas de decimales no muestren basura (0,1 + 0,2)
 function redondearLitros(n) { return Math.round(n * 100) / 100; }
-function consumoComb(inicio, cargado, trasvase, fin) {
+function consumoComb(inicio, cargado, recibido, entregado, fin) {
   if (fin == null || inicio == null) return null;
-  return redondearLitros(Number(inicio) + cargado - Number(trasvase || 0) - Number(fin));
+  return redondearLitros(Number(inicio) + cargado + recibido - entregado - Number(fin));
+}
+
+// Período de una lista en el que cae una fecha; en el día compartido ("del 15 al 15"), el que empieza ese día.
+// Es la misma regla que mant_priv.periodo_combustible en la base.
+function periodoDeFechaEn(lista, fecha) {
+  return lista
+    .filter(p => p.desde <= fecha && p.hasta >= fecha)
+    .sort((a, b) => b.desde.localeCompare(a.desde) || b.id - a.id)[0] || null;
+}
+function periodoDeFechaComb(fecha) { return periodoDeFechaEn(combPeriodos, fecha); }
+function entregaBarcoComb(t) { return t.origen_barco_id === barcoActual.id; }
+// Trasvases que caerían en un período con estas fechas (sirve también mientras se editan en el modal)
+function trasvasesDeRangoComb(desde, hasta, periodoId) {
+  const lista = [...combPeriodos.filter(p => p.id !== periodoId), { id: periodoId ?? 'nuevo', desde, hasta }];
+  return combTrasvases.filter(t => periodoDeFechaEn(lista, t.fecha)?.id === (periodoId ?? 'nuevo'));
+}
+function sumasTrasvasesComb(lista) {
+  const suma = l => redondearLitros(l.reduce((s, t) => s + Number(t.litros), 0));
+  return { entregado: suma(lista.filter(entregaBarcoComb)), recibido: suma(lista.filter(t => !entregaBarcoComb(t))) };
+}
+// El otro lado del trasvase, visto desde el barco elegido
+function otroBuqueTrasv(t) {
+  const id = entregaBarcoComb(t) ? t.destino_barco_id : t.origen_barco_id;
+  if (id == null) return { nombre: t.otro_buque, externo: true };
+  return { nombre: combBarcos.find(b => b.id === id)?.nombre || '(barco sin nombre)', externo: false, id };
 }
 function promedioComb(consumo, horasNav) {
   if (consumo == null || !Number(horasNav)) return null;
@@ -5665,28 +5751,33 @@ function fmtFechaHora(ts) {
 
 function datosPeriodoComb(p) {
   const cargado = cargadoPeriodo(p.id);
-  const consumo = consumoComb(p.inicio_litros, cargado, p.trasvase_litros, p.fin_litros);
-  return { cargado, consumo, promedio: promedioComb(consumo, p.horas_navegacion) };
+  const { entregado, recibido } = sumasTrasvasesComb(trasvasesDeRangoComb(p.desde, p.hasta, p.id));
+  const consumo = consumoComb(p.inicio_litros, cargado, recibido, entregado, p.fin_litros);
+  return { cargado, entregado, recibido, consumo, promedio: promedioComb(consumo, p.horas_navegacion) };
 }
 
 function renderCombustible() {
   const div = document.getElementById('comb-lista');
-  if (!puedeVerCombustible()) { div.innerHTML = ''; return; }
+  if (!puedeVerCombustible()) { div.innerHTML = ''; document.getElementById('comb-trasvases').innerHTML = ''; return; }
+  renderTrasvasesComb();
   if (!combPeriodos.length) {
     div.innerHTML = '<div class="empty"><div class="big">⛽</div>Todavía no hay períodos de combustible cargados</div>';
     return;
   }
   const filas = combPeriodos.map(p => {
-    const { cargado, consumo, promedio } = datosPeriodoComb(p);
+    const { cargado, entregado, recibido, consumo, promedio } = datosPeriodoComb(p);
     const avisos = [];
     const avisoInicio = avisoInicioComb(Number(p.inicio_litros), periodoAnteriorComb(p.desde, p.id));
     if (avisoInicio) avisos.push(avisoInicio);
     if (consumo != null && consumo < 0) avisos.push('El consumo da negativo: revisá los litros cargados');
     const cargas = cargasDePeriodo(p.id).map(c =>
       `${fmtFechaDMA(c.fecha)} · ${fmtLitros(c.litros)} L${c.proveedor ? ' · ' + escape(c.proveedor) : ''}`);
+    const trasvases = trasvasesDeRangoComb(p.desde, p.hasta, p.id).map(t =>
+      `${fmtFechaDMA(t.fecha)} · ${entregaBarcoComb(t) ? '➡️ a' : '⬅️ de'} ${escape(otroBuqueTrasv(t).nombre)} · ${fmtLitros(t.litros)} L`);
     const detalle = [
       ...avisos.map(a => `<div class="comb-aviso">⚠️ ${escape(a)}</div>`),
       cargas.length ? `<div>⛽ Cargas: ${cargas.join(' — ')}</div>` : '',
+      trasvases.length ? `<div>🔁 Trasvases: ${trasvases.join(' — ')}</div>` : '',
       p.observaciones ? `<div>📝 ${escape(p.observaciones)}</div>` : ''
     ].filter(Boolean).join('');
     const acciones = [
@@ -5698,7 +5789,8 @@ function renderCombustible() {
         <td><strong>${textoPeriodoComb(p)}</strong>${p.fin_litros == null ? ' <span class="badge-tipo">en curso</span>' : ''}</td>
         <td class="num">${fmtLitros(p.inicio_litros)}</td>
         <td class="num${consumo != null && consumo < 0 ? ' comb-negativo' : ''}">${consumo != null && consumo < 0 ? '⚠️ ' : ''}${fmtLitros(consumo)}</td>
-        <td class="num">${fmtLitros(p.trasvase_litros)}</td>
+        <td class="num">${fmtLitros(entregado)}</td>
+        <td class="num">${fmtLitros(recibido)}</td>
         <td class="num">${fmtLitros(cargado)}</td>
         <td class="num">${fmtLitros(p.fin_litros)}</td>
         <td class="num">${fmtLitros(p.horas_mmpp)}</td>
@@ -5708,14 +5800,14 @@ function renderCombustible() {
         <td class="num">${fmtPromedio(promedio)}</td>
         <td>${acciones}</td>
       </tr>
-      ${detalle ? `<tr class="comb-detalle"><td colspan="12">${detalle}</td></tr>` : ''}`;
+      ${detalle ? `<tr class="comb-detalle"><td colspan="13">${detalle}</td></tr>` : ''}`;
   }).join('');
   div.innerHTML = `
     <div style="overflow-x:auto">
       <table class="tabla-minimos tabla-comb">
         <thead><tr>
           <th>Período</th><th class="num">Inicio</th><th class="num">Consumo</th><th class="num">Trasvase a otro buque</th>
-          <th class="num">Cargado</th><th class="num">Fin</th><th class="num">MMPP</th><th class="num">MGAs</th>
+          <th class="num">Recibido de otro buque</th><th class="num">Cargado</th><th class="num">Fin</th><th class="num">MMPP</th><th class="num">MGAs</th>
           <th class="num">Millas</th><th class="num">Hr navegación</th><th class="num">l/h</th><th></th>
         </tr></thead>
         <tbody>${filas}</tbody>
@@ -5748,7 +5840,6 @@ function abrirModalComb(id) {
     val('cb-desde', combActual.desde);
     val('cb-hasta', combActual.hasta);
     val('cb-inicio', combActual.inicio_litros);
-    val('cb-trasvase', combActual.trasvase_litros);
     val('cb-fin', combActual.fin_litros);
     val('cb-mmpp', combActual.horas_mmpp);
     val('cb-mga', combActual.horas_mga);
@@ -5770,7 +5861,6 @@ function abrirModalComb(id) {
     const anterior = periodoAnteriorComb(desde, null);
     val('cb-inicio', anterior?.fin_litros);
     ['cb-fin', 'cb-mmpp', 'cb-mga', 'cb-millas', 'cb-nav', 'cb-obs'].forEach(i => val(i, ''));
-    val('cb-trasvase', 0);
     document.getElementById('cb-autor').textContent = '';
   }
   // Un período nuevo del operador se guarda en curso: el fin lo carga después, editándolo
@@ -5827,9 +5917,18 @@ function combActualizarAvisos() {
   else if (anterior) nota.textContent = `El período anterior (${textoPeriodoComb(anterior)}) todavía no tiene fin: cargá el inicio a mano.`;
   else nota.textContent = 'No hay período anterior: cargá el inicio a mano.';
 
+  // Trasvases que caen en el período con las fechas del formulario (se cargan aparte, con "➕ Trasvase")
+  const hasta = document.getElementById('cb-hasta').value;
+  const trasv = desde && hasta && hasta >= desde ? trasvasesDeRangoComb(desde, hasta, combActual?.id) : [];
+  const { entregado, recibido } = sumasTrasvasesComb(trasv);
+  document.getElementById('cb-trasvases-nota').textContent = trasv.length
+    ? `Entregado a otros buques: ${fmtLitros(entregado)} L · Recibido: ${fmtLitros(recibido)} L ` +
+      `(${trasv.length} trasvase${trasv.length > 1 ? 's' : ''} en estas fechas). Se cargan con "➕ Trasvase".`
+    : 'No hay trasvases en estas fechas. Se cargan aparte, con "➕ Trasvase".';
+
   const cargado = cargasDelModal().reduce((s, c) => s + (c.litros > 0 ? c.litros : 0), 0);
-  const consumo = consumoComb(isNaN(inicio) ? null : inicio, cargado,
-    numeroONull(document.getElementById('cb-trasvase').value) || 0, numeroONull(document.getElementById('cb-fin').value));
+  const consumo = consumoComb(isNaN(inicio) ? null : inicio, cargado, recibido, entregado,
+    numeroONull(document.getElementById('cb-fin').value));
   const promedio = promedioComb(consumo, numeroONull(document.getElementById('cb-nav').value));
   const calc = document.getElementById('cb-calculo');
   calc.innerHTML = consumo == null
@@ -5846,7 +5945,6 @@ async function guardarComb() {
   const datos = {
     desde, hasta,
     inicio_litros: leer('cb-inicio'),
-    trasvase_litros: leer('cb-trasvase') ?? 0,
     fin_litros: document.getElementById('cb-fin').disabled ? null : leer('cb-fin'),
     horas_mmpp: leer('cb-mmpp'),
     horas_mga: leer('cb-mga'),
@@ -5859,7 +5957,7 @@ async function guardarComb() {
   if (!desde || !hasta) { toast('Faltan las fechas del período', true); return; }
   if (hasta < desde) { toast('La fecha "hasta" no puede ser anterior a "desde"', true); return; }
   if (datos.inicio_litros == null) { toast('Falta el inicio (litros)', true); return; }
-  const numeros = ['inicio_litros', 'trasvase_litros', 'fin_litros', 'horas_mmpp', 'horas_mga', 'millas', 'horas_navegacion'];
+  const numeros = ['inicio_litros', 'fin_litros', 'horas_mmpp', 'horas_mga', 'millas', 'horas_navegacion'];
   if (numeros.some(k => datos[k] != null && (isNaN(datos[k]) || datos[k] < 0))) { toast('Los números no pueden ser negativos', true); return; }
   for (const c of cargas) {
     if (!c.fecha) { toast('A una carga le falta la fecha', true); return; }
@@ -5924,8 +6022,10 @@ async function borrarComb(id) {
   const p = combPeriodos.find(x => x.id === id);
   if (!p || !puedeEditar()) return;
   const n = cargasDePeriodo(id).length;
+  const nt = trasvasesDeRangoComb(p.desde, p.hasta, p.id).length;
   if (!confirm(`¿Borrar el período ${textoPeriodoComb(p)}?` +
     (n ? `\n\nTambién se borran sus ${n} carga${n > 1 ? 's' : ''} de proveedor.` : '') +
+    (nt ? `\n\nSus ${nt} trasvase${nt > 1 ? 's' : ''} no se borran: quedan sin período hasta que cargues otro período con esas fechas.` : '') +
     '\n\nEsta acción no se puede deshacer.')) return;
   try {
     const { error } = await sb.from('mant_combustible_periodos').delete().eq('id', id);
@@ -5938,17 +6038,175 @@ async function borrarComb(id) {
   }
 }
 
-// Combustible_BM_Santa_Lucia_2026-11-02.xlsx, del período más nuevo al más viejo (como en pantalla)
+// ---- Trasvases ----
+// En la app solo se sabe el período de este barco; el del otro barco lo controla la base
+function puedeEditarTrasvUI(t) {
+  const p = periodoDeFechaComb(t.fecha);
+  return puedeEditar() || (puedeRegistrar() && (!p || p.fin_litros == null));
+}
+function textoOtroBuqueTrasv(t) {
+  const o = otroBuqueTrasv(t);
+  return o.nombre + (o.externo ? ' (fuera del sistema)' : '');
+}
+
+function renderTrasvasesComb() {
+  const div = document.getElementById('comb-trasvases');
+  if (!combTrasvases.length) {
+    div.innerHTML = '<div class="empty"><div class="big">🔁</div>Todavía no hay trasvases</div>';
+    return;
+  }
+  div.innerHTML = combTrasvases.map(t => {
+    const entrega = entregaBarcoComb(t);
+    const p = periodoDeFechaComb(t.fecha);
+    const periodoTxt = p
+      ? `Período ${textoPeriodoComb(p)}${p.fin_litros == null ? ' (en curso)' : ''}`
+      : '<span class="comb-aviso">⚠️ Sin período en este barco: no suma en ningún consumo</span>';
+    const acciones = puedeEditarTrasvUI(t)
+      ? `<button class="btn btn-sec btn-pequeno" onclick="abrirModalTrasv(${t.id})">✏️ Editar</button>
+         <button class="btn btn-sec btn-pequeno" onclick="borrarTrasv(${t.id})" style="background:#fde0df;color:var(--rojo)">🗑 Borrar</button>`
+      : '';
+    return `
+      <div class="admin-item">
+        <div>
+          <div class="titulo">${entrega ? '➡️ Entregado a' : '⬅️ Recibido de'} ${escape(textoOtroBuqueTrasv(t))} · ${fmtLitros(t.litros)} L</div>
+          <div class="detalle">${fmtFechaDMA(t.fecha)} · ${periodoTxt}${t.notas ? ' · 📝 ' + escape(t.notas) : ''}</div>
+        </div>
+        <div class="acciones">${acciones}</div>
+      </div>`;
+  }).join('');
+}
+
+function abrirModalTrasv(id) {
+  trasvActual = id ? combTrasvases.find(t => t.id === id) : null;
+  if (trasvActual ? !puedeEditarTrasvUI(trasvActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  const otros = combBarcos.filter(b => b.id !== barcoActual.id);
+  document.getElementById('tv-barco').innerHTML =
+    otros.map(b => `<option value="${b.id}">${escape(b.nombre)}</option>`).join('') +
+    '<option value="externo">Otro buque (fuera del sistema)</option>';
+  // Sugerencias: los buques de afuera ya usados
+  const externos = [...new Set(combTrasvases.map(t => t.otro_buque).filter(Boolean))].sort();
+  document.getElementById('tv-externos').innerHTML = externos.map(n => `<option value="${escape(n)}">`).join('');
+
+  if (trasvActual) {
+    const o = otroBuqueTrasv(trasvActual);
+    document.getElementById('modal-trasv-titulo').textContent = 'Editar trasvase';
+    document.getElementById('tv-tipo').value = entregaBarcoComb(trasvActual) ? 'entregado' : 'recibido';
+    document.getElementById('tv-barco').value = o.externo ? 'externo' : String(o.id);
+    document.getElementById('tv-externo').value = o.externo ? o.nombre : '';
+    document.getElementById('tv-fecha').value = trasvActual.fecha;
+    document.getElementById('tv-litros').value = trasvActual.litros;
+    document.getElementById('tv-notas').value = trasvActual.notas || '';
+    const partes = [];
+    if (trasvActual.creado_por) partes.push(`Cargado por ${nombreUsuarioComb(trasvActual.creado_por)} el ${fmtFechaHora(trasvActual.creado_en)}`);
+    if (trasvActual.actualizado_por && trasvActual.actualizado_en !== trasvActual.creado_en)
+      partes.push(`modificado por ${nombreUsuarioComb(trasvActual.actualizado_por)} el ${fmtFechaHora(trasvActual.actualizado_en)}`);
+    document.getElementById('tv-autor').textContent = partes.join(' · ');
+  } else {
+    document.getElementById('modal-trasv-titulo').textContent = 'Nuevo trasvase';
+    document.getElementById('tv-tipo').value = 'entregado';
+    document.getElementById('tv-barco').value = otros.length ? String(otros[0].id) : 'externo';
+    document.getElementById('tv-externo').value = '';
+    document.getElementById('tv-fecha').value = hoyLocalISO();
+    document.getElementById('tv-litros').value = '';
+    document.getElementById('tv-notas').value = '';
+    document.getElementById('tv-autor').textContent = '';
+  }
+  trasvActualizarNota();
+  document.getElementById('modal-trasv').classList.add('show');
+}
+
+function cerrarModalTrasv() {
+  document.getElementById('modal-trasv').classList.remove('show');
+  trasvActual = null;
+}
+
+// Muestra el nombre libre solo para buques de afuera, y en qué período de este barco cae la fecha
+function trasvActualizarNota() {
+  const sel = document.getElementById('tv-barco');
+  const externo = sel.value === 'externo';
+  document.getElementById('tv-externo-campo').style.display = externo ? '' : 'none';
+  const fecha = document.getElementById('tv-fecha').value;
+  const p = fecha ? periodoDeFechaComb(fecha) : null;
+  const nota = document.getElementById('tv-periodo-nota');
+  const partes = [];
+  if (!fecha) partes.push('');
+  else if (p) partes.push(escape(`Cuenta en el período ${textoPeriodoComb(p)}${p.fin_litros == null ? ' (en curso)' : ' (cerrado)'} de ${barcoActual.nombre}.`));
+  else partes.push(`<span class="comb-aviso">⚠️ ${escape(barcoActual.nombre)} no tiene un período en esa fecha: no va a sumar en ningún consumo hasta que cargues ese período.</span>`);
+  if (!externo && sel.selectedOptions[0]) partes.push(escape(`También aparece en ${sel.selectedOptions[0].textContent}.`));
+  nota.innerHTML = partes.filter(Boolean).join(' ');
+}
+
+async function guardarTrasv() {
+  const entrega = document.getElementById('tv-tipo').value === 'entregado';
+  const otro = document.getElementById('tv-barco').value;
+  const externo = otro === 'externo';
+  const nombreExterno = document.getElementById('tv-externo').value.trim();
+  const fecha = document.getElementById('tv-fecha').value;
+  const litros = numeroONull(document.getElementById('tv-litros').value);
+  if (externo && !nombreExterno) { toast('Falta el nombre del otro buque', true); return; }
+  if (!fecha) { toast('Falta la fecha', true); return; }
+  if (litros == null || isNaN(litros) || litros <= 0) { toast('Los litros tienen que ser mayores a 0', true); return; }
+
+  const otroId = externo ? null : Number(otro);
+  const datos = {
+    origen_barco_id: entrega ? barcoActual.id : otroId,
+    destino_barco_id: entrega ? otroId : barcoActual.id,
+    otro_buque: externo ? nombreExterno : null,
+    fecha, litros,
+    notas: document.getElementById('tv-notas').value.trim() || null
+  };
+  const btn = document.getElementById('tv-btn-guardar');
+  btn.disabled = true;
+  try {
+    // Con .select() se sabe si la base dejó cambiarlo (si no, vuelve vacío)
+    const { data, error } = trasvActual
+      ? await sb.from('mant_combustible_trasvases').update(datos).eq('id', trasvActual.id).select()
+      : await sb.from('mant_combustible_trasvases').insert(datos).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(trasvActual ? '✓ Trasvase actualizado' : '✓ Trasvase guardado');
+    cerrarModalTrasv();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function borrarTrasv(id) {
+  const t = combTrasvases.find(x => x.id === id);
+  if (!t) return;
+  const o = otroBuqueTrasv(t);
+  if (!confirm(`¿Borrar el trasvase del ${fmtFechaDMA(t.fecha)} (${entregaBarcoComb(t) ? 'entregado a' : 'recibido de'} ` +
+    `${textoOtroBuqueTrasv(t)}, ${fmtLitros(t.litros)} L)?` +
+    (o.externo ? '' : `\n\nTambién desaparece de ${o.nombre}.`) + '\n\nEsta acción no se puede deshacer.')) return;
+  try {
+    const { data, error } = await sb.from('mant_combustible_trasvases').delete().eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast('✓ Trasvase borrado');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// Combustible_BM_Santa_Lucia_2026-11-02.xlsx: hoja de períodos (del más nuevo al más viejo, como en pantalla)
+// y hoja de trasvases
 function exportarCombExcel() {
-  if (!combPeriodos.length) { toast('No hay períodos para exportar'); return; }
+  if (!combPeriodos.length && !combTrasvases.length) { toast('No hay períodos ni trasvases para exportar'); return; }
   const data = combPeriodos.map(p => {
-    const { cargado, consumo, promedio } = datosPeriodoComb(p);
+    const { cargado, entregado, recibido, consumo, promedio } = datosPeriodoComb(p);
     const num = v => v == null ? null : Number(v);
     return {
       Período: textoPeriodoComb(p),
       Inicio: num(p.inicio_litros),
       Consumo: consumo,
-      'Trasvase a otro buque': num(p.trasvase_litros),
+      'Trasvase a otro buque': entregado,
+      'Recibido de otro buque': recibido,
       Cargado: redondearLitros(cargado),
       Fin: num(p.fin_litros),
       MMPP: num(p.horas_mmpp),
@@ -5958,8 +6216,24 @@ function exportarCombExcel() {
       'Consumo promedio (l/h)': promedio == null ? '—' : Math.round(promedio * 10) / 10
     };
   });
+  const trasvases = combTrasvases.map(t => {
+    const p = periodoDeFechaComb(t.fecha);
+    return {
+      Fecha: t.fecha,
+      Tipo: entregaBarcoComb(t) ? 'Entregado' : 'Recibido',
+      'Otro buque': otroBuqueTrasv(t).nombre,
+      'Fuera del sistema': otroBuqueTrasv(t).externo ? 'Sí' : 'No',
+      Litros: Number(t.litros),
+      Período: p ? textoPeriodoComb(p) : 'Sin período',
+      Notas: t.notas
+    };
+  });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Combustible');
+  // json_to_sheet de una lista vacía no tiene encabezados: se arman a mano
+  const hoja = (filas, cols) => filas.length ? XLSX.utils.json_to_sheet(filas) : XLSX.utils.aoa_to_sheet([cols]);
+  XLSX.utils.book_append_sheet(wb, hoja(data, ['Período', 'Inicio', 'Consumo', 'Trasvase a otro buque', 'Recibido de otro buque',
+    'Cargado', 'Fin', 'MMPP', 'MGAs', 'Millas', 'Hr navegación', 'Consumo promedio (l/h)']), 'Combustible');
+  XLSX.utils.book_append_sheet(wb, hoja(trasvases, ['Fecha', 'Tipo', 'Otro buque', 'Fuera del sistema', 'Litros', 'Período', 'Notas']), 'Trasvases');
   XLSX.writeFile(wb, ['Combustible', nombreBarcoArchivo(), hoyLocalISO()].join('_') + '.xlsx');
   toast('✓ Excel descargado');
 }
