@@ -32,7 +32,7 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 
 ### Navigation (two levels)
 
-The top bar has four sections, each with its sub-tabs underneath:
+The top bar has these sections, each with its sub-tabs underneath:
 
 | Section | Sub-tabs |
 |---|---|
@@ -40,13 +40,17 @@ The top bar has four sections, each with its sub-tabs underneath:
 | 🔧 Mantenimiento | Tareas, Deficiencias, Horas, Historial |
 | ⚓ Barco | Mi Barco, Equipos, Certificados |
 | 📦 Pañol | Stock, Herramientas |
+| ⛽ Combustible | Combustible (for now only `admin_empresa`, see "Combustible") |
+| ⚙️ Admin | Barcos, Usuarios (only `admin_empresa`) |
+
+- **Restricted sections:** `puedeVerSeccion()` says who may open a section. `cambiarTab()` and `renderEncabezado()` send everyone else back to the dashboard, and the buttons are hidden with `.solo-admin` / `.solo-combustible`.
 
 - **Markup:** each sub-tab is a `.tab` button with `data-tab` (opens `<section id="sec-<tab>">`) and `data-seccion`. `SECCION_DE_TAB` is built from those attributes, so **a new tab only needs its button and section**.
 - **Navigating:** always call `cambiarTab('<sub-tab>')`. It activates the section too, shows only that section's sub-tabs, and hides the sub-tab row when the section has a single sub-tab.
   - Clicking a section (`cambiarSeccion()`) reopens the last sub-tab used in it.
   - The current tab and the last sub-tab per section are saved in `localStorage` (key `nav`) and restored on load.
 - **Section badges** (`#badge-sec-*`) are the sum of the visible sub-tab badges, recomputed by a `MutationObserver` whenever any sub-tab badge changes. The code that sets the sub-tab badges never touches them.
-- On mobile the four sections share the width (icon above the label) and the sub-tab row scrolls horizontally.
+- On mobile the sections share the width (icon above the label) and the sub-tab row scrolls horizontally.
 
 ### Maintenance status model
 
@@ -171,6 +175,29 @@ Overdue or upcoming tasks and certificates that were already reported to the com
   - Renewing a certificate does the same inside `mant_certificados_renovar` ("Estuvo postergado hasta …").
 - **Excel:** both exports include "Postergada hasta" and "Motivo postergación", filled only while the postponement is active.
 
+### Combustible (fuel)
+
+Stage 1 of 3 (section `============ COMBUSTIBLE ============`). Fuel is tracked per ship by **period** (`mant_combustible_periodos`), each with its supplier loads (`mant_combustible_cargas`, deleted with the period).
+
+- **Periods:**
+  - `desde`/`hasta` default to the calendar month after the last period, or to "15 to 15" if the last one didn't end on a month's last day (`fechasNuevoPeriodoComb()`). Both are editable.
+  - Periods of a ship can't overlap, but they may share the boundary day. The trigger `mant_priv.combustible_sin_solape` enforces this, and the app checks it first.
+  - `fin_litros` null means the period is "en curso".
+- **Inicio:** `inicio_litros` is prefilled from the previous period's `fin_litros` (`periodoAnteriorComb()`: latest `hasta` ≤ this `desde`) and stored. Without a previous period it's typed in. When it differs from the previous end, `avisoInicioComb()` shows a warning, both in the modal and in the list.
+- **Calculated, never stored:**
+  - consumo = inicio + cargado − trasvase − fin (`consumoComb()`). "Recibido de otro barco" comes in stage 2.
+  - l/h = consumo / `horas_navegacion` (`promedioComb()`), shown as "—" with 0 or no hours.
+  - A negative consumption shows a warning.
+- **Trasvases:** stage 1 only has the single `trasvase_litros` field. Stage 2 will add a transfers table linked to the other ship of the system (by id, not by name), so a transfer is entered once and shows on both ships.
+- **Permissions (enforced by RLS too):**
+  - lectura sees.
+  - operador adds and edits only periods en curso, and their loads. It can type the end, which closes the period for it, and can't insert an already-closed period: the modal disables "fin" on a new period for non-jefes.
+  - jefe and admin edit any period. Deleting is jefe and admin only.
+  - `guardarComb()` saves the loads before the period update, so an operador closing a period can still save its loads.
+- **Visibility:** for now the tab is only for `admin_empresa`. `puedeVerCombustible()` is the single switch (body class `puede-combustible`, elements `.solo-combustible`); the database rules are already per role.
+- **Authorship:** `creado_por` comes from `mant_priv.registrar_autor`, and `actualizado_por`/`actualizado_en` from `mant_priv.combustible_actualizado`. The modal shows them through `nombreUsuarioComb()`, which only knows emails of the admin's company users.
+- **Excel:** `exportarCombExcel()` writes, in this order: Período, Inicio, Consumo, Trasvase a otro buque, Cargado, Fin, MMPP, MGAs, Millas, Hr navegación, Consumo promedio (l/h). The file is `Combustible_<barco>_<fecha>.xlsx`.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -192,6 +219,8 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
+- `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `trasvase_litros` (default 0), `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
+- `mant_combustible_cargas` — `periodo_id` → `mant_combustible_periodos(barco_id, id)` on delete cascade, `fecha`, `litros` (> 0), `proveedor`, `creado_en/por`.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 

@@ -76,7 +76,8 @@
   /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan) */
   body:not(.puede-registrar) .solo-operador,
   body:not(.puede-editar) .solo-jefe,
-  body:not(.puede-administrar) .solo-admin { display: none !important; }
+  body:not(.puede-administrar) .solo-admin,
+  body:not(.puede-combustible) .solo-combustible { display: none !important; }
   .btn-header {
     background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3);
     padding: 7px 13px; border-radius: 7px; font: inherit; font-size: 13px; cursor: pointer; font-weight: 500;
@@ -595,6 +596,15 @@
   .tabla-minimos th, .tabla-minimos td { padding: 10px 12px; border-bottom: 1px solid var(--gris-2); font-size: 13.5px; text-align: left; }
   .tabla-minimos th { background: var(--gris-1); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--texto-suave); }
   .tabla-minimos tr:last-child td { border-bottom: none; }
+  /* Combustible: tabla de períodos (se desliza de costado en el celular) */
+  .tabla-comb th, .tabla-comb td { white-space: nowrap; }
+  .tabla-comb td.num, .tabla-comb th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabla-comb tr.comb-detalle td { white-space: normal; background: var(--gris-1); font-size: 12.5px; color: var(--texto-suave); }
+  .tabla-comb .comb-negativo { color: var(--rojo); font-weight: 700; }
+  .comb-aviso { color: var(--rojo); font-weight: 600; }
+  .comb-nota { font-size: 12px; color: var(--texto-suave); margin-top: 5px; }
+  .comb-carga { display: grid; grid-template-columns: 1.1fr 0.9fr 1.4fr auto; gap: 6px; margin-bottom: 6px; }
+  .comb-calculo { background: var(--gris-1); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-top: 4px; }
   .tabla-minimos .minimo-input { width: 90px; padding: 6px 8px; border: 1px solid var(--gris-2); border-radius: 6px; font: inherit; font-size: 13.5px; }
   .tabla-minimos .minimo-input:focus { outline: none; border-color: var(--azul-profundo); }
 
@@ -954,6 +964,7 @@
     <button class="seccion" data-seccion="mantenimiento"><span class="ico">🔧</span><span class="txt">Mantenimiento</span><span id="badge-sec-mantenimiento" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="barco"><span class="ico">⚓</span><span class="txt">Barco</span><span id="badge-sec-barco" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="panol"><span class="ico">📦</span><span class="txt">Pañol</span><span id="badge-sec-panol" class="badge" style="display:none">0</span></button>
+    <button class="seccion solo-combustible" data-seccion="combustible"><span class="ico">⛽</span><span class="txt">Combustible</span></button>
     <button class="seccion solo-admin" data-seccion="admin"><span class="ico">⚙️</span><span class="txt">Admin</span></button>
   </div>
   <div class="subtabs" id="subtabs">
@@ -968,6 +979,7 @@
       <button class="tab" data-tab="certificados" data-seccion="barco">📋 Certificados <span id="badge-certificados" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="stock" data-seccion="panol">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
+      <button class="tab solo-combustible" data-tab="combustible" data-seccion="combustible">⛽ Combustible</button>
       <button class="tab solo-admin" data-tab="admin-barcos" data-seccion="admin">🚢 Barcos</button>
       <button class="tab solo-admin" data-tab="admin-usuarios" data-seccion="admin">👥 Usuarios</button>
     </div>
@@ -1208,6 +1220,16 @@
     </div>
     <div id="historial-lista"></div>
   </section>
+  <!-- COMBUSTIBLE: períodos del barco elegido (por ahora solo admin_empresa, ver puedeVerCombustible) -->
+  <section class="section" id="sec-combustible">
+    <h2 class="panel-titulo">Combustible</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-operador" onclick="abrirModalComb()">➕ Agregar período</button>
+      <button class="btn btn-acento" onclick="exportarCombExcel()">📥 Exportar Excel</button>
+    </div>
+    <div id="comb-lista"></div>
+  </section>
+
   <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
   <section class="section" id="sec-admin-barcos">
     <h2 class="panel-titulo">Barcos de la empresa</h2>
@@ -1736,6 +1758,75 @@
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalDef()">Cancelar</button>
       <button class="btn" onclick="guardarDef()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: nuevo/editar período de combustible -->
+<div class="modal-bg" id="modal-comb">
+  <div class="modal">
+    <h2 id="modal-comb-titulo">Nuevo período</h2>
+    <div class="modal-sub">Litros del barco en el período. El consumo y el promedio se calculan solos.</div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Desde *</label>
+        <input type="date" id="cb-desde" onchange="combActualizarAvisos()">
+      </div>
+      <div>
+        <label>Hasta *</label>
+        <input type="date" id="cb-hasta" onchange="combActualizarAvisos()">
+      </div>
+    </div>
+    <div class="field">
+      <label>Inicio (litros) *</label>
+      <input type="number" id="cb-inicio" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
+      <div class="comb-nota" id="cb-inicio-nota"></div>
+    </div>
+    <div class="field">
+      <label>Cargas de proveedor</label>
+      <div id="cb-cargas"></div>
+      <button class="btn btn-sec btn-pequeno" type="button" onclick="combAgregarCarga()">➕ Agregar carga</button>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Trasvase a otro buque (litros)</label>
+        <input type="number" id="cb-trasvase" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
+      </div>
+      <div>
+        <label>Fin del período (litros, sonda)</label>
+        <input type="number" id="cb-fin" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
+        <div class="comb-nota" id="cb-fin-nota"></div>
+      </div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Horas MMPP</label>
+        <input type="number" id="cb-mmpp" min="0" step="any" inputmode="decimal">
+      </div>
+      <div>
+        <label>Horas MGAs</label>
+        <input type="number" id="cb-mga" min="0" step="any" inputmode="decimal">
+      </div>
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label>Millas</label>
+        <input type="number" id="cb-millas" min="0" step="any" inputmode="decimal">
+      </div>
+      <div>
+        <label>Horas de navegación</label>
+        <input type="number" id="cb-nav" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
+      </div>
+    </div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="cb-obs" rows="2"></textarea>
+    </div>
+    <div class="comb-calculo" id="cb-calculo"></div>
+    <div class="comb-nota" id="cb-autor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalComb()">Cancelar</button>
+      <button class="btn" id="cb-btn-guardar" onclick="guardarComb()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -2273,6 +2364,8 @@ function nivelActual() { return barcoActual ? NIVEL_ROL[barcoActual.rol] : 0; }
 function puedeRegistrar() { return nivelActual() >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
 function puedeEditar() { return nivelActual() >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
 function puedeAdministrar() { return nivelActual() >= NIVEL_ROL.admin_empresa; }  // barcos y usuarios de la empresa
+// La pestaña ⛽ Combustible, por ahora solo para el admin (la base ya tiene los permisos por rol para todos)
+function puedeVerCombustible() { return puedeAdministrar(); }
 
 // Lee los accesos del usuario y los barcos que puede ver; elige el último usado. false si no tiene ninguno.
 async function cargarBarcos() {
@@ -2307,9 +2400,10 @@ function renderEncabezado() {
   document.body.classList.toggle('puede-registrar', puedeRegistrar());
   document.body.classList.toggle('puede-editar', puedeEditar());
   document.body.classList.toggle('puede-administrar', puedeAdministrar());
-  // Si estaba en Administración y en este barco no es admin, vuelve al inicio
+  document.body.classList.toggle('puede-combustible', puedeVerCombustible());
+  // Si estaba en una sección que en este barco no le corresponde, vuelve al inicio
   const tabActiva = document.querySelector('.tab.active');
-  if (barcoActual && !puedeAdministrar() && tabActiva && SECCION_DE_TAB[tabActiva.dataset.tab] === 'admin') cambiarTab('dashboard');
+  if (barcoActual && tabActiva && !puedeVerSeccion(SECCION_DE_TAB[tabActiva.dataset.tab])) cambiarTab('dashboard');
   if (!barcoActual) {
     cont.textContent = 'Sin barco asignado';
     document.getElementById('header-rol').textContent = '';
@@ -2335,7 +2429,7 @@ async function cambiarBarco(id) {
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
-  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null;
   if (equipoActualFicha) volverAEquipos();
   renderEncabezado();
   await cargarTodo();
@@ -2379,7 +2473,9 @@ async function cargarTodo() {
       {data: df, error: e9},
       {data: ce, error: e10},
       {data: ch, error: e11},
-      {data: tp, error: e12}
+      {data: tp, error: e12},
+      {data: cp, error: e13},
+      {data: cc, error: e14}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2393,7 +2489,9 @@ async function cargarTodo() {
       traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B).order('anio').order('numero').order('id')),
       traerTodo(() => sb.from('mant_certificados').select('*').eq('barco_id', B).eq('activo', true).order('fecha_vencimiento').order('id')),
       traerTodo(() => sb.from('mant_certificados_historial').select('*, certificado:mant_certificados(nombre)').eq('barco_id', B).order('fecha_renovacion', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_tripulantes').select('*').eq('barco_id', B).order('nombre').order('id'))
+      traerTodo(() => sb.from('mant_tripulantes').select('*').eq('barco_id', B).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_combustible_periodos').select('*').eq('barco_id', B).order('desde', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_combustible_cargas').select('*').eq('barco_id', B).order('fecha').order('id'))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -2409,6 +2507,8 @@ async function cargarTodo() {
     if (e10) throw e10;
     if (e11) throw e11;
     if (e12) throw e12;
+    if (e13) throw e13;
+    if (e14) throw e14;
     tareasTodas = tt || [];
     tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
@@ -2430,6 +2530,8 @@ async function cargarTodo() {
     certificados = (ce || []).filter(c => !c.tripulante_id || tripActivos.has(c.tripulante_id));
     certificadosBaja = (ce || []).filter(c => c.tripulante_id && !tripActivos.has(c.tripulante_id));
     certHistorial = ch || [];
+    combPeriodos = cp || [];
+    combCargas = cc || [];
     renderTodo();
     await cargarUsuariosEmpresa();
   } catch (err) {
@@ -2452,6 +2554,7 @@ function renderTodo() {
   renderHoras();
   renderDeficiencias();
   renderCertificados();
+  renderCombustible();
 }
 
 // ============ FILTROS ============
@@ -5497,6 +5600,370 @@ document.getElementById('modal-export-plan').addEventListener('change', e => {
 });
 document.getElementById('modal-export-plan').addEventListener('click', e => { if (e.target.id === 'modal-export-plan') cerrarExportarPlan(); });
 
+// ============ COMBUSTIBLE ============
+// Períodos por barco (mant_combustible_periodos) con sus cargas de proveedor (mant_combustible_cargas).
+// Consumo = inicio + cargado + recibido − trasvasado − fin (recibido de otro barco llega en la etapa 2: hoy 0).
+// Permisos (los controla la base): operador agrega y edita solo períodos en curso (sin fin); jefe y admin, cualquiera;
+// borrar, jefe y admin. Un operador no puede crear un período ya cerrado: primero lo guarda y después carga el fin.
+let combPeriodos = [];   // del más nuevo al más viejo
+let combCargas = [];
+let combActual = null;   // período en edición (null = nuevo)
+
+function fmtLitros(n) {
+  return n == null ? '—' : Number(n).toLocaleString('es-UY', { maximumFractionDigits: 2 });
+}
+function textoPeriodoComb(p) { return `${fmtFechaDMA(p.desde)} – ${fmtFechaDMA(p.hasta)}`; }
+// Último día del mes de una fecha YYYY-MM-DD
+function finDeMes(fecha) {
+  const f = new Date(fecha + 'T00:00:00Z');
+  return new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0)).toISOString().split('T')[0];
+}
+function numeroONull(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return isNaN(n) ? NaN : n;
+}
+
+function cargasDePeriodo(id) { return combCargas.filter(c => c.periodo_id === id); }
+function cargadoPeriodo(id) { return cargasDePeriodo(id).reduce((s, c) => s + Number(c.litros), 0); }
+// Redondeo a centésimos para que las sumas de decimales no muestren basura (0,1 + 0,2)
+function redondearLitros(n) { return Math.round(n * 100) / 100; }
+function consumoComb(inicio, cargado, trasvase, fin) {
+  if (fin == null || inicio == null) return null;
+  return redondearLitros(Number(inicio) + cargado - Number(trasvase || 0) - Number(fin));
+}
+function promedioComb(consumo, horasNav) {
+  if (consumo == null || !Number(horasNav)) return null;
+  return consumo / Number(horasNav);
+}
+function fmtPromedio(n) {
+  return n == null ? '—' : n.toLocaleString('es-UY', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+// Período anterior: el que termina más tarde sin pasar del inicio de este (comparten el día del borde en "del 15 al 15")
+function periodoAnteriorComb(desde, exceptoId) {
+  return combPeriodos
+    .filter(p => p.id !== exceptoId && p.hasta <= desde)
+    .sort((a, b) => b.hasta.localeCompare(a.hasta) || b.id - a.id)[0] || null;
+}
+// Aviso si el inicio no coincide con el fin del período anterior (null si coincide o no hay con qué comparar)
+function avisoInicioComb(inicio, anterior) {
+  if (!anterior || anterior.fin_litros == null || inicio == null || isNaN(inicio)) return null;
+  if (redondearLitros(inicio) === redondearLitros(Number(anterior.fin_litros))) return null;
+  return `El inicio no coincide con el fin del período anterior (${textoPeriodoComb(anterior)}: ${fmtLitros(anterior.fin_litros)} L)`;
+}
+function puedeEditarPeriodo(p) { return puedeEditar() || (puedeRegistrar() && p.fin_litros == null); }
+
+// Quién hizo algo: el email si se conoce (el admin ve los de su empresa), si no "otro usuario"
+function nombreUsuarioComb(uid) {
+  if (!uid) return null;
+  if (uid === usuarioId) return usuarioEmail;
+  return usuariosEmpresa.find(u => u.user_id === uid)?.email || 'otro usuario';
+}
+function fmtFechaHora(ts) {
+  return ts ? new Date(ts).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function datosPeriodoComb(p) {
+  const cargado = cargadoPeriodo(p.id);
+  const consumo = consumoComb(p.inicio_litros, cargado, p.trasvase_litros, p.fin_litros);
+  return { cargado, consumo, promedio: promedioComb(consumo, p.horas_navegacion) };
+}
+
+function renderCombustible() {
+  const div = document.getElementById('comb-lista');
+  if (!puedeVerCombustible()) { div.innerHTML = ''; return; }
+  if (!combPeriodos.length) {
+    div.innerHTML = '<div class="empty"><div class="big">⛽</div>Todavía no hay períodos de combustible cargados</div>';
+    return;
+  }
+  const filas = combPeriodos.map(p => {
+    const { cargado, consumo, promedio } = datosPeriodoComb(p);
+    const avisos = [];
+    const avisoInicio = avisoInicioComb(Number(p.inicio_litros), periodoAnteriorComb(p.desde, p.id));
+    if (avisoInicio) avisos.push(avisoInicio);
+    if (consumo != null && consumo < 0) avisos.push('El consumo da negativo: revisá los litros cargados');
+    const cargas = cargasDePeriodo(p.id).map(c =>
+      `${fmtFechaDMA(c.fecha)} · ${fmtLitros(c.litros)} L${c.proveedor ? ' · ' + escape(c.proveedor) : ''}`);
+    const detalle = [
+      ...avisos.map(a => `<div class="comb-aviso">⚠️ ${escape(a)}</div>`),
+      cargas.length ? `<div>⛽ Cargas: ${cargas.join(' — ')}</div>` : '',
+      p.observaciones ? `<div>📝 ${escape(p.observaciones)}</div>` : ''
+    ].filter(Boolean).join('');
+    const acciones = [
+      puedeEditarPeriodo(p) ? `<button class="btn btn-sec btn-pequeno" onclick="abrirModalComb(${p.id})">✏️ Editar</button>` : '',
+      `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="borrarComb(${p.id})" style="background:#fde0df;color:var(--rojo)">🗑 Borrar</button>`
+    ].join(' ');
+    return `
+      <tr>
+        <td><strong>${textoPeriodoComb(p)}</strong>${p.fin_litros == null ? ' <span class="badge-tipo">en curso</span>' : ''}</td>
+        <td class="num">${fmtLitros(p.inicio_litros)}</td>
+        <td class="num${consumo != null && consumo < 0 ? ' comb-negativo' : ''}">${consumo != null && consumo < 0 ? '⚠️ ' : ''}${fmtLitros(consumo)}</td>
+        <td class="num">${fmtLitros(p.trasvase_litros)}</td>
+        <td class="num">${fmtLitros(cargado)}</td>
+        <td class="num">${fmtLitros(p.fin_litros)}</td>
+        <td class="num">${fmtLitros(p.horas_mmpp)}</td>
+        <td class="num">${fmtLitros(p.horas_mga)}</td>
+        <td class="num">${fmtLitros(p.millas)}</td>
+        <td class="num">${fmtLitros(p.horas_navegacion)}</td>
+        <td class="num">${fmtPromedio(promedio)}</td>
+        <td>${acciones}</td>
+      </tr>
+      ${detalle ? `<tr class="comb-detalle"><td colspan="12">${detalle}</td></tr>` : ''}`;
+  }).join('');
+  div.innerHTML = `
+    <div style="overflow-x:auto">
+      <table class="tabla-minimos tabla-comb">
+        <thead><tr>
+          <th>Período</th><th class="num">Inicio</th><th class="num">Consumo</th><th class="num">Trasvase a otro buque</th>
+          <th class="num">Cargado</th><th class="num">Fin</th><th class="num">MMPP</th><th class="num">MGAs</th>
+          <th class="num">Millas</th><th class="num">Hr navegación</th><th class="num">l/h</th><th></th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+// Fechas propuestas para un período nuevo: el mes que sigue al último; si el último iba "del 15 al 15", igual
+function fechasNuevoPeriodoComb() {
+  const ultimo = [...combPeriodos].sort((a, b) => b.hasta.localeCompare(a.hasta))[0];
+  if (!ultimo) {
+    const hoy = hoyLocalISO();
+    const desde = hoy.slice(0, 8) + '01';
+    return { desde, hasta: finDeMes(desde) };
+  }
+  if (ultimo.hasta === finDeMes(ultimo.hasta)) {
+    const desde = sumarDias(ultimo.hasta, 1);
+    return { desde, hasta: finDeMes(desde) };
+  }
+  return { desde: ultimo.hasta, hasta: sumarMeses(ultimo.hasta, 1) };
+}
+
+function abrirModalComb(id) {
+  combActual = id ? combPeriodos.find(p => p.id === id) : null;
+  if (combActual ? !puedeEditarPeriodo(combActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  const val = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
+  document.getElementById('cb-cargas').innerHTML = '';
+  if (combActual) {
+    document.getElementById('modal-comb-titulo').textContent = 'Editar período ' + textoPeriodoComb(combActual);
+    val('cb-desde', combActual.desde);
+    val('cb-hasta', combActual.hasta);
+    val('cb-inicio', combActual.inicio_litros);
+    val('cb-trasvase', combActual.trasvase_litros);
+    val('cb-fin', combActual.fin_litros);
+    val('cb-mmpp', combActual.horas_mmpp);
+    val('cb-mga', combActual.horas_mga);
+    val('cb-millas', combActual.millas);
+    val('cb-nav', combActual.horas_navegacion);
+    val('cb-obs', combActual.observaciones);
+    cargasDePeriodo(combActual.id).forEach(c => combAgregarCarga(c));
+    const partes = [];
+    if (combActual.creado_por) partes.push(`Cargado por ${nombreUsuarioComb(combActual.creado_por)} el ${fmtFechaHora(combActual.creado_en)}`);
+    if (combActual.actualizado_por && combActual.actualizado_en !== combActual.creado_en)
+      partes.push(`modificado por ${nombreUsuarioComb(combActual.actualizado_por)} el ${fmtFechaHora(combActual.actualizado_en)}`);
+    document.getElementById('cb-autor').textContent = partes.join(' · ');
+  } else {
+    document.getElementById('modal-comb-titulo').textContent = 'Nuevo período';
+    const { desde, hasta } = fechasNuevoPeriodoComb();
+    val('cb-desde', desde);
+    val('cb-hasta', hasta);
+    // Inicio automático: el fin del período anterior
+    const anterior = periodoAnteriorComb(desde, null);
+    val('cb-inicio', anterior?.fin_litros);
+    ['cb-fin', 'cb-mmpp', 'cb-mga', 'cb-millas', 'cb-nav', 'cb-obs'].forEach(i => val(i, ''));
+    val('cb-trasvase', 0);
+    document.getElementById('cb-autor').textContent = '';
+  }
+  // Un período nuevo del operador se guarda en curso: el fin lo carga después, editándolo
+  const finBloqueado = !combActual && !puedeEditar();
+  document.getElementById('cb-fin').disabled = finBloqueado;
+  document.getElementById('cb-fin-nota').textContent = finBloqueado
+    ? 'Guardá el período y cargá el fin después, editándolo.'
+    : (!puedeEditar() ? 'Cuando cargues el fin, el período queda cerrado y ya no lo vas a poder editar.' : '');
+  combActualizarAvisos();
+  document.getElementById('modal-comb').classList.add('show');
+}
+
+function cerrarModalComb() {
+  document.getElementById('modal-comb').classList.remove('show');
+  combActual = null;
+}
+
+// Una fila de carga en el modal (c = carga guardada, o nada para una nueva)
+function combAgregarCarga(c) {
+  const fila = document.createElement('div');
+  fila.className = 'comb-carga';
+  if (c) fila.dataset.id = c.id;
+  fila.innerHTML = `
+    <input type="date" class="cc-fecha" aria-label="Fecha de la carga">
+    <input type="number" class="cc-litros" min="0" step="any" inputmode="decimal" placeholder="Litros" aria-label="Litros">
+    <input type="text" class="cc-proveedor" placeholder="Proveedor" aria-label="Proveedor">
+    <button class="btn btn-sec btn-pequeno" type="button" title="Quitar carga" aria-label="Quitar carga">✕</button>`;
+  fila.querySelector('.cc-fecha').value = c ? c.fecha : (document.getElementById('cb-desde').value || hoyLocalISO());
+  fila.querySelector('.cc-litros').value = c ? c.litros : '';
+  fila.querySelector('.cc-proveedor').value = c?.proveedor || '';
+  fila.querySelector('.cc-litros').addEventListener('input', combActualizarAvisos);
+  fila.querySelector('button').addEventListener('click', () => { fila.remove(); combActualizarAvisos(); });
+  document.getElementById('cb-cargas').appendChild(fila);
+}
+
+function cargasDelModal() {
+  return [...document.querySelectorAll('#cb-cargas .comb-carga')].map(f => ({
+    id: f.dataset.id ? Number(f.dataset.id) : null,
+    fecha: f.querySelector('.cc-fecha').value,
+    litros: numeroONull(f.querySelector('.cc-litros').value),
+    proveedor: f.querySelector('.cc-proveedor').value.trim() || null
+  }));
+}
+
+// Avisos y cálculo en vivo dentro del modal
+function combActualizarAvisos() {
+  const desde = document.getElementById('cb-desde').value;
+  const inicio = numeroONull(document.getElementById('cb-inicio').value);
+  const anterior = desde ? periodoAnteriorComb(desde, combActual?.id) : null;
+  const nota = document.getElementById('cb-inicio-nota');
+  const aviso = avisoInicioComb(inicio, anterior);
+  if (aviso) nota.innerHTML = `<span class="comb-aviso">⚠️ ${escape(aviso)}</span>`;
+  else if (anterior && anterior.fin_litros != null) nota.textContent = `Tomado del fin del período anterior (${textoPeriodoComb(anterior)}).`;
+  else if (anterior) nota.textContent = `El período anterior (${textoPeriodoComb(anterior)}) todavía no tiene fin: cargá el inicio a mano.`;
+  else nota.textContent = 'No hay período anterior: cargá el inicio a mano.';
+
+  const cargado = cargasDelModal().reduce((s, c) => s + (c.litros > 0 ? c.litros : 0), 0);
+  const consumo = consumoComb(isNaN(inicio) ? null : inicio, cargado,
+    numeroONull(document.getElementById('cb-trasvase').value) || 0, numeroONull(document.getElementById('cb-fin').value));
+  const promedio = promedioComb(consumo, numeroONull(document.getElementById('cb-nav').value));
+  const calc = document.getElementById('cb-calculo');
+  calc.innerHTML = consumo == null
+    ? `Cargado: <strong>${fmtLitros(cargado)} L</strong> · Consumo: — (falta el fin del período)`
+    : `Cargado: <strong>${fmtLitros(cargado)} L</strong> · Consumo: <strong${consumo < 0 ? ' class="comb-aviso"' : ''}>${fmtLitros(consumo)} L</strong>` +
+      ` · Promedio: <strong>${fmtPromedio(promedio)}</strong> l/h` +
+      (consumo < 0 ? '<div class="comb-aviso">⚠️ El consumo da negativo: revisá los litros cargados.</div>' : '');
+}
+
+async function guardarComb() {
+  const leer = id => numeroONull(document.getElementById(id).value);
+  const desde = document.getElementById('cb-desde').value;
+  const hasta = document.getElementById('cb-hasta').value;
+  const datos = {
+    desde, hasta,
+    inicio_litros: leer('cb-inicio'),
+    trasvase_litros: leer('cb-trasvase') ?? 0,
+    fin_litros: document.getElementById('cb-fin').disabled ? null : leer('cb-fin'),
+    horas_mmpp: leer('cb-mmpp'),
+    horas_mga: leer('cb-mga'),
+    millas: leer('cb-millas'),
+    horas_navegacion: leer('cb-nav'),
+    observaciones: document.getElementById('cb-obs').value.trim() || null
+  };
+  const cargas = cargasDelModal();
+
+  if (!desde || !hasta) { toast('Faltan las fechas del período', true); return; }
+  if (hasta < desde) { toast('La fecha "hasta" no puede ser anterior a "desde"', true); return; }
+  if (datos.inicio_litros == null) { toast('Falta el inicio (litros)', true); return; }
+  const numeros = ['inicio_litros', 'trasvase_litros', 'fin_litros', 'horas_mmpp', 'horas_mga', 'millas', 'horas_navegacion'];
+  if (numeros.some(k => datos[k] != null && (isNaN(datos[k]) || datos[k] < 0))) { toast('Los números no pueden ser negativos', true); return; }
+  for (const c of cargas) {
+    if (!c.fecha) { toast('A una carga le falta la fecha', true); return; }
+    if (c.fecha < desde || c.fecha > hasta) { toast(`La carga del ${fmtFechaDMA(c.fecha)} está fuera del período`, true); return; }
+    if (c.litros == null || isNaN(c.litros) || c.litros <= 0) { toast('Cada carga tiene que tener litros mayores a 0', true); return; }
+  }
+  const pisa = combPeriodos.find(p => p.id !== combActual?.id && p.desde < hasta && p.hasta > desde);
+  if (pisa) { toast(`Se superpone con el período ${textoPeriodoComb(pisa)}`, true); return; }
+
+  const btn = document.getElementById('cb-btn-guardar');
+  btn.disabled = true;
+  try {
+    let periodoId;
+    if (combActual) {
+      periodoId = combActual.id;
+      // Primero las cargas: si el operador carga el fin, después el período queda cerrado para él
+      await guardarCargasComb(periodoId, cargas);
+      const { error } = await sb.from('mant_combustible_periodos').update(datos).eq('id', periodoId);
+      if (error) throw error;
+    } else {
+      const { data: nuevo, error } = await sb.from('mant_combustible_periodos').insert(conBarco(datos)).select().single();
+      if (error) throw error;
+      periodoId = nuevo.id;
+      await guardarCargasComb(periodoId, cargas);
+    }
+    toast(combActual ? '✓ Período actualizado' : '✓ Período guardado');
+    cerrarModalComb();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+    await cargarTodo();  // lo que sí se guardó queda a la vista
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Sincroniza las cargas del modal con la base: borra las quitadas, actualiza las cambiadas y agrega las nuevas
+async function guardarCargasComb(periodoId, cargas) {
+  const antes = cargasDePeriodo(periodoId);
+  const quedan = new Set(cargas.filter(c => c.id).map(c => c.id));
+  const borrar = antes.filter(c => !quedan.has(c.id)).map(c => c.id);
+  if (borrar.length) {
+    const { error } = await sb.from('mant_combustible_cargas').delete().in('id', borrar);
+    if (error) throw error;
+  }
+  for (const c of cargas.filter(c => c.id)) {
+    const vieja = antes.find(a => a.id === c.id);
+    if (vieja && vieja.fecha === c.fecha && Number(vieja.litros) === c.litros && (vieja.proveedor || null) === c.proveedor) continue;
+    const { error } = await sb.from('mant_combustible_cargas')
+      .update({ fecha: c.fecha, litros: c.litros, proveedor: c.proveedor }).eq('id', c.id);
+    if (error) throw error;
+  }
+  const nuevas = cargas.filter(c => !c.id).map(c => ({ periodo_id: periodoId, fecha: c.fecha, litros: c.litros, proveedor: c.proveedor }));
+  if (nuevas.length) {
+    const { error } = await sb.from('mant_combustible_cargas').insert(conBarco(nuevas));
+    if (error) throw error;
+  }
+}
+
+async function borrarComb(id) {
+  const p = combPeriodos.find(x => x.id === id);
+  if (!p || !puedeEditar()) return;
+  const n = cargasDePeriodo(id).length;
+  if (!confirm(`¿Borrar el período ${textoPeriodoComb(p)}?` +
+    (n ? `\n\nTambién se borran sus ${n} carga${n > 1 ? 's' : ''} de proveedor.` : '') +
+    '\n\nEsta acción no se puede deshacer.')) return;
+  try {
+    const { error } = await sb.from('mant_combustible_periodos').delete().eq('id', id);
+    if (error) throw error;
+    toast('✓ Período borrado');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// Combustible_BM_Santa_Lucia_2026-11-02.xlsx, del período más nuevo al más viejo (como en pantalla)
+function exportarCombExcel() {
+  if (!combPeriodos.length) { toast('No hay períodos para exportar'); return; }
+  const data = combPeriodos.map(p => {
+    const { cargado, consumo, promedio } = datosPeriodoComb(p);
+    const num = v => v == null ? null : Number(v);
+    return {
+      Período: textoPeriodoComb(p),
+      Inicio: num(p.inicio_litros),
+      Consumo: consumo,
+      'Trasvase a otro buque': num(p.trasvase_litros),
+      Cargado: redondearLitros(cargado),
+      Fin: num(p.fin_litros),
+      MMPP: num(p.horas_mmpp),
+      MGAs: num(p.horas_mga),
+      Millas: num(p.millas),
+      'Hr navegación': num(p.horas_navegacion),
+      'Consumo promedio (l/h)': promedio == null ? '—' : Math.round(promedio * 10) / 10
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Combustible');
+  XLSX.writeFile(wb, ['Combustible', nombreBarcoArchivo(), hoyLocalISO()].join('_') + '.xlsx');
+  toast('✓ Excel descargado');
+}
+
 // ============ NAVEGACIÓN TABS ============
 // Dos niveles: secciones (Inicio, Mantenimiento, Barco, Pañol) y sub-pestañas. Cada sub-pestaña
 // abre su <section id="sec-..."> y su botón .tab declara la sección con data-seccion.
@@ -5505,10 +5972,17 @@ const SECCION_DE_TAB = Object.fromEntries(
   [...document.querySelectorAll('.tab')].map(b => [b.dataset.tab, b.dataset.seccion]));
 let ultimaTabDeSeccion = {};  // sección -> última sub-pestaña abierta en ella
 
+// Administración solo para el admin de la empresa; Combustible según puedeVerCombustible()
+function puedeVerSeccion(seccion) {
+  if (seccion === 'admin') return puedeAdministrar();
+  if (seccion === 'combustible') return puedeVerCombustible();
+  return true;
+}
+
 function cambiarTab(name) {
   if (!SECCION_DE_TAB[name]) name = 'dashboard';
-  // Administración solo para el admin de la empresa (antes de entrar todavía no se sabe el rol)
-  if (SECCION_DE_TAB[name] === 'admin' && barcoActual && !puedeAdministrar()) name = 'dashboard';
+  // Antes de entrar todavía no se sabe el rol
+  if (barcoActual && !puedeVerSeccion(SECCION_DE_TAB[name])) name = 'dashboard';
   const seccion = SECCION_DE_TAB[name];
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === name);
