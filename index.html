@@ -899,6 +899,10 @@
   }
   .equipo-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); border-top-color: var(--acento); }
   .equipo-card.con-vencidos { border-top-color: var(--rojo); }
+  .equipo-card.de-baja { opacity: 0.6; background: var(--gris-1); border-top-color: var(--gris-3); }
+  .tarea-en-pausa { opacity: 0.6; margin-bottom: 8px; }
+  .tarea-en-pausa .task-card { pointer-events: none; }
+  .pill.de-baja, .mini-badge.de-baja { background: var(--gris-2); color: var(--texto-suave); font-weight: 700; }
   .equipo-card.con-proximos { border-top-color: var(--ambar); }
   .equipo-card .icon { font-size: 22px; }
   .equipo-card .nombre { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--azul-profundo); line-height: 1.2; }
@@ -1173,6 +1177,7 @@
           <option value="PROXIMOS">🟡 Con tareas próximas</option>
           <option value="OK">🟢 Al día</option>
         </select>
+        <label class="toolbar-check"><input type="checkbox" id="eq-mostrar-bajas" onchange="guardarMostrarBajasEq(); renderEquipos()"> Mostrar dados de baja</label>
       </div>
       <div id="equipos-grilla"></div>
     </div>
@@ -1875,7 +1880,7 @@
     <div class="field"><label>Notas</label><textarea id="eq-notas-tx" rows="2"></textarea></div>
 
     <div class="modal-actions">
-      <button class="btn btn-sec" id="eq-borrar-btn" onclick="borrarEquipo()" style="margin-right:auto;display:none;background:#fde0df;color:var(--rojo)">🗑 Borrar</button>
+      <button class="btn btn-sec solo-jefe" id="eq-borrar-btn" onclick="darDeBajaEquipo()" style="margin-right:auto;display:none;background:#fde0df;color:var(--rojo)">⏹ Dar de baja</button>
       <button class="btn btn-sec" onclick="cerrarModalEquipo()">Cancelar</button>
       <button class="btn" onclick="guardarEquipo()">✓ Guardar</button>
     </div>
@@ -2564,7 +2569,8 @@ let usuarioId = null;      // auth.uid() de la sesión
 let usuarioEmail = null;   // email de la sesión (para volver a entrar solo después de cambiar la contraseña)
 let barcosDisponibles = []; // [{ id, nombre, empresa_id, rol }]: barcos que el usuario puede ver y su rol en cada uno
 let barcoActual = null;    // barco elegido: todo se lee filtrado por él y todo lo nuevo se guarda con su barco_id
-let equipos = [];          // fichas de equipos
+let equipos = [];          // fichas de equipos activos (todas las listas y selectores usan estos)
+let equiposTodos = [];     // también los dados de baja (para verlos con "Mostrar dados de baja" y reactivarlos)
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
 let defActual = null;      // deficiencia en edición o cierre
 let certificados = [];     // certificados del barco (solo activos)
@@ -2878,7 +2884,8 @@ async function cargarTodo() {
       traerTodo(() => sb.from('mant_tarea_repuestos').select('*').eq('barco_id', B).order('id')),
       traerTodo(() => sb.from('mant_herramientas').select('*').eq('barco_id', B).order('nombre').order('id')),
       sb.from('mant_buque').select('*').eq('id', B),
-      traerTodo(() => sb.from('mant_equipos').select('*').eq('barco_id', B).eq('activo', true).order('nombre').order('id')),
+      // Todos los equipos (también los dados de baja, para poder verlos y reactivarlos); abajo se separan los activos
+      traerTodo(() => sb.from('mant_equipos').select('*').eq('barco_id', B).order('nombre').order('id')),
       traerTodo(() => sb.from('mant_lecturas_horas').select('*').eq('barco_id', B).order('fecha', { ascending: false }).order('id', { ascending: false })),
       traerTodo(() => sb.from('mant_deficiencias').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B).order('anio').order('numero').order('id')),
       traerTodo(() => sb.from('mant_certificados').select('*').eq('barco_id', B).eq('activo', true).order('fecha_vencimiento').order('id')),
@@ -2926,8 +2933,11 @@ async function cargarTodo() {
     if (e20) throw e20;
     if (e21) throw e21;
     if (e22) throw e22;
+    equiposTodos = eq || [];
+    equipos = equiposTodos.filter(e => e.activo);
     tareasTodas = tt || [];
-    tareas = tareasTodas.filter(t => t.activa);
+    // Activas = no dadas de baja y no en pausa por tener su equipo dado de baja (vuelven al reactivarlo)
+    tareas = tareasTodas.filter(t => t.activa && !tareaEnPausa(t));
     historial = hh || [];
     repuestos = rr || [];
     tareaRepuestos = tr || [];
@@ -2938,7 +2948,6 @@ async function cargarTodo() {
       barcoActual.nombre = buque.nombre;
       renderEncabezado();
     }
-    equipos = eq || [];
     lecturas = lh || [];
     deficiencias = df || [];
     tripulantes = tp || [];
@@ -7896,6 +7905,8 @@ llenarSelectoresTipoTrabajo();
 ['eq-buscador','eq-filtro-cat','eq-filtro-estado'].forEach(id => {
   document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderEquipos);
 });
+// "Mostrar dados de baja" en Equipos se recuerda en este navegador
+try { document.getElementById('eq-mostrar-bajas').checked = localStorage.getItem('eq-mostrar-bajas') === '1'; } catch (e) {}
 ['def-buscador','def-filtro-estado'].forEach(id => {
   document.getElementById(id).addEventListener(id.includes('buscador') ? 'input' : 'change', renderDeficiencias);
 });
@@ -8100,9 +8111,20 @@ async function guardarBuque() {
 }
 
 // ============ EQUIPOS - GRILLA ============
+// Una tarea queda en pausa mientras su equipo (por equipo_id) esté dado de baja: no cuenta en ningún lado
+// (Dashboard, Tareas, horas...) y vuelve sola al reactivarlo. No se cambia nada de la tarea en la base.
+function tareaEnPausa(t) {
+  return t.equipo_id != null && equiposTodos.some(e => e.id === t.equipo_id && !e.activo);
+}
+function guardarMostrarBajasEq() {
+  try { localStorage.setItem('eq-mostrar-bajas', document.getElementById('eq-mostrar-bajas').checked ? '1' : '0'); } catch (e) {}
+}
+
 function renderEquipos() {
+  const mostrarBajas = document.getElementById('eq-mostrar-bajas').checked;
+  const lista = mostrarBajas ? equiposTodos : equipos;
   // Filtros
-  const cats = [...new Set(equipos.map(e => e.categoria).filter(Boolean))].sort();
+  const cats = [...new Set(lista.map(e => e.categoria).filter(Boolean))].sort();
   const selCat = document.getElementById('eq-filtro-cat');
   llenarSelectConservando(selCat, '<option value="">Todas las categorías</option>' + cats.map(c => `<option value="${escape(c)}">${escape(c)}</option>`).join(''));
   document.getElementById('lista-cat-eq').innerHTML = cats.map(c => `<option value="${escape(c)}">`).join('');
@@ -8112,8 +8134,9 @@ function renderEquipos() {
   const est = document.getElementById('eq-filtro-estado').value;
 
   // Calcular estado de cada equipo (basado en sus tareas)
-  const equiposConStats = equipos.map(eq => {
-    const tareasEq = tareas.filter(t => t.equipo_id === eq.id);
+  const equiposConStats = lista.map(eq => {
+    // Un equipo dado de baja no tiene tareas que cuenten (están en pausa)
+    const tareasEq = eq.activo ? tareas.filter(t => t.equipo_id === eq.id) : [];
     const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
     tareasEq.forEach(t => stats[calcularEstado(t).estado]++);
     let estado = 'OK';
@@ -8126,6 +8149,7 @@ function renderEquipos() {
   // Filtrar
   let filtrados = equiposConStats.filter(eq => {
     if (cat && eq.categoria !== cat) return false;
+    if (!eq.activo && est !== 'TODOS' && est) return false;
     if (est === 'VENCIDOS' && eq._estado !== 'VENCIDOS') return false;
     if (est === 'PROXIMOS' && eq._estado !== 'PROXIMOS') return false;
     if (est === 'OK' && eq._estado !== 'OK') return false;
@@ -8136,9 +8160,10 @@ function renderEquipos() {
     return true;
   });
 
-  // Ordenar: vencidos → próximos → ok
+  // Ordenar: vencidos → próximos → ok; los dados de baja al final
   const ord = { VENCIDOS: 0, PROXIMOS: 1, OK: 2, SIN_TAREAS: 3 };
   filtrados.sort((a, b) => {
+    if (a.activo !== b.activo) return a.activo ? -1 : 1;
     if (ord[a._estado] !== ord[b._estado]) return ord[a._estado] - ord[b._estado];
     return a.nombre.localeCompare(b.nombre);
   });
@@ -8172,13 +8197,16 @@ function renderEquipos() {
 
   let html = `<p style="font-size:13px;color:var(--texto-suave);margin-bottom:12px">${filtrados.length} equipo${filtrados.length>1?'s':''}</p><div class="equipos-grid">`;
   for (const eq of filtrados) {
-    const cls = eq._estado === 'VENCIDOS' ? 'con-vencidos' : eq._estado === 'PROXIMOS' ? 'con-proximos' : '';
+    const cls = !eq.activo ? 'de-baja' : eq._estado === 'VENCIDOS' ? 'con-vencidos' : eq._estado === 'PROXIMOS' ? 'con-proximos' : '';
     const fabModel = [eq.fabricante, eq.modelo].filter(Boolean).join(' · ') || (eq.categoria || '');
     let badges = '';
-    if (eq._stats.VENCIDO > 0) badges += `<span class="mini-badge vencido">🔴 ${eq._stats.VENCIDO} vencida${eq._stats.VENCIDO>1?'s':''}</span>`;
-    if (eq._stats.PROXIMO > 0) badges += `<span class="mini-badge proximo">🟡 ${eq._stats.PROXIMO} próxima${eq._stats.PROXIMO>1?'s':''}</span>`;
-    if (eq._stats.VENCIDO === 0 && eq._stats.PROXIMO === 0 && eq._totalTareas > 0) badges += `<span class="mini-badge ok">🟢 Al día</span>`;
-    if (eq._totalTareas === 0) badges += `<span class="mini-badge neutral">Sin tareas</span>`;
+    if (!eq.activo) badges += '<span class="mini-badge de-baja">De baja</span>';
+    else if (eq._stats.VENCIDO > 0) badges += `<span class="mini-badge vencido">🔴 ${eq._stats.VENCIDO} vencida${eq._stats.VENCIDO>1?'s':''}</span>`;
+    if (eq.activo) {
+      if (eq._stats.PROXIMO > 0) badges += `<span class="mini-badge proximo">🟡 ${eq._stats.PROXIMO} próxima${eq._stats.PROXIMO>1?'s':''}</span>`;
+      if (eq._stats.VENCIDO === 0 && eq._stats.PROXIMO === 0 && eq._totalTareas > 0) badges += `<span class="mini-badge ok">🟢 Al día</span>`;
+      if (eq._totalTareas === 0) badges += `<span class="mini-badge neutral">Sin tareas</span>`;
+    }
 
     html += `
       <div class="equipo-card ${cls}" onclick="abrirFichaEquipo(${eq.id})">
@@ -8198,7 +8226,7 @@ function renderEquipos() {
 
 // ============ FICHA INDIVIDUAL DEL EQUIPO ============
 function abrirFichaEquipo(id) {
-  const eq = equipos.find(e => e.id === id);
+  const eq = equiposTodos.find(e => e.id === id);
   if (!eq) { toast('Equipo no encontrado', true); return; }
   equipoActualFicha = eq;
 
@@ -8226,7 +8254,9 @@ function volverAEquipos() {
 function renderFichaEquipo() {
   if (!equipoActualFicha) return;
   const eq = equipoActualFicha;
-  const tareasEq = tareas.filter(t => t.equipo_id === eq.id);
+  // Dado de baja: sus tareas activas están en pausa (no cuentan en ningún lado); acá se muestran igual
+  const tareasEq = eq.activo ? tareas.filter(t => t.equipo_id === eq.id)
+    : tareasTodas.filter(t => t.activa && t.equipo_id === eq.id);
   // El historial incluye el de las tareas dadas de baja (marcadas en la lista)
   const idMapTodas = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
   const histEq = historial.filter(h => idMapTodas[h.tarea_id]?.equipo_id === eq.id);
@@ -8273,18 +8303,23 @@ function renderFichaEquipo() {
         ${eq.modelo ? ` ${escape(eq.modelo)}` : ''}
       </div>
       <div class="pills">
+        ${eq.activo ? '' : '<span class="pill de-baja">De baja</span>'}
         ${fabPills.join('')}
         <span class="pill ${estPillCls}">${escape(eq.estado || 'Operativo')}</span>
       </div>
-      <button class="btn btn-acento editar solo-jefe" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>
+      ${eq.activo
+        ? `<button class="btn btn-acento editar solo-jefe" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>`
+        : `<button class="btn btn-acento editar solo-jefe" onclick="reactivarEquipo(${eq.id})">↺ Reactivar</button>`}
     </div>
+
+    ${eq.activo ? '' : `<div class="datos-tecnicos-box vacio" style="margin-bottom:14px">Equipo dado de baja: no aparece en listas ni selectores${tareasEq.length ? ` y sus ${tareasEq.length} tarea${tareasEq.length > 1 ? 's quedan' : ' queda'} en pausa hasta que lo reactives` : ''}. Su historial queda guardado.</div>`}
 
     ${quickStats.length ? `
       <div class="ficha-stats">
         ${quickStats.map(s => `<div class="ficha-stat neutral"><div class="v">${escape(s.v)}</div><div class="l">${escape(s.l)}</div></div>`).join('')}
       </div>` : ''}
 
-    <div class="ficha-stats">
+    <div class="ficha-stats"${eq.activo ? '' : ' style="display:none"'}>
       <div class="ficha-stat vencido"><div class="v">${stats.VENCIDO}</div><div class="l">Vencidas</div></div>
       <div class="ficha-stat proximo"><div class="v">${stats.PROXIMO}</div><div class="l">Próximas</div></div>
       <div class="ficha-stat ok"><div class="v">${stats.OK}</div><div class="l">Al día</div></div>
@@ -8294,7 +8329,7 @@ function renderFichaEquipo() {
 
     ${eq.datos_tecnicos
       ? `<h3 class="panel-titulo" style="margin-top:6px">📋 Datos técnicos</h3><div class="datos-tecnicos-box">${escape(eq.datos_tecnicos)}</div>`
-      : `<div class="datos-tecnicos-box vacio">Sin datos técnicos cargados. Tocá <strong>Editar ficha</strong> para agregarlos.</div>`}
+      : eq.activo ? `<div class="datos-tecnicos-box vacio">Sin datos técnicos cargados. Tocá <strong>Editar ficha</strong> para agregarlos.</div>` : ''}
 
     ${(histEq.length > 0 || tareasEq.some(usaHoras)) ? `
       <h3 class="panel-titulo">📊 Gráficos</h3>
@@ -8312,7 +8347,7 @@ function renderFichaEquipo() {
 
     <div id="ficha-rellenos" class="solo-combustible"></div>
 
-    <h3 class="panel-titulo">🔧 Próximas tareas (${tareasEq.length})</h3>
+    <h3 class="panel-titulo">${eq.activo ? '🔧 Próximas tareas' : '⏸ Tareas en pausa (equipo de baja)'} (${tareasEq.length})</h3>
     <div class="task-list" id="ficha-tareas-list"></div>
 
     <h3 class="panel-titulo" style="margin-top:24px">📜 Historial (${histEq.length})</h3>
@@ -8329,7 +8364,8 @@ function renderFichaEquipo() {
     const ordTareas = tareasEq.map(t => ({...t, _est: calcularEstado(t)}));
     const ordEst = { VENCIDO: 0, PROXIMO: 1, OK: 2, SIN_DATO: 3 };
     ordTareas.sort((a, b) => ordEst[a._est.estado] - ordEst[b._est.estado]);
-    listaT.innerHTML = ordTareas.map(renderTaskCard).join('');
+    listaT.innerHTML = eq.activo ? ordTareas.map(renderTaskCard).join('')
+      : ordTareas.map(t => `<div class="tarea-en-pausa"><span class="badge-tipo">En pausa (equipo de baja)</span>${renderTaskCard(t)}</div>`).join('');
   }
 
   // Render historial del equipo
@@ -8482,7 +8518,7 @@ function abrirModalEquipo(id) {
   set('eq-proveedor', target?.proveedor_local);
   set('eq-notas-tx', target?.notas);
   document.getElementById('eq-critico').checked = !!target?.critico;
-  document.getElementById('eq-borrar-btn').style.display = target ? 'inline-flex' : 'none';
+  document.getElementById('eq-borrar-btn').style.display = target && target.activo ? 'inline-flex' : 'none';
   // Guardamos el id para saber si update o insert
   document.getElementById('modal-equipo').dataset.editId = target ? target.id : '';
   document.getElementById('modal-equipo').classList.add('show');
@@ -8571,26 +8607,45 @@ async function guardarEquipo() {
   }
 }
 
-async function borrarEquipo() {
+// Dar de baja (activo = false): no se borra nada. El equipo sale de listas y selectores y sus tareas quedan en
+// pausa (tareaEnPausa) hasta que se reactive. Con "Mostrar dados de baja" se lo ve en Equipos y se reactiva desde su ficha.
+async function darDeBajaEquipo() {
   const editId = document.getElementById('modal-equipo').dataset.editId;
-  if (!editId) return;
+  if (!editId || !puedeEditar()) return;
   const eq = equipos.find(e => e.id === parseInt(editId));
   if (!eq) return;
-  // Verificar si tiene tareas vinculadas
-  const tareasVinc = tareas.filter(t => t.equipo_id === eq.id).length;
-  if (tareasVinc > 0) {
-    if (!confirm(`Este equipo tiene ${tareasVinc} tarea${tareasVinc>1?'s':''} vinculada${tareasVinc>1?'s':''}.\n\nSi lo borrás, las tareas quedan sin equipo (pero NO se borran).\n\n¿Confirmás?`)) return;
-  } else {
-    if (!confirm(`¿Borrar el equipo "${eq.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
-  }
+  const n = tareas.filter(t => t.equipo_id === eq.id).length;
+  if (!confirm(`¿Dar de baja "${eq.nombre}"?\n\nEl equipo deja de aparecer en listas y selectores. No se borra nada: su historial queda guardado.` +
+    (n ? `\n\nSus ${n} tarea${n > 1 ? 's quedan' : ' queda'} en pausa hasta que lo reactives.` : ''))) return;
   try {
-    // En vez de DELETE, marcamos activo = false para no perder historial
-    const { error } = await sb.from('mant_equipos').update({ activo: false }).eq('id', eq.id);
+    const { data, error } = await sb.from('mant_equipos').update({ activo: false }).eq('id', eq.id).select();
     if (error) throw error;
-    toast('✓ Equipo eliminado');
+    if (!data || !data.length) throw { code: '42501' };
+    toast(`✓ ${eq.nombre} dado de baja`);
     cerrarModalEquipo();
     volverAEquipos();
     await cargarTodo();
+  } catch (err) {
+    toast(textoError(err), true);
+  }
+}
+
+async function reactivarEquipo(id) {
+  const eq = equiposTodos.find(e => e.id === id);
+  if (!eq || !puedeEditar()) return;
+  const n = tareasTodas.filter(t => t.activa && t.equipo_id === id).length;
+  if (!confirm(`¿Reactivar "${eq.nombre}"?\n\nVuelve a aparecer en listas y selectores.` +
+    (n ? `\n\nSus ${n} tarea${n > 1 ? 's vuelven' : ' vuelve'} a contar (vencidas, próximas, horas).` : ''))) return;
+  try {
+    const { data, error } = await sb.from('mant_equipos').update({ activo: true }).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(`✓ ${eq.nombre} reactivado`);
+    await cargarTodo();
+    if (equipoActualFicha && equipoActualFicha.id === id) {
+      equipoActualFicha = equiposTodos.find(e => e.id === id);
+      renderFichaEquipo();
+    }
   } catch (err) {
     toast(textoError(err), true);
   }

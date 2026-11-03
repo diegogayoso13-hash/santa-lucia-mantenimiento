@@ -26,7 +26,11 @@ There is no build, bundle, lint, or test tooling in this repo — it's plain HTM
 
 - `cargarTodo()` fetches all tables from Supabase in parallel on login/startup and populates global arrays (`tareas`, `tareasTodas`, `historial`, `repuestos`, `herramientas`, `tareaRepuestos`, `buque`, `equipos`, `lecturas`, `deficiencias`, `certificados`, `certHistorial`, `tripulantes`).
   - **Paging:** PostgREST returns at most 1000 rows per request, so every list goes through `traerTodo(() => consulta)`, which pages with `.range()` until it has everything. The callback must build a fresh query each time with a stable order (add `.order('id')` as a tie-breaker). New list loads must use it too.
-  - **Active rows:** `mant_tareas` is loaded in full into `tareasTodas`; `tareas` holds only the active ones (`activa = true`) and is what everything else uses (status, Dashboard, alerts, filters, hours). `mant_equipos` and `mant_certificados` load only `activo = true` — tasks with history, equipment, certificates and crew are soft-deleted, never hard-deleted. `tripulantes` is loaded in full (including inactive), and `certificados` drops the documents of inactive crew members right after loading.
+  - **Active rows:** tasks with history, equipment, certificates and crew are soft-deleted, never hard-deleted.
+    - `mant_tareas` is loaded in full into `tareasTodas`. `tareas` holds only the active ones (`activa = true`) that aren't paused (see "Retired equipment"), and is what everything else uses (status, Dashboard, alerts, filters, hours).
+    - `mant_equipos` is loaded in full into `equiposTodos`. `equipos` holds only `activo = true`, and every list and selector uses it.
+    - `mant_certificados` loads only `activo = true`.
+    - `tripulantes` is loaded in full (including inactive), and `certificados` drops the documents of inactive crew members right after loading.
 - `renderTodo()` re-renders every section from those in-memory arrays. There's no reactive framework: after any mutation (save/delete), code calls `cargarTodo()` again (or manually patches the array + calls the relevant `renderX()`), not a diffing re-render.
 - Tab switching (`cambiarTab`) just toggles `.active` on `<section>` elements — all tabs are already in the DOM, nothing is lazy-loaded.
 
@@ -121,6 +125,16 @@ Each save also inserts one `mant_lecturas_horas` row per equipment (including th
 ### Ship & equipment fichas ("Mi Barco" / "Equipos" tabs)
 
 `mant_buque` (one row per ship; the app shows the selected ship's) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Tasks can optionally link to an equipment row via `tarea.equipo_id`, which makes the equipment name clickable to jump to its ficha. Note that tasks also carry the equipment name as free text (`tarea.equipo`), and the Tareas filters, hour cascading and `mant_lecturas_horas` match on that name, not on `equipo_id`.
+
+### Retired equipment
+
+- **Retiring:** "⏹ Dar de baja" in the equipment modal (`darDeBajaEquipo()`, jefe/admin) sets `mant_equipos.activo = false`. Nothing is deleted.
+- **While retired**, the equipment's active tasks (`activa = true`, linked by `equipo_id`) are **paused** (`tareaEnPausa()`):
+  - they're left out of `tareas`, so they count nowhere (Dashboard, alerts, Tareas list, badges, hours entry, Registrar varias);
+  - they're not changed in the database, so they come back by themselves when the equipment is reactivated;
+  - tasks linked only by the equipment's name (no `equipo_id`) are not paused.
+- **Equipos tab:** "Mostrar dados de baja" (`#eq-mostrar-bajas`, remembered in `localStorage` key `eq-mostrar-bajas`) lists the retired equipment last, greyed, labelled "De baja".
+- **Retired equipment's ficha:** it shows "De baja", "↺ Reactivar" (`reactivarEquipo()`, jefe/admin) instead of "Editar ficha", and its paused tasks greyed (they can't be registered while paused).
 
 ### Critical equipment
 
