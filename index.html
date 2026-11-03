@@ -669,6 +669,29 @@
   .tq-item .info { flex: 1; min-width: 0; font-size: 13px; }
   .tq-item .info small { display: block; color: var(--texto-suave); }
   .tq-item.baja { opacity: 0.55; }
+  /* Rellenos de aceite: tabla en PC, tarjetas en el celular; bloque en la ficha del equipo */
+  .toolbar .rl-fecha-filtro { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--texto-suave); white-space: nowrap; }
+  .toolbar .rl-fecha-filtro input { min-width: 0; flex: none; width: auto; }
+  .rl-total { font-size: 13.5px; color: var(--texto-suave); margin: 4px 0 12px; }
+  .rl-total strong { color: var(--azul-profundo); font-size: 15px; }
+  .tabla-rellenos th, .tabla-rellenos td { padding: 7px 8px; font-size: 13px; }
+  .tabla-rellenos td.num, .tabla-rellenos th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tabla-rellenos td.litros { font-weight: 700; color: var(--azul-profundo); }
+  .tabla-rellenos td.obs { color: var(--texto-suave); max-width: 260px; }
+  .tabla-rellenos td.acciones { text-align: right; white-space: nowrap; padding: 4px 6px; }
+  .badge-cambio { background: #e6def0; color: #5b3f8c; }
+  .rl-tarjetas { display: none; }
+  .rl-tarjeta { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  .rl-tarjeta .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .rl-tarjeta .litros { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; color: var(--azul-profundo); }
+  .rl-tarjeta .meta { font-size: 12.5px; color: var(--texto-suave); margin-top: 2px; }
+  @media (max-width: 700px) {
+    .rl-tabla-wrap { display: none; }
+    .rl-tarjetas { display: block; }
+  }
+  .ficha-rellenos-tot { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ficha-rellenos-tot div { background: white; border: 1px solid var(--gris-2); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--texto-suave); }
+  .ficha-rellenos-tot strong { display: block; font-size: 18px; color: var(--azul-profundo); }
   /* Inicio: tanques de la última sonda */
   .tanques-inicio { margin-bottom: 24px; }
   .tanques-inicio::after { background: var(--azul-medio); }
@@ -1059,6 +1082,7 @@
       <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
       <button class="tab solo-combustible" data-tab="combustible" data-seccion="combustible">⛽ Combustible</button>
       <button class="tab solo-combustible" data-tab="sondas" data-seccion="combustible">📏 Sondas</button>
+      <button class="tab solo-combustible" data-tab="rellenos" data-seccion="combustible">🛢️ Rellenos</button>
       <button class="tab solo-admin" data-tab="admin-barcos" data-seccion="admin">🚢 Barcos</button>
       <button class="tab solo-admin" data-tab="admin-usuarios" data-seccion="admin">👥 Usuarios</button>
     </div>
@@ -1324,6 +1348,24 @@
       <button class="btn btn-acento" onclick="exportarSondasExcel()">📥 Exportar Excel</button>
     </div>
     <div id="sondas-lista"></div>
+  </section>
+
+  <!-- RELLENOS DE ACEITE (misma visibilidad que Combustible) -->
+  <section class="section" id="sec-rellenos">
+    <h2 class="panel-titulo">Rellenos de aceite</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-operador" onclick="abrirModalRelleno()">➕ Relleno</button>
+      <button class="btn btn-sec" onclick="abrirModalAceites()">🛢️ Aceites</button>
+      <button class="btn btn-acento" onclick="exportarRellenosExcel()">📥 Exportar Excel</button>
+    </div>
+    <div class="toolbar">
+      <select id="rl-filtro-equipo" onchange="renderRellenos()" aria-label="Equipo"></select>
+      <select id="rl-filtro-aceite" onchange="renderRellenos()" aria-label="Aceite"></select>
+      <label class="rl-fecha-filtro">Desde <input type="date" id="rl-desde" onchange="renderRellenos()"></label>
+      <label class="rl-fecha-filtro">Hasta <input type="date" id="rl-hasta" onchange="renderRellenos()"></label>
+    </div>
+    <div class="rl-total" id="rl-total"></div>
+    <div id="rl-lista"></div>
   </section>
 
   <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
@@ -1768,6 +1810,10 @@
       <div><label>Tipo de aceite</label><input type="text" id="eq-aceite-tipo" placeholder="SAE 30"></div>
       <div><label>Capacidad aceite (L)</label><input type="number" step="0.01" id="eq-aceite-cap"></div>
     </div>
+    <div class="field">
+      <label>Aceite (de la lista del barco, para los rellenos)</label>
+      <select id="eq-aceite-id"></select>
+    </div>
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Detalles técnicos adicionales</h3>
     <div class="field">
@@ -2028,6 +2074,73 @@
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalTanque()">Cancelar</button>
       <button class="btn" onclick="guardarTanque()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: nuevo/editar relleno de aceite -->
+<div class="modal-bg" id="modal-relleno">
+  <div class="modal">
+    <h2 id="modal-relleno-titulo">Nuevo relleno</h2>
+    <div class="modal-sub">Aceite agregado a un equipo (relleno) o cambio completo.</div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Fecha *</label><input type="date" id="rl-fecha"></div>
+      <div><label>Tipo *</label>
+        <select id="rl-tipo"><option value="Relleno">Relleno</option><option value="Cambio">Cambio</option></select></div>
+    </div>
+    <div class="field">
+      <label>Equipo *</label>
+      <select id="rl-equipo" onchange="rellenoEquipoCambiado()"></select>
+    </div>
+    <div class="field">
+      <label>Aceite *</label>
+      <select id="rl-aceite"></select>
+      <div class="comb-nota" id="rl-aceite-nota"></div>
+    </div>
+    <div class="field" style="max-width:200px">
+      <label>Litros *</label>
+      <input type="number" id="rl-litros" min="0" step="any" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="rl-obs" rows="2"></textarea>
+    </div>
+    <div class="comb-nota" id="rl-autor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalRelleno()">Cancelar</button>
+      <button class="btn" id="rl-btn-guardar" onclick="guardarRelleno()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: lista de aceites del barco -->
+<div class="modal-bg" id="modal-aceites">
+  <div class="modal" style="max-width:600px">
+    <h2>Aceites</h2>
+    <div class="modal-sub">Los aceites que se usan en el barco y dónde se guardan.</div>
+    <div id="ac-lista"></div>
+    <div class="modal-actions">
+      <button class="btn solo-jefe" onclick="abrirModalAceite()">➕ Agregar aceite</button>
+      <button class="btn btn-sec" onclick="cerrarModalAceites()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: agregar/editar aceite -->
+<div class="modal-bg" id="modal-aceite">
+  <div class="modal">
+    <h2 id="modal-aceite-titulo">Agregar aceite</h2>
+    <div class="field">
+      <label>Nombre *</label>
+      <input type="text" id="ac-nombre" placeholder="ej: Mobil Delvac 15W40">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Tipo *</label><select id="ac-tipo"></select></div>
+      <div><label>Dónde se guarda</label><select id="ac-tanque"></select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalAceite()">Cancelar</button>
+      <button class="btn" onclick="guardarAceite()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -2630,7 +2743,7 @@ async function cambiarBarco(id) {
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
-  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null; rellenoActual = null; aceiteActual = null;
   if (equipoActualFicha) volverAEquipos();
   renderEncabezado();
   await cargarTodo();
@@ -2681,7 +2794,9 @@ async function cargarTodo() {
       {data: cb, error: e16},
       {data: tq, error: e17},
       {data: sd, error: e18},
-      {data: sl, error: e19}
+      {data: sl, error: e19},
+      {data: ac, error: e20},
+      {data: rl, error: e21}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2705,7 +2820,12 @@ async function cargarTodo() {
       // Sondas: todos los tanques (también los dados de baja, por su historial), las sondas y sus lecturas
       traerTodo(() => sb.from('mant_tanques').select('*').eq('barco_id', B).order('orden').order('id')),
       traerTodo(() => sb.from('mant_sondas').select('*').eq('barco_id', B).order('fecha', { ascending: false }).order('id')),
-      traerTodo(() => sb.from('mant_sondas_lecturas').select('*').eq('barco_id', B).order('id'))
+      traerTodo(() => sb.from('mant_sondas_lecturas').select('*').eq('barco_id', B).order('id')),
+      // Rellenos de aceite: todos los aceites (también dados de baja) y los rellenos con el nombre del equipo
+      // embebido, así se ven aunque el equipo se haya dado de baja
+      traerTodo(() => sb.from('mant_aceites').select('*').eq('barco_id', B).order('nombre').order('id')),
+      traerTodo(() => sb.from('mant_rellenos').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B)
+        .order('fecha', { ascending: false }).order('id', { ascending: false }))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -2728,6 +2848,8 @@ async function cargarTodo() {
     if (e17) throw e17;
     if (e18) throw e18;
     if (e19) throw e19;
+    if (e20) throw e20;
+    if (e21) throw e21;
     tareasTodas = tt || [];
     tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
@@ -2756,6 +2878,8 @@ async function cargarTodo() {
     tanques = tq || [];
     sondas = sd || [];
     sondasLecturas = sl || [];
+    aceites = ac || [];
+    rellenos = rl || [];
     renderTodo();
     await cargarUsuariosEmpresa();
   } catch (err) {
@@ -2782,6 +2906,7 @@ function renderTodo() {
   renderCombustibleInicio();
   renderSondas();
   renderTanquesInicio();
+  renderRellenos();
 }
 
 // ============ FILTROS ============
@@ -6974,6 +7099,348 @@ function renderTanquesInicio() {
     </div>`;
 }
 
+// ============ RELLENOS ============
+// Rellenos de aceite por equipo (mant_rellenos): fecha, equipo, aceite, litros, tipo (Relleno/Cambio).
+// Aceites del barco en mant_aceites (dónde se guardan: un tanque de mant_tanques o tambor/bidón); cada
+// equipo puede tener su aceite (mant_equipos.aceite_id), que se propone al cargar un relleno.
+// Permisos (los controla la base): ver todos; cargar operador+; editar jefe/admin cualquiera, el operador solo
+// lo que cargó él el mismo día (hora de Uruguay, mant_priv.relleno_propio_del_dia); borrar y aceites jefe/admin.
+// Misma visibilidad que Combustible.
+// Los tipos también están en el check mant_aceites_tipo_check: si agregás uno, actualizá los dos.
+const TIPOS_ACEITE = ['motor', 'hidráulico', 'compresor', 'otro'];
+
+let aceites = [];          // del barco, también los dados de baja
+let rellenos = [];         // del más nuevo al más viejo
+let rellenoActual = null;  // relleno en edición (null = nuevo)
+let aceiteActual = null;   // aceite en edición (null = nuevo)
+
+// Dónde se guarda un aceite: el código de su tanque o "tambor/bidón"
+function lugarAceite(a) {
+  const t = a.tanque_id ? tanques.find(x => x.id === a.tanque_id) : null;
+  return t ? t.codigo : 'tambor/bidón';
+}
+function textoAceite(id) {
+  const a = aceites.find(x => x.id === id);
+  return a ? `${a.nombre} (${lugarAceite(a)})` : '(aceite)';
+}
+function nombreAceite(id) { return aceites.find(a => a.id === id)?.nombre || '(aceite)'; }
+function nombreEquipoRelleno(r) { return r.equipo?.nombre || equipos.find(e => e.id === r.equipo_id)?.nombre || '(equipo)'; }
+// Opciones de aceite: los activos y, si hace falta, el elegido aunque esté dado de baja
+function llenarSelectorAceite(sel, elegido, vacio) {
+  const lista = aceites.filter(a => a.activo || a.id === elegido);
+  sel.innerHTML = (vacio ? `<option value="">${escape(vacio)}</option>` : '') +
+    lista.map(a => `<option value="${a.id}">${escape(textoAceite(a.id))}${a.activo ? '' : ' (dado de baja)'}</option>`).join('');
+  sel.value = elegido ? String(elegido) : '';
+}
+// Fecha local (YYYY-MM-DD) en que se cargó un registro
+function fechaLocalDe(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function puedeEditarRelleno(r) {
+  return puedeEditar() || (puedeRegistrar() && r.creado_por === usuarioId && fechaLocalDe(r.creado_en) === hoyLocalISO());
+}
+
+function filtrosRellenos() {
+  return {
+    equipo: parseInt(document.getElementById('rl-filtro-equipo').value) || null,
+    aceite: parseInt(document.getElementById('rl-filtro-aceite').value) || null,
+    desde: document.getElementById('rl-desde').value,
+    hasta: document.getElementById('rl-hasta').value
+  };
+}
+// Los rellenos que pasan los filtros, en el orden de la pantalla (pantalla y Excel)
+function rellenosFiltrados() {
+  const f = filtrosRellenos();
+  return rellenos.filter(r =>
+    (!f.equipo || r.equipo_id === f.equipo) && (!f.aceite || r.aceite_id === f.aceite) &&
+    (!f.desde || r.fecha >= f.desde) && (!f.hasta || r.fecha <= f.hasta));
+}
+function sumaLitros(lista) { return redondearLitros(lista.reduce((s, r) => s + Number(r.litros), 0)); }
+
+function renderRellenos() {
+  if (!puedeVerCombustible()) {
+    document.getElementById('rl-lista').innerHTML = '';
+    document.getElementById('rl-total').innerHTML = '';
+    renderRellenosFicha();
+    return;
+  }
+  // Filtros: equipos y aceites que tienen rellenos, más los activos
+  const eqIds = new Set([...equipos.map(e => e.id), ...rellenos.map(r => r.equipo_id)]);
+  const eqOpc = [...eqIds].map(id => ({ id, nombre: equipos.find(e => e.id === id)?.nombre || nombreEquipoRelleno(rellenos.find(r => r.equipo_id === id)) }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  llenarSelectConservando(document.getElementById('rl-filtro-equipo'),
+    '<option value="">Todos los equipos</option>' + eqOpc.map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join(''));
+  llenarSelectConservando(document.getElementById('rl-filtro-aceite'),
+    '<option value="">Todos los aceites</option>' + aceites.filter(a => a.activo || rellenos.some(r => r.aceite_id === a.id))
+      .map(a => `<option value="${a.id}">${escape(a.nombre)}</option>`).join(''));
+
+  const lista = rellenosFiltrados();
+  document.getElementById('rl-total').innerHTML = rellenos.length
+    ? `${lista.length} relleno${lista.length !== 1 ? 's' : ''} · total <strong>${fmtLitros(sumaLitros(lista))} L</strong>` : '';
+  const div = document.getElementById('rl-lista');
+  if (!rellenos.length) { div.innerHTML = '<div class="empty"><div class="big">🛢️</div>Todavía no hay rellenos cargados</div>'; renderRellenosFicha(); return; }
+  if (!lista.length) { div.innerHTML = '<div class="empty"><div class="big">🔍</div>No hay rellenos con esos filtros</div>'; renderRellenosFicha(); return; }
+
+  const acciones = r => [
+    puedeEditarRelleno(r) ? `<button class="btn-ico" onclick="abrirModalRelleno(${r.id})" title="Editar relleno" aria-label="Editar relleno">✏️</button>` : '',
+    `<button class="btn-ico peligro solo-jefe" onclick="borrarRelleno(${r.id})" title="Borrar relleno" aria-label="Borrar relleno">🗑️</button>`
+  ].join('');
+  const tipo = r => r.tipo === 'Cambio' ? '<span class="badge-tipo badge-cambio">Cambio</span>' : '<span class="badge-tipo">Relleno</span>';
+  const quien = r => r.creado_por ? escape(nombreUsuarioComb(r.creado_por)) : '';
+  div.innerHTML = `
+    <div class="rl-tabla-wrap" style="overflow-x:auto">
+      <table class="tabla-minimos tabla-rellenos">
+        <thead><tr><th>Fecha</th><th>Equipo</th><th>Aceite</th><th>Tipo</th><th class="num">Litros</th><th>Observaciones</th><th>Cargado por</th><th></th></tr></thead>
+        <tbody>${lista.map(r => `
+          <tr>
+            <td style="white-space:nowrap">${fmtFechaDMA(r.fecha)}</td>
+            <td>${escape(nombreEquipoRelleno(r))}</td>
+            <td>${escape(nombreAceite(r.aceite_id))}</td>
+            <td>${tipo(r)}</td>
+            <td class="num litros">${fmtLitros(r.litros)}</td>
+            <td class="obs">${escape(r.observaciones || '')}</td>
+            <td style="font-size:12px;color:var(--texto-suave)">${quien(r)}</td>
+            <td class="acciones">${acciones(r)}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="rl-tarjetas">${lista.map(r => `
+      <div class="rl-tarjeta">
+        <div class="cab">
+          <div><span class="litros">${fmtLitros(r.litros)} L</span> ${tipo(r)}</div>
+          <div>${acciones(r)}</div>
+        </div>
+        <div><strong>${escape(nombreEquipoRelleno(r))}</strong></div>
+        <div class="meta">${fmtFechaDMA(r.fecha)} · ${escape(nombreAceite(r.aceite_id))}${r.creado_por ? ' · ' + quien(r) : ''}</div>
+        ${r.observaciones ? `<div class="meta">📝 ${escape(r.observaciones)}</div>` : ''}
+      </div>`).join('')}</div>`;
+  renderRellenosFicha();
+}
+
+// Bloque de la ficha del equipo: botón, totales de los últimos 30 y 90 días (contando hoy) y últimos 5 rellenos
+function renderRellenosFicha() {
+  const div = document.getElementById('ficha-rellenos');
+  if (!div || !equipoActualFicha) return;
+  if (!puedeVerCombustible()) { div.innerHTML = ''; return; }
+  const id = equipoActualFicha.id;
+  const delEquipo = rellenos.filter(r => r.equipo_id === id);
+  const hoy = hoyLocalISO();
+  const ultimos = dias => sumaLitros(delEquipo.filter(r => r.fecha >= sumarDias(hoy, -(dias - 1)) && r.fecha <= hoy));
+  div.innerHTML = `
+    <h3 class="panel-titulo" style="margin-top:6px">🛢️ Rellenos de aceite</h3>
+    <div class="acciones-globales"><button class="btn solo-operador" onclick="abrirModalRelleno(null, ${id})">🛢️ Relleno</button></div>
+    <div class="ficha-rellenos-tot">
+      <div><strong>${fmtLitros(ultimos(30))} L</strong>últimos 30 días</div>
+      <div><strong>${fmtLitros(ultimos(90))} L</strong>últimos 90 días</div>
+    </div>
+    ${delEquipo.length ? `<div>${delEquipo.slice(0, 5).map(r => `
+      <div class="hist-item">
+        <div class="hist-info">
+          <div class="tarea">${fmtFechaDMA(r.fecha)} · <strong>${fmtLitros(r.litros)} L</strong> de ${escape(nombreAceite(r.aceite_id))} ${r.tipo === 'Cambio' ? '<span class="badge-tipo badge-cambio">Cambio</span>' : ''}</div>
+          ${r.observaciones ? `<div class="notas">📝 ${escape(r.observaciones)}</div>` : ''}
+        </div>
+      </div>`).join('')}</div>` : '<div class="empty">Sin rellenos cargados para este equipo</div>'}`;
+}
+
+// ---- Formulario de relleno ----
+// equipoId: al abrirlo desde la ficha del equipo, ya viene elegido
+function abrirModalRelleno(id, equipoId) {
+  rellenoActual = id ? rellenos.find(r => r.id === id) : null;
+  if (rellenoActual ? !puedeEditarRelleno(rellenoActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (!aceites.some(a => a.activo)) { toast('Primero cargá los aceites del barco ("🛢️ Aceites")', true); return; }
+  const eqElegido = rellenoActual ? rellenoActual.equipo_id : (equipoId || null);
+  // Equipos activos y, si hace falta, el del relleno aunque esté dado de baja
+  const opciones = equipos.map(e => ({ id: e.id, nombre: e.nombre }));
+  if (rellenoActual && !opciones.some(e => e.id === rellenoActual.equipo_id)) opciones.push({ id: rellenoActual.equipo_id, nombre: nombreEquipoRelleno(rellenoActual) });
+  opciones.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  document.getElementById('rl-equipo').innerHTML = '<option value="">— Elegí un equipo —</option>' +
+    opciones.map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join('');
+  document.getElementById('rl-equipo').value = eqElegido ? String(eqElegido) : '';
+  document.getElementById('modal-relleno-titulo').textContent = rellenoActual ? 'Editar relleno' : 'Nuevo relleno';
+  document.getElementById('rl-fecha').value = rellenoActual ? rellenoActual.fecha : hoyLocalISO();
+  document.getElementById('rl-tipo').value = rellenoActual?.tipo || 'Relleno';
+  document.getElementById('rl-litros').value = rellenoActual ? Number(rellenoActual.litros) : '';
+  document.getElementById('rl-obs').value = rellenoActual?.observaciones || '';
+  if (rellenoActual) {
+    llenarSelectorAceite(document.getElementById('rl-aceite'), rellenoActual.aceite_id, '— Elegí un aceite —');
+    rellenoNotaAceite();
+  } else {
+    rellenoEquipoCambiado();
+  }
+  const r = rellenoActual, partes = [];
+  if (r?.creado_por) partes.push(`Cargado por ${nombreUsuarioComb(r.creado_por)} el ${fmtFechaHora(r.creado_en)}`);
+  if (r?.actualizado_por && r.actualizado_en !== r.creado_en) partes.push(`modificado por ${nombreUsuarioComb(r.actualizado_por)} el ${fmtFechaHora(r.actualizado_en)}`);
+  document.getElementById('rl-autor').textContent = partes.join(' · ');
+  document.getElementById('modal-relleno').classList.add('show');
+}
+function cerrarModalRelleno() {
+  document.getElementById('modal-relleno').classList.remove('show');
+  rellenoActual = null;
+}
+// Al elegir equipo se propone su aceite (se puede cambiar)
+function rellenoEquipoCambiado() {
+  const eq = equipos.find(e => e.id === parseInt(document.getElementById('rl-equipo').value));
+  llenarSelectorAceite(document.getElementById('rl-aceite'), eq?.aceite_id || null, '— Elegí un aceite —');
+  rellenoNotaAceite();
+}
+function rellenoNotaAceite() {
+  const eq = equipos.find(e => e.id === parseInt(document.getElementById('rl-equipo').value));
+  document.getElementById('rl-aceite-nota').textContent = !eq ? ''
+    : eq.aceite_id ? `El equipo usa ${nombreAceite(eq.aceite_id)}.` : 'El equipo no tiene aceite asignado en su ficha: elegilo.';
+}
+
+async function guardarRelleno() {
+  const datos = {
+    fecha: document.getElementById('rl-fecha').value,
+    equipo_id: parseInt(document.getElementById('rl-equipo').value) || null,
+    aceite_id: parseInt(document.getElementById('rl-aceite').value) || null,
+    litros: numeroONull(document.getElementById('rl-litros').value),
+    tipo: document.getElementById('rl-tipo').value,
+    observaciones: document.getElementById('rl-obs').value.trim() || null
+  };
+  if (!datos.fecha) { toast('Falta la fecha', true); return; }
+  if (!datos.equipo_id) { toast('Falta el equipo', true); return; }
+  if (!datos.aceite_id) { toast('Falta el aceite', true); return; }
+  if (datos.litros == null || isNaN(datos.litros) || datos.litros <= 0) { toast('Los litros tienen que ser mayores a 0', true); return; }
+  const btn = document.getElementById('rl-btn-guardar');
+  btn.disabled = true;
+  try {
+    // Con .select() se sabe si la base dejó (si no, vuelve vacío)
+    const { data, error } = rellenoActual
+      ? await sb.from('mant_rellenos').update(datos).eq('id', rellenoActual.id).select()
+      : await sb.from('mant_rellenos').insert(conBarco(datos)).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(rellenoActual ? '✓ Relleno actualizado' : `✓ Relleno de ${fmtLitros(datos.litros)} L guardado`);
+    cerrarModalRelleno();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function borrarRelleno(id) {
+  const r = rellenos.find(x => x.id === id);
+  if (!r || !puedeEditar()) return;
+  if (!confirm(`¿Borrar el relleno del ${fmtFechaDMA(r.fecha)} (${nombreEquipoRelleno(r)}, ${fmtLitros(r.litros)} L)?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_rellenos').delete().eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast('✓ Relleno borrado');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// ---- Aceites ----
+function abrirModalAceites() {
+  renderListaAceites();
+  document.getElementById('modal-aceites').classList.add('show');
+}
+function cerrarModalAceites() { document.getElementById('modal-aceites').classList.remove('show'); }
+function renderListaAceites() {
+  const div = document.getElementById('ac-lista');
+  if (!aceites.length) { div.innerHTML = '<div class="empty">No hay aceites cargados</div>'; return; }
+  div.innerHTML = aceites.map(a => {
+    const nEq = equipos.filter(e => e.aceite_id === a.id).length;
+    return `
+      <div class="tq-item${a.activo ? '' : ' baja'}">
+        <div class="info"><strong>${escape(a.nombre)}</strong> · ${escape(a.tipo)}${a.activo ? '' : ' · dado de baja'}
+          <small>${escape(lugarAceite(a))} · ${nEq} equipo${nEq !== 1 ? 's' : ''}</small></div>
+        <button class="btn-ico solo-jefe" onclick="abrirModalAceite(${a.id})" title="Editar aceite" aria-label="Editar aceite">✏️</button>
+        ${a.activo
+          ? `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoAceite(${a.id}, false)">Dar de baja</button>`
+          : `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoAceite(${a.id}, true)">↺ Reactivar</button>`}
+      </div>`;
+  }).join('');
+}
+function abrirModalAceite(id) {
+  if (!puedeEditar()) return;
+  aceiteActual = id ? aceites.find(a => a.id === id) : null;
+  document.getElementById('ac-tipo').innerHTML = TIPOS_ACEITE.map(t => `<option value="${t}">${t}</option>`).join('');
+  document.getElementById('ac-tanque').innerHTML = '<option value="">Tambor/bidón</option>' +
+    tanques.filter(t => t.activo || t.id === aceiteActual?.tanque_id)
+      .map(t => `<option value="${t.id}">${escape(t.codigo)} · ${escape(t.servicio)}${t.contenido ? ' · ' + escape(t.contenido) : ''}</option>`).join('');
+  document.getElementById('modal-aceite-titulo').textContent = aceiteActual ? 'Editar aceite' : 'Agregar aceite';
+  document.getElementById('ac-nombre').value = aceiteActual?.nombre || '';
+  document.getElementById('ac-tipo').value = aceiteActual?.tipo || 'motor';
+  document.getElementById('ac-tanque').value = aceiteActual?.tanque_id ? String(aceiteActual.tanque_id) : '';
+  document.getElementById('modal-aceite').classList.add('show');
+}
+function cerrarModalAceite() {
+  document.getElementById('modal-aceite').classList.remove('show');
+  aceiteActual = null;
+}
+async function guardarAceite() {
+  const nombre = document.getElementById('ac-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre del aceite', true); return; }
+  if (aceites.some(a => a.id !== aceiteActual?.id && a.nombre.toLowerCase() === nombre.toLowerCase())) {
+    toast(`Ya hay un aceite "${nombre}" en este barco`, true); return;
+  }
+  const datos = { nombre, tipo: document.getElementById('ac-tipo').value, tanque_id: parseInt(document.getElementById('ac-tanque').value) || null };
+  try {
+    const { data, error } = aceiteActual
+      ? await sb.from('mant_aceites').update(datos).eq('id', aceiteActual.id).select()
+      : await sb.from('mant_aceites').insert(conBarco(datos)).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(aceiteActual ? '✓ Aceite actualizado' : '✓ Aceite agregado');
+    cerrarModalAceite();
+    await cargarTodo();
+    renderListaAceites();
+  } catch (err) {
+    console.error(err);
+    toast(err && err.code === '23505' ? `Ya hay un aceite "${nombre}" en este barco` : textoError(err), true);
+  }
+}
+async function cambiarActivoAceite(id, activo) {
+  const a = aceites.find(x => x.id === id);
+  if (!a || !puedeEditar()) return;
+  if (!activo && !confirm(`¿Dar de baja el aceite ${a.nombre}?\n\nDeja de ofrecerse en los rellenos nuevos. Los rellenos viejos se conservan.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_aceites').update({ activo }).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(activo ? `✓ ${a.nombre} reactivado` : `✓ ${a.nombre} dado de baja`);
+    await cargarTodo();
+    renderListaAceites();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// Rellenos_BM_Santa_Lucia[_<equipo>][_<aceite>][_desde-..][_hasta-..]_2026-11-03.xlsx: lo que se ve en pantalla
+function exportarRellenosExcel() {
+  if (!rellenos.length) { toast('No hay rellenos para exportar'); return; }
+  const lista = rellenosFiltrados();
+  if (!lista.length) { toast('No hay rellenos con esos filtros para exportar'); return; }
+  const data = lista.map(r => ({
+    Fecha: r.fecha,
+    Equipo: nombreEquipoRelleno(r),
+    Aceite: nombreAceite(r.aceite_id),
+    Tipo: r.tipo,
+    Litros: Number(r.litros),
+    Observaciones: r.observaciones,
+    'Cargado por': r.creado_por ? nombreUsuarioComb(r.creado_por) : null
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Rellenos');
+  const f = filtrosRellenos();
+  const eqNombre = f.equipo ? equipos.find(e => e.id === f.equipo)?.nombre || nombreEquipoRelleno(lista[0]) : '';
+  const partes = ['Rellenos', nombreBarcoArchivo(), textoArchivo(eqNombre), f.aceite ? textoArchivo(nombreAceite(f.aceite)) : '',
+    f.desde ? 'desde-' + f.desde : '', f.hasta ? 'hasta-' + f.hasta : '', hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
+  toast('✓ Excel descargado');
+}
+
 // ============ NAVEGACIÓN TABS ============
 // Dos niveles: secciones (Inicio, Mantenimiento, Barco, Pañol) y sub-pestañas. Cada sub-pestaña
 // abre su <section id="sec-..."> y su botón .tab declara la sección con data-seccion.
@@ -7422,6 +7889,7 @@ function renderFichaEquipo() {
   if (eq.ubicacion_abordo) fabPills.push(`<span class="pill">📍 ${escape(eq.ubicacion_abordo)}</span>`);
   const origenHoras = eq.horas_de_id ? equipos.find(e => e.id === eq.horas_de_id) : null;
   if (origenHoras) fabPills.push(`<span class="pill">⏱ Horas de ${escape(origenHoras.nombre)}</span>`);
+  if (eq.aceite_id) fabPills.push(`<span class="pill">🛢️ Aceite: ${escape(textoAceite(eq.aceite_id))}</span>`);
   if (eq.cantidad > 1) fabPills.push(`<span class="pill">×${eq.cantidad}</span>`);
 
   // Estado del equipo
@@ -7484,12 +7952,16 @@ function renderFichaEquipo() {
       </div>
     ` : ''}
 
+    <div id="ficha-rellenos" class="solo-combustible"></div>
+
     <h3 class="panel-titulo">🔧 Próximas tareas (${tareasEq.length})</h3>
     <div class="task-list" id="ficha-tareas-list"></div>
 
     <h3 class="panel-titulo" style="margin-top:24px">📜 Historial (${histEq.length})</h3>
     <div id="ficha-historial-list"></div>
   `;
+
+  renderRellenosFicha();
 
   // Render lista de tareas del equipo
   const listaT = document.getElementById('ficha-tareas-list');
@@ -7646,6 +8118,7 @@ function abrirModalEquipo(id) {
   set('eq-refrig', target?.tipo_refrigeracion);
   set('eq-aceite-tipo', target?.aceite_tipo);
   set('eq-aceite-cap', target?.capacidad_aceite_l);
+  llenarSelectorAceite(document.getElementById('eq-aceite-id'), target?.aceite_id, '— Sin aceite asignado —');
   set('eq-datos-tec', target?.datos_tecnicos);
   document.getElementById('eq-estado').value = target?.estado || 'Operativo';
   set('eq-proveedor', target?.proveedor_local);
@@ -7710,6 +8183,7 @@ async function guardarEquipo() {
     tipo_refrigeracion: txt('eq-refrig'),
     aceite_tipo: txt('eq-aceite-tipo'),
     capacidad_aceite_l: num('eq-aceite-cap'),
+    aceite_id: parseInt(document.getElementById('eq-aceite-id').value) || null,
     datos_tecnicos: txt('eq-datos-tec'),
     estado: document.getElementById('eq-estado').value,
     proveedor_local: txt('eq-proveedor'),

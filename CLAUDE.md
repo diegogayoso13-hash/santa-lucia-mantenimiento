@@ -40,7 +40,7 @@ The top bar has these sections, each with its sub-tabs underneath:
 | 🔧 Mantenimiento | Tareas, Deficiencias, Horas, Historial |
 | ⚓ Barco | Mi Barco, Equipos, Certificados |
 | 📦 Pañol | Stock, Herramientas |
-| ⛽ Consumos | Combustible, Sondas (for now only `admin_empresa`, see "Combustible" and "Sondas"; "Rellenos" will join later). Internal section key: `combustible` |
+| ⛽ Consumos | Combustible, Sondas, Rellenos (for now only `admin_empresa`, see "Combustible", "Sondas" and "Rellenos de aceite"). Internal section key: `combustible` |
 | ⚙️ Admin | Barcos, Usuarios (only `admin_empresa`) |
 
 - **Restricted sections:** `puedeVerSeccion()` says who may open a section. `cambiarTab()` and `renderEncabezado()` send everyone else back to the dashboard, and the buttons are hidden with `.solo-admin` / `.solo-combustible`.
@@ -260,6 +260,32 @@ Stage 1 (section `============ SONDAS ============`, sub-tab `sondas` of ⛽ Con
   - Ballast tanks are listed in small text as Vacío / Lleno / litres / sin medir.
   - Clicking it opens Sondas.
 
+### Rellenos de aceite (oil top-ups)
+
+Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos, same visibility switch as Combustible. It started on 2026-11-03 with no history. Soundings-based oil consumption and the soundings vs top-ups cross-check are not built yet.
+
+- **Oils (`mant_aceites`):**
+  - Each oil has `nombre` (unique per ship), `tipo`, and `tanque_id` (where it's stored: a tank of `mant_tanques`; null = "tambor/bidón").
+  - `tipo` is check-constrained (`mant_aceites_tipo_check`) and mirrored in `TIPOS_ACEITE`. **Adding one means updating both.**
+  - Oils are retired with `activo = false`, never deleted.
+  - Managed in `#modal-aceites` / `#modal-aceite`; jefe/admin only.
+- **Oil per equipment:** `mant_equipos.aceite_id` (nullable, same-ship composite FK) is set with the "Aceite" select in the equipment modal (`llenarSelectorAceite()`). The ficha shows it as a pill.
+  - It's separate from the older free-text `aceite_tipo`. For the gearboxes both now say "Mobil Delvac 15W40".
+- **Top-ups (`mant_rellenos`):** each one has `fecha`, `equipo_id`, `aceite_id` (proposed from the equipment, changeable), `litros` (> 0), `tipo` (`'Relleno'|'Cambio'`) and `observaciones`. Authorship comes from triggers.
+  - They're loaded with an embed (`equipo:mant_equipos(nombre)`) so names survive equipment soft-deletes; display them with `nombreEquipoRelleno()`.
+- **Permissions:**
+  - Everyone sees; operador+ adds.
+  - jefe/admin edit anything. operador edits only its own top-ups on the day it entered them, in Uruguay time (`mant_priv.relleno_propio_del_dia`); `creado_en` can't be changed (trigger `mant_priv.conservar_creado_en`). The app mirrors this with `puedeEditarRelleno()`.
+  - Deleting is jefe/admin.
+- **Screen (`renderRellenos()`):**
+  - Filters by equipment, oil and date range (`filtrosRellenos()` / `rellenosFiltrados()`, shared with the Excel), with the total litres of what's filtered.
+  - A table on PC (newest first) and cards at 700 px or less.
+  - `exportarRellenosExcel()` exports what's on screen; the file name carries the filters.
+- **Equipment ficha:** `renderRellenosFicha()` fills `#ficha-rellenos` with:
+  - the "🛢️ Relleno" button (`abrirModalRelleno(null, equipoId)`);
+  - the totals of the last 30 and 90 days, counting today;
+  - the last 5 top-ups.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -287,6 +313,9 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_tanques` — `codigo` (unique per ship), `servicio` (check-constrained), `contenido`, `capacidad_litros` (> 0), `orden`, `activo`, `creado_en/por`, `actualizado_en/por`.
 - `mant_sondas` — `fecha` (`unique (barco_id, fecha)`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 - `mant_sondas_lecturas` — `sonda_id` → `mant_sondas(barco_id, id)` on delete cascade, `tanque_id` → `mant_tanques(barco_id, id)`, `litros` (≥ 0); `unique (sonda_id, tanque_id)`.
+- `mant_aceites` — `nombre` (unique per ship), `tipo` (check-constrained), `tanque_id` → `mant_tanques(barco_id, id)` (null = tambor/bidón), `activo`, `creado_en/por`, `actualizado_en/por`.
+- `mant_rellenos` — `fecha`, `equipo_id` → `mant_equipos(barco_id, id)`, `aceite_id` → `mant_aceites(barco_id, id)`, `litros` (> 0), `tipo` (`'Relleno'|'Cambio'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
+- `mant_equipos.aceite_id` → `mant_aceites(barco_id, id)` (nullable): the equipment's oil.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 
