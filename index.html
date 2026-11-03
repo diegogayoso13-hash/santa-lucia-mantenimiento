@@ -689,6 +689,21 @@
     .rl-tabla-wrap { display: none; }
     .rl-tarjetas { display: block; }
   }
+  /* Fotos: miniatura del encabezado, foto del barco, visor y recorte circular */
+  .header-foto img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; vertical-align: middle; border: 2px solid rgba(255,255,255,0.7); cursor: pointer; margin-top: -4px; }
+  .barco-foto { margin-bottom: 16px; text-align: center; }
+  .barco-foto img { display: block; margin: 0 auto; max-width: 100%; max-height: 440px; width: auto; height: auto; border-radius: 12px; cursor: zoom-in; background: var(--gris-2); }
+  .barco-foto .sin-foto { border: 2px dashed var(--gris-3); border-radius: 12px; padding: 34px 16px; color: var(--texto-suave); font-size: 14px; }
+  .barco-foto .acciones { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  .barco-foto .cargando { padding: 60px 16px; color: var(--texto-suave); font-size: 13px; }
+  .visor-foto { display: none; position: fixed; inset: 0; z-index: 4000; background: rgba(5, 15, 30, 0.92); align-items: center; justify-content: center; padding: 16px; }
+  .visor-foto.show { display: flex; }
+  .visor-foto img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+  .visor-cerrar { position: absolute; top: 12px; right: 12px; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.15); color: white; font-size: 20px; cursor: pointer; }
+  .visor-cargando { position: absolute; color: white; font-size: 14px; }
+  .recorte-area { position: relative; margin: 0 auto; overflow: hidden; touch-action: none; user-select: none; background: #000; border-radius: 8px; }
+  .recorte-area canvas { display: block; }
+  .recorte-circulo { position: absolute; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); cursor: move; touch-action: none; }
   /* Consumo de aceite por sonda: tarjetas de tanques, tablas (tarjetas en el celular) y avisos */
   .ac-tanques { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 8px; }
   .ac-tanque-card { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 12px 14px; }
@@ -1071,7 +1086,7 @@
   <div class="header-inner" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
     <div>
       <!-- El nombre sale de la ficha del barco elegido; con más de un barco es un selector (renderEncabezado) -->
-      <h1>⚓ <span id="header-barco"></span> <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
+      <h1><span id="header-foto" class="header-foto">⚓</span> <span id="header-barco"></span> <span class="accent">·</span> <span style="font-weight:400;opacity:0.85">Plan de Mantenimiento</span></h1>
       <p class="sub">Gestión integral del mantenimiento de a bordo</p>
     </div>
     <div style="display:flex;align-items:center;gap:10px;font-size:13px">
@@ -2125,6 +2140,32 @@
   </div>
 </div>
 
+<!-- FOTOS: selector de archivo (cámara o galería en el celular), visor grande y recorte circular de la miniatura -->
+<input type="file" id="foto-input" accept="image/*" style="display:none">
+<div class="visor-foto" id="visor-foto" onclick="if (event.target === this) cerrarVisorFoto()">
+  <button class="visor-cerrar" onclick="cerrarVisorFoto()" aria-label="Cerrar">✕</button>
+  <img id="visor-foto-img" alt="Foto">
+  <div class="visor-cargando" id="visor-foto-cargando">Cargando…</div>
+</div>
+<div class="modal-bg" id="modal-recorte">
+  <div class="modal" style="max-width:600px">
+    <h2>Miniatura</h2>
+    <div class="modal-sub">Mové el círculo sobre la foto y agrandalo o achicalo. Eso es lo que se ve en la miniatura redonda.</div>
+    <div class="recorte-area" id="recorte-area">
+      <canvas id="recorte-canvas"></canvas>
+      <div class="recorte-circulo" id="recorte-circulo"></div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Tamaño del círculo</label>
+      <input type="range" id="recorte-tamano" min="15" max="100" value="80" style="width:100%">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="recorte-cancelar">Cancelar</button>
+      <button class="btn" id="recorte-guardar">✓ Usar este recorte</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: nuevo/editar relleno de aceite -->
 <div class="modal-bg" id="modal-relleno">
   <div class="modal">
@@ -2823,6 +2864,8 @@ async function cambiarBarco(id) {
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
   repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null; rellenoActual = null; aceiteActual = null; cargaAceiteActual = null;
   if (equipoActualFicha) volverAEquipos();
+  cerrarVisorFoto();
+  document.getElementById('header-foto').textContent = '⚓';   // la foto del barco nuevo llega con cargarTodo
   renderEncabezado();
   await cargarTodo();
 }
@@ -7931,16 +7974,303 @@ document.getElementById('modal-confirm').addEventListener('click', e => { if (e.
 document.getElementById('modal-buque').addEventListener('click', e => { if (e.target.id === 'modal-buque') cerrarModalBuque(); });
 document.getElementById('modal-equipo').addEventListener('click', e => { if (e.target.id === 'modal-equipo') cerrarModalEquipo(); });
 
+// ============ FOTOS ============
+// Reutilizable (hoy la foto del barco; después, deficiencias). Depósito privado mant-fotos de Supabase Storage,
+// rutas empresa/barco/tipo/archivo.jpg; la miniatura es la misma ruta con _min.jpg. Las fotos se ven solo con
+// enlaces firmados de corta duración. Permisos en Storage (mant_priv.foto_permitida): ver quien tenga el barco;
+// subir, cambiar y quitar jefe/admin. Se achican en el navegador antes de subir.
+const FOTOS_BUCKET = 'mant-fotos';
+const FOTO_LADO_MAX = 1600;          // lado mayor de la foto grande
+const FOTO_MINI_LADO = 300;          // miniatura cuadrada (se muestra redonda)
+const FOTO_KB_OBJETIVO = 300;        // si pasa de esto, se baja la calidad
+const FOTO_CALIDADES = [0.8, 0.72, 0.64, 0.56];
+const FOTO_MB_MAX = 15;              // archivo original, antes de achicar
+const FOTO_URL_SEGUNDOS = 600;       // duración de los enlaces firmados
+const urlsFotos = new Map();         // ruta -> { url, vence } (para no pedir un enlace nuevo en cada pantalla)
+
+function rutaMiniatura(ruta) { return ruta.replace(/\.jpg$/, '_min.jpg'); }
+function idAleatorio() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+function canvasABlob(canvas, calidad) {
+  return new Promise((ok, mal) => canvas.toBlob(b => b ? ok(b) : mal(new Error('No se pudo procesar la imagen')), 'image/jpeg', calidad));
+}
+// Imagen del archivo respetando la orientación que guardó la cámara
+async function leerImagen(blob) {
+  if (window.createImageBitmap) {
+    try { return await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { /* sigue con <img> */ }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return img;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function dibujarEn(fuente, ancho, alto, sx = 0, sy = 0, sw = fuente.width, sh = fuente.height) {
+  const c = document.createElement('canvas');
+  c.width = ancho; c.height = alto;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, ancho, alto);
+  return c;
+}
+
+// Valida y achica un archivo de foto: { grande: Blob JPG, lienzo: canvas achicado (para recortar la miniatura) }
+async function prepararFoto(archivo) {
+  if (!archivo || !/^image\//.test(archivo.type || '')) throw new Error('El archivo no es una imagen');
+  if (archivo.size > FOTO_MB_MAX * 1024 * 1024) throw new Error(`La foto pesa más de ${FOTO_MB_MAX} MB`);
+  let img;
+  try { img = await leerImagen(archivo); } catch (e) {
+    throw new Error('No se pudo abrir la imagen. Si es HEIC (iPhone), elegila desde el teléfono o guardala como JPG');
+  }
+  const escala = Math.min(1, FOTO_LADO_MAX / Math.max(img.width, img.height));
+  const lienzo = dibujarEn(img, Math.round(img.width * escala), Math.round(img.height * escala));
+  if (img.close) img.close();
+  let grande;
+  for (const q of FOTO_CALIDADES) {
+    grande = await canvasABlob(lienzo, q);
+    if (grande.size <= FOTO_KB_OBJETIVO * 1024) break;
+  }
+  return { grande, lienzo };
+}
+// Miniatura cuadrada a partir de un recorte { x, y, lado } en píxeles del lienzo
+function miniaturaDesde(lienzo, recorte) {
+  return canvasABlob(dibujarEn(lienzo, FOTO_MINI_LADO, FOTO_MINI_LADO, recorte.x, recorte.y, recorte.lado, recorte.lado), 0.8);
+}
+
+// Sube foto y miniatura a empresa/barco/tipo/; devuelve la ruta de la grande
+async function subirFoto(tipo, grande, mini) {
+  const ruta = `${barcoActual.empresa_id}/${barcoActual.id}/${tipo}/${idAleatorio()}.jpg`;
+  const st = sb.storage.from(FOTOS_BUCKET);
+  const { error: e1 } = await st.upload(ruta, grande, { contentType: 'image/jpeg', upsert: false });
+  if (e1) throw e1;
+  const { error: e2 } = await st.upload(rutaMiniatura(ruta), mini, { contentType: 'image/jpeg', upsert: false });
+  if (e2) { await st.remove([ruta]); throw e2; }
+  return ruta;
+}
+async function reemplazarMiniatura(ruta, mini) {
+  const { error } = await sb.storage.from(FOTOS_BUCKET).upload(rutaMiniatura(ruta), mini, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw error;
+  urlsFotos.delete(rutaMiniatura(ruta));
+}
+async function borrarFoto(ruta) {
+  urlsFotos.delete(ruta); urlsFotos.delete(rutaMiniatura(ruta));
+  const { error } = await sb.storage.from(FOTOS_BUCKET).remove([ruta, rutaMiniatura(ruta)]);
+  if (error) throw error;
+}
+// Enlace firmado (de corta duración) de una foto o de su miniatura
+async function urlFoto(ruta, miniatura) {
+  const r = miniatura ? rutaMiniatura(ruta) : ruta;
+  const guardado = urlsFotos.get(r);
+  if (guardado && guardado.vence > Date.now() + 60000) return guardado.url;
+  const { data, error } = await sb.storage.from(FOTOS_BUCKET).createSignedUrl(r, FOTO_URL_SEGUNDOS);
+  if (error) throw error;
+  urlsFotos.set(r, { url: data.signedUrl, vence: Date.now() + FOTO_URL_SEGUNDOS * 1000 });
+  return data.signedUrl;
+}
+// La foto grande descargada como lienzo (para volver a recortar la miniatura sin subirla de nuevo)
+async function lienzoDeFoto(ruta) {
+  const { data, error } = await sb.storage.from(FOTOS_BUCKET).download(ruta);
+  if (error) throw error;
+  const img = await leerImagen(data);
+  return dibujarEn(img, img.width, img.height);
+}
+
+// Abre el selector de archivo (cámara o galería en el celular); devuelve el archivo o null
+function elegirArchivoFoto() {
+  return new Promise(resolver => {
+    const input = document.getElementById('foto-input');
+    input.value = '';
+    input.onchange = () => resolver(input.files[0] || null);
+    input.click();
+  });
+}
+
+// Visor grande
+async function abrirVisorFoto(ruta) {
+  const visor = document.getElementById('visor-foto'), img = document.getElementById('visor-foto-img');
+  img.removeAttribute('src');
+  document.getElementById('visor-foto-cargando').style.display = '';
+  visor.classList.add('show');
+  try {
+    img.onload = () => { document.getElementById('visor-foto-cargando').style.display = 'none'; };
+    img.src = await urlFoto(ruta, false);
+  } catch (err) {
+    cerrarVisorFoto();
+    toast(textoError(err), true);
+  }
+}
+function cerrarVisorFoto() { document.getElementById('visor-foto').classList.remove('show'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarVisorFoto(); });
+
+// Recorte circular: muestra el lienzo con un círculo que se mueve (arrastrando) y se agranda (barra o rueda).
+// Devuelve { x, y, lado } en píxeles del lienzo, o null si se cancela.
+function elegirRecorteCircular(lienzo) {
+  return new Promise(resolver => {
+    const modal = document.getElementById('modal-recorte');
+    const area = document.getElementById('recorte-area');
+    const canvas = document.getElementById('recorte-canvas');
+    const circulo = document.getElementById('recorte-circulo');
+    const tamano = document.getElementById('recorte-tamano');
+    modal.classList.add('show');
+    // La foto entra en el área (ancho del modal y alto máximo 60 % de la pantalla)
+    const anchoMax = Math.min(area.parentElement.clientWidth || 520, 560);
+    const altoMax = Math.max(220, Math.round(window.innerHeight * 0.6));
+    const escala = Math.min(anchoMax / lienzo.width, altoMax / lienzo.height, 1);
+    const w = Math.round(lienzo.width * escala), h = Math.round(lienzo.height * escala);
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(lienzo, 0, 0, w, h);
+    area.style.width = w + 'px'; area.style.height = h + 'px';
+    const menor = Math.min(w, h);
+    let lado = Math.round(menor * 0.8), x = (w - lado) / 2, y = (h - lado) / 2;
+    tamano.value = 80;
+    const dibujar = () => {
+      x = Math.min(Math.max(0, x), w - lado); y = Math.min(Math.max(0, y), h - lado);
+      Object.assign(circulo.style, { left: x + 'px', top: y + 'px', width: lado + 'px', height: lado + 'px' });
+    };
+    const cambiarLado = nuevo => {
+      const cx = x + lado / 2, cy = y + lado / 2;
+      lado = Math.round(Math.min(Math.max(nuevo, menor * 0.15), menor));
+      x = cx - lado / 2; y = cy - lado / 2;
+      tamano.value = Math.round(lado / menor * 100);
+      dibujar();
+    };
+    dibujar();
+    let arrastre = null;
+    circulo.onpointerdown = e => { arrastre = { px: e.clientX, py: e.clientY, x, y }; circulo.setPointerCapture(e.pointerId); e.preventDefault(); };
+    circulo.onpointermove = e => { if (!arrastre) return; x = arrastre.x + e.clientX - arrastre.px; y = arrastre.y + e.clientY - arrastre.py; dibujar(); };
+    circulo.onpointerup = circulo.onpointercancel = () => { arrastre = null; };
+    tamano.oninput = () => cambiarLado(menor * Number(tamano.value) / 100);
+    area.onwheel = e => { e.preventDefault(); cambiarLado(lado * (e.deltaY < 0 ? 1.06 : 0.94)); };
+    const terminar = res => { modal.classList.remove('show'); resolver(res); };
+    document.getElementById('recorte-cancelar').onclick = () => terminar(null);
+    document.getElementById('recorte-guardar').onclick = () =>
+      terminar({ x: Math.round(x / escala), y: Math.round(y / escala), lado: Math.min(Math.round(lado / escala), lienzo.width, lienzo.height) });
+  });
+}
+
+// ---- Foto del barco (mant_buque.foto_ruta) ----
+async function mostrarFotoEncabezado() {
+  const span = document.getElementById('header-foto');
+  const ruta = buque?.foto_ruta;
+  if (!ruta) { span.textContent = '⚓'; return; }
+  try {
+    const url = await urlFoto(ruta, true);
+    if (buque?.foto_ruta !== ruta) return;   // cambió mientras tanto
+    span.innerHTML = `<img src="${escape(url)}" alt="Foto del barco" title="Ver foto del barco">`;
+    span.querySelector('img').onclick = () => abrirVisorFoto(ruta);
+  } catch (err) {
+    console.error(err);
+    span.textContent = '⚓';
+  }
+}
+function htmlFotoBarco() {
+  const ruta = buque.foto_ruta;
+  return `
+    <div class="barco-foto" id="barco-foto">
+      ${ruta ? '<div class="cargando" id="barco-foto-cargando">Cargando foto…</div><img id="barco-foto-img" alt="Foto del barco" style="display:none">'
+             : '<div class="sin-foto">📷 Sin foto del barco</div>'}
+      <div class="acciones solo-jefe">
+        ${ruta ? `<button class="btn btn-sec btn-pequeno" onclick="subirFotoBarco()">📷 Cambiar</button>
+                  <button class="btn btn-sec btn-pequeno" onclick="ajustarMiniaturaBarco()">◯ Ajustar miniatura</button>
+                  <button class="btn btn-sec btn-pequeno" onclick="quitarFotoBarco()" style="background:#fde0df;color:var(--rojo)">Quitar</button>`
+               : '<button class="btn btn-sec btn-pequeno" onclick="subirFotoBarco()">📷 Subir foto</button>'}
+      </div>
+    </div>`;
+}
+async function cargarFotoBarco() {
+  const ruta = buque?.foto_ruta;
+  const img = document.getElementById('barco-foto-img');
+  if (!ruta || !img) return;
+  try {
+    img.onload = () => { const c = document.getElementById('barco-foto-cargando'); if (c) c.remove(); img.style.display = ''; };
+    img.onclick = () => abrirVisorFoto(ruta);
+    img.src = await urlFoto(ruta, false);
+  } catch (err) {
+    console.error(err);
+    const c = document.getElementById('barco-foto-cargando');
+    if (c) c.textContent = 'No se pudo cargar la foto';
+  }
+}
+
+// Subir o cambiar: elegir → achicar → recortar miniatura → subir → guardar la ruta → borrar la vieja
+async function subirFotoBarco() {
+  if (!puedeEditar() || !buque) return;
+  const archivo = await elegirArchivoFoto();
+  if (!archivo) return;
+  let preparada;
+  try { preparada = await prepararFoto(archivo); } catch (err) { toast(err.message, true); return; }
+  const recorte = await elegirRecorteCircular(preparada.lienzo);
+  if (!recorte) return;
+  toast('Subiendo foto…');
+  const vieja = buque.foto_ruta;
+  let nueva = null;
+  try {
+    const mini = await miniaturaDesde(preparada.lienzo, recorte);
+    nueva = await subirFoto('buque', preparada.grande, mini);
+    const { data, error } = await sb.from('mant_buque').update({ foto_ruta: nueva }).eq('id', buque.id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    if (vieja) { try { await borrarFoto(vieja); } catch (e) { console.error('No se pudo borrar la foto anterior', e); } }
+    toast(vieja ? '✓ Foto cambiada' : '✓ Foto subida');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    if (nueva) { try { await borrarFoto(nueva); } catch (e) { /* queda suelta, sin enlazar */ } }
+    toast(textoError(err), true);
+  }
+}
+// Volver a recortar la miniatura sin subir la foto de nuevo
+async function ajustarMiniaturaBarco() {
+  const ruta = buque?.foto_ruta;
+  if (!puedeEditar() || !ruta) return;
+  try {
+    toast('Abriendo la foto…');
+    const lienzo = await lienzoDeFoto(ruta);
+    const recorte = await elegirRecorteCircular(lienzo);
+    if (!recorte) return;
+    await reemplazarMiniatura(ruta, await miniaturaDesde(lienzo, recorte));
+    toast('✓ Miniatura actualizada');
+    mostrarFotoEncabezado();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+async function quitarFotoBarco() {
+  const ruta = buque?.foto_ruta;
+  if (!puedeEditar() || !ruta) return;
+  if (!confirm('¿Quitar la foto del barco?\n\nSe borra del depósito (la foto y su miniatura). Esta acción no se puede deshacer.')) return;
+  try {
+    const { data, error } = await sb.from('mant_buque').update({ foto_ruta: null }).eq('id', buque.id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    try { await borrarFoto(ruta); } catch (e) { console.error('No se pudo borrar el archivo', e); }
+    toast('✓ Foto quitada');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
 // ============ MI BARCO ============
 function renderBarco() {
   const div = document.getElementById('barco-contenido');
   if (!buque) {
     div.innerHTML = '<div class="empty"><div class="big">⚓</div>No hay datos del buque cargados.<br><small>Parece que falta correr el SQL inicial.</small></div>';
+    mostrarFotoEncabezado();
     return;
   }
   const v = (x, suf = '') => x != null && x !== '' ? `${x}${suf}` : '—';
 
   div.innerHTML = `
+    ${htmlFotoBarco()}
     <div class="barco-hero">
       <div class="tipo">${escape(buque.tipo || 'Buque')}</div>
       <h2>${escape(buque.nombre)}</h2>
@@ -8004,6 +8334,8 @@ function renderBarco() {
 
     ${buque.notas ? `<div class="ficha-card"><h3>📝 Notas</h3><div style="white-space:pre-wrap;font-size:13.5px;line-height:1.6">${escape(buque.notas)}</div></div>` : ''}
   `;
+  cargarFotoBarco();
+  mostrarFotoEncabezado();
 }
 
 let buqueNuevo = false;  // true: la ventana de la ficha está agregando un barco (Administración)

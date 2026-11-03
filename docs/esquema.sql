@@ -1555,3 +1555,46 @@ CREATE POLICY mant_cargas_aceite_borrar ON public.mant_cargas_aceite FOR DELETE 
 
 REVOKE ALL ON public.mant_cargas_aceite FROM anon, service_role, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mant_cargas_aceite TO authenticated;
+
+-- =============== FOTOS (Supabase Storage) ===============
+-- Depósito privado mant-fotos: rutas empresa/barco/tipo/archivo.jpg (ej. 1/1/buque/<uuid>.jpg); la miniatura es la
+-- misma ruta con _min.jpg. Las fotos se achican en el navegador y se ven solo con enlaces firmados de corta duración.
+-- Ruta de la foto del barco: campo agregado a mant_buque, vacío por defecto
+-- (en el CREATE TABLE de mant_buque de arriba no figura: se agregó después).
+ALTER TABLE public.mant_buque ADD COLUMN foto_ruta TEXT;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('mant-fotos', 'mant-fotos', false, 2097152, ARRAY['image/jpeg']);   -- privado, solo JPG de hasta 2 MB
+
+-- Una ruta empresa/barco/... es válida si la empresa es la del barco y el usuario tiene ese barco con el nivel
+-- pedido (1 ver, 2 operador, 3 jefe/admin)
+CREATE FUNCTION mant_priv.foto_permitida(p_nombre TEXT, p_nivel INTEGER)
+RETURNS BOOLEAN LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_partes TEXT[] := string_to_array(p_nombre, '/');
+  v_empresa INTEGER; v_barco INTEGER;
+BEGIN
+  IF array_length(v_partes, 1) IS NULL OR array_length(v_partes, 1) < 4
+     OR v_partes[1] !~ '^[0-9]{1,9}$' OR v_partes[2] !~ '^[0-9]{1,9}$' THEN
+    RETURN false;
+  END IF;
+  v_empresa := v_partes[1]::INTEGER;
+  v_barco := v_partes[2]::INTEGER;
+  RETURN EXISTS (SELECT 1 FROM public.mant_buque b WHERE b.id = v_barco AND b.empresa_id = v_empresa)
+     AND v_barco = ANY (mant_priv.barcos(p_nivel));
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION mant_priv.foto_permitida(TEXT, INTEGER) FROM public;
+GRANT EXECUTE ON FUNCTION mant_priv.foto_permitida(TEXT, INTEGER) TO authenticated, service_role;
+
+-- Ver: cualquiera con acceso al barco; subir, cambiar y quitar: jefe y admin (para todos los tipos de carpeta;
+-- si un tipo necesita otra regla, por ejemplo deficiencias, se agrega acá)
+CREATE POLICY mant_fotos_ver ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'mant-fotos' AND mant_priv.foto_permitida(name, 1));
+CREATE POLICY mant_fotos_subir ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'mant-fotos' AND mant_priv.foto_permitida(name, 3));
+CREATE POLICY mant_fotos_cambiar ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'mant-fotos' AND mant_priv.foto_permitida(name, 3))
+  WITH CHECK (bucket_id = 'mant-fotos' AND mant_priv.foto_permitida(name, 3));
+CREATE POLICY mant_fotos_quitar ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'mant-fotos' AND mant_priv.foto_permitida(name, 3));

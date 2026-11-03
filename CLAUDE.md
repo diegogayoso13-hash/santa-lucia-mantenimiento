@@ -317,6 +317,25 @@ Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos
   - **Layout:** `tablaConTarjetas()` draws each of these as a table on PC and as cards at 700 px or less, with the row tinted and a warning line.
   - **Excel:** `exportarRellenosExcel()` adds the sheets "Reserva TK x", "Sistema TK x", "Tambor-bidón por mes" and "Cargas a tanque" after the filtered "Rellenos" sheet. The rellenos filters don't affect these sheets.
 
+### Photos
+
+Section `============ FOTOS ============`. It's reusable: today it holds the ship photo, and later it will hold deficiencies.
+
+- **Storage:**
+  - The private Supabase Storage bucket `mant-fotos` only takes JPG up to 2 MB.
+  - Paths are `empresa/barco/tipo/<uuid>.jpg`; the thumbnail is the same path ending in `_min.jpg` (`rutaMiniatura()`).
+  - Policies on `storage.objects` use `mant_priv.foto_permitida(name, nivel)`: the company folder must be the ship's company, and the user needs that ship at the level. Viewing needs level 1; upload, overwrite and delete need 3 (jefe/admin) for every folder type. A new type that needs different rules (e.g. operador uploading deficiency photos) needs its own policy condition.
+  - Storage doesn't allow deleting objects with SQL; use the Storage API (`sb.storage.from(...).remove`).
+- **Helpers:**
+  - `prepararFoto(archivo)` rejects non-images and files over `FOTO_MB_MAX` (15 MB), then resizes in the browser: longest side `FOTO_LADO_MAX` (1600), JPG quality from 0.8 down until it's ≤ `FOTO_KB_OBJETIVO` (300 KB), keeping the camera's orientation. It returns `{ grande, lienzo }`.
+  - `elegirRecorteCircular(lienzo)` opens `#modal-recorte` (drag the circle, resize with the slider or the wheel) and returns `{x, y, lado}` or null. `miniaturaDesde(lienzo, recorte)` makes the 300×300 thumbnail.
+  - `subirFoto(tipo, grande, mini)`, `reemplazarMiniatura()`, `borrarFoto()` and `urlFoto(ruta, miniatura)` (signed URLs, `FOTO_URL_SEGUNDOS` = 600, cached in `urlsFotos`).
+  - `lienzoDeFoto()` downloads the big photo to re-crop. `abrirVisorFoto()` is the full-size viewer (`#visor-foto`, Esc closes it). `elegirArchivoFoto()` opens `#foto-input` (`accept="image/*"`: camera or gallery on a phone).
+- **Ship photo:** `mant_buque.foto_ruta` holds the path of the big image.
+  - Mi Barco shows it whole with a maximum height (`htmlFotoBarco()` / `cargarFotoBarco()`), with "Subir foto" / "Cambiar" / "Ajustar miniatura" / "Quitar" (jefe/admin).
+  - The header shows the round thumbnail in `#header-foto` (`mostrarFotoEncabezado()`), or ⚓ if there's none.
+  - `subirFotoBarco()` uploads the new photo, saves the path, then deletes the old one; if saving fails, it deletes the new upload. `ajustarMiniaturaBarco()` re-crops and overwrites only the thumbnail. `quitarFotoBarco()` clears the field, then deletes both files.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -348,6 +367,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_rellenos` — `fecha`, `equipo_id` → `mant_equipos(barco_id, id)`, `aceite_id` → `mant_aceites(barco_id, id)`, `litros` (> 0), `tipo` (`'Relleno'|'Cambio'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 - `mant_equipos.aceite_id` → `mant_aceites(barco_id, id)` (nullable): the equipment's oil.
 - `mant_tanques.uso_aceite` — `'Reserva'|'Sistema'|null`, only on oil tanks.
+- `mant_buque.foto_ruta` — path of the ship photo in the `mant-fotos` Storage bucket (see "Photos").
 - `mant_cargas_aceite` — `fecha`, `tanque_id` → `mant_tanques(barco_id, id)` (oil tanks only), `litros` (> 0), `origen` (`'Proveedor'|'Tambor/bidón'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
