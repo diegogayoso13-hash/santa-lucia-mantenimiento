@@ -40,7 +40,7 @@ The top bar has these sections, each with its sub-tabs underneath:
 | 🔧 Mantenimiento | Tareas, Deficiencias, Horas, Historial |
 | ⚓ Barco | Mi Barco, Equipos, Certificados |
 | 📦 Pañol | Stock, Herramientas |
-| ⛽ Combustible | Combustible (for now only `admin_empresa`, see "Combustible") |
+| ⛽ Consumos | Combustible, Sondas (for now only `admin_empresa`, see "Combustible" and "Sondas"; "Rellenos" will join later). Internal section key: `combustible` |
 | ⚙️ Admin | Barcos, Usuarios (only `admin_empresa`) |
 
 - **Restricted sections:** `puedeVerSeccion()` says who may open a section. `cambiarTab()` and `renderEncabezado()` send everyone else back to the dashboard, and the buttons are hidden with `.solo-admin` / `.solo-combustible`.
@@ -222,6 +222,37 @@ Stages 1 and 2 of 3 (section `============ COMBUSTIBLE ============`). Fuel is t
   - Clicking it opens ⛽ Combustible.
   - The capacity field is hidden when adding a ship, because `mant_barco_crear` doesn't copy that column; it's set later by editing the ficha.
 
+### Sondas (tank soundings)
+
+Stage 1 (section `============ SONDAS ============`, sub-tab `sondas` of ⛽ Consumos, same visibility switch as Combustible). It replaces the paper soundings notebook.
+
+- **Tanks (`mant_tanques`):**
+  - Each tank has `codigo`, `servicio`, `contenido`, `capacidad_litros` and `orden` (the column order).
+  - `servicio` is check-constrained (`mant_tanques_servicio_check`) and mirrored in `SERVICIOS_TANQUE`, with colors in `COLOR_SERVICIO`. **Adding one means updating both.**
+  - The code is unique per ship. Tanks are retired with `activo = false`, never deleted, so their readings are kept.
+  - Managed in `#modal-tanques` / `#modal-tanque` (`abrirModalTanques()`, `guardarTanque()`, `cambiarActivoTanque()`); jefe/admin only.
+- **Soundings:**
+  - A sounding (`mant_sondas`) is one date per ship (`unique (barco_id, fecha)`) plus observations.
+  - Its readings (`mant_sondas_lecturas`) hold the litres per tank, deleted with the sounding. **No row = not measured**, which is different from 0.
+  - The form (`#modal-sonda`, `abrirModalSonda()` / `guardarSonda()` / `guardarLecturasSonda()`) has one row per active tank, plus retired tanks that have a reading in that sounding.
+    - "Vacío" sets 0 and "Lleno" sets the capacity.
+    - Negative values block saving. Above capacity only warns (`sondaAvisoFila()`); the database accepts it.
+- **Permissions:**
+  - `mant_priv.sonda_permitida(barco, id, fecha)`: jefe/admin always; operador only if no other sounding of the ship has the same or a later date. So an operador adds new soundings and edits only the latest; the lecturas policies use the same rule through their sounding.
+  - Deleting soundings and managing tanks: jefe/admin.
+  - The app mirrors this with `puedeEditarSonda()` / `esUltimaSonda()` and detects silent RLS refusals with `.select()`.
+- **Screen (`renderSondas()`):**
+  - It's laid out like the notebook: one row per date, newest first, and one column per tank in `orden` (`tanquesColumnas()`: active tanks, plus retired ones that have readings, shown greyed).
+  - A header row groups consecutive tanks of the same service by color.
+  - After the last fuel tank comes "Total comb." (`celdasSondas()`, `totalCombustibleSonda()`: sum of the measured fuel tanks), shown when there are two or more fuel tanks.
+  - At 700 px or less it shows one card per sounding.
+  - The Excel (`exportarSondasExcel()`) uses the same layout: a services row (merged cells), a tank-codes row, the total and the observations.
+- **Link with Combustible:** next to "Fin" in the period form, `combNotaSonda()` offers the sounding closest to the period's `hasta` (`sondaCercana()`, within `DIAS_SONDA_CERCANA` = 5 days either way; on a tie, the later one). It shows "Sonda del dd/mm: X L (TK 5 + TK 6)" with a "Usar" button and notes unmeasured fuel tanks. It never fills the field by itself.
+- **Dashboard card "📏 Tanques"** (`#dash-tanques`, `renderTanquesInicio()`): the latest sounding with its date and "hace X días".
+  - Non-ballast active tanks get one bar each with their %.
+  - Ballast tanks are listed in small text as Vacío / Lleno / litres / sin medir.
+  - Clicking it opens Sondas.
+
 ### Dates
 
 Older code computes "today" with `new Date().toISOString().split('T')[0]`, which is UTC and rolls over to tomorrow after 21:00 in Uruguay (UTC-3). New code uses `hoyLocalISO()` and `sumarDias()` (defined in the Deficiencias section); prefer those for new date logic.
@@ -246,6 +277,9 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
 - `mant_combustible_cargas` — `periodo_id` → `mant_combustible_periodos(barco_id, id)` on delete cascade, `fecha`, `litros` (> 0), `proveedor`, `creado_en/por`.
 - `mant_combustible_trasvases` — `origen_barco_id` / `destino_barco_id` → `mant_buque(id)` (one may be null), `otro_buque` (name, only when one side is null), `fecha`, `litros` (> 0), `notas`, `creado_en/por`, `actualizado_en/por`. It has no `barco_id`: it belongs to both ships.
+- `mant_tanques` — `codigo` (unique per ship), `servicio` (check-constrained), `contenido`, `capacidad_litros` (> 0), `orden`, `activo`, `creado_en/por`, `actualizado_en/por`.
+- `mant_sondas` — `fecha` (`unique (barco_id, fecha)`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
+- `mant_sondas_lecturas` — `sonda_id` → `mant_sondas(barco_id, id)` on delete cascade, `tanque_id` → `mant_tanques(barco_id, id)`, `litros` (≥ 0); `unique (sonda_id, tanque_id)`.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 

@@ -632,6 +632,50 @@
     .comb-tabla-wrap { display: none; }
     .comb-tarjetas { display: block; }
   }
+  /* Sondas: tabla como el cuaderno (columnas por tanque, agrupadas por color de servicio); en el celular, tarjetas */
+  .tabla-sondas th, .tabla-sondas td { white-space: nowrap; padding: 6px 6px; font-size: 12.5px; }
+  .tabla-sondas th { font-size: 10.5px; letter-spacing: 0.02em; text-align: center; }
+  .tabla-sondas th.grupo { color: var(--texto); border-bottom: 0; }
+  .tabla-sondas thead tr:nth-child(2) th { text-transform: none; font-size: 11px; }
+  .tabla-sondas td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabla-sondas td.total, .tabla-sondas th.total { font-weight: 700; color: var(--azul-profundo); }
+  .tabla-sondas td.sobre { color: #9a6a00; font-weight: 700; }
+  .tabla-sondas td.obs { max-width: 150px; overflow: hidden; text-overflow: ellipsis; color: var(--texto-suave); }
+  .tabla-sondas .baja { opacity: 0.55; }
+  .sondas-tarjetas { display: none; }
+  .sonda-tarjeta { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .sonda-tarjeta .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .sonda-tarjeta .fecha { font-weight: 700; font-size: 14px; }
+  .sonda-tarjeta .grupo { margin-top: 10px; border-left: 4px solid var(--gris-3); padding-left: 8px; }
+  .sonda-tarjeta .grupo .nombre { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--texto-suave); font-weight: 600; }
+  .sonda-tarjeta .grilla { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 12px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .sonda-tarjeta .obs { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--gris-2); font-size: 12px; color: var(--texto-suave); }
+  @media (max-width: 700px) {
+    .sondas-tabla-wrap { display: none; }
+    .sondas-tarjetas { display: block; }
+  }
+  .sd-fila { display: grid; grid-template-columns: minmax(0, 1.6fr) 110px auto; gap: 8px; align-items: center; padding: 6px 0 6px 8px; border-left: 4px solid var(--gris-3); border-bottom: 1px solid var(--gris-2); }
+  .sd-fila .tq { font-size: 13px; font-weight: 600; }
+  .sd-fila .tq small { display: block; font-weight: 400; color: var(--texto-suave); font-size: 11.5px; }
+  .sd-fila input { width: 100%; padding: 7px 8px; border: 1px solid var(--gris-2); border-radius: 6px; font: inherit; font-size: 14px; text-align: right; }
+  .sd-fila .rapidos { display: flex; gap: 4px; }
+  .sd-fila .aviso { grid-column: 1 / -1; font-size: 12px; color: #9a6a00; font-weight: 600; }
+  .sd-fila .aviso:empty { display: none; }
+  .tq-item { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--gris-2); }
+  .tq-item .chip { width: 10px; height: 28px; border-radius: 3px; flex: none; }
+  .tq-item .info { flex: 1; min-width: 0; font-size: 13px; }
+  .tq-item .info small { display: block; color: var(--texto-suave); }
+  .tq-item.baja { opacity: 0.55; }
+  /* Inicio: tanques de la última sonda */
+  .tanques-inicio { margin-bottom: 24px; }
+  .tanques-inicio::after { background: var(--azul-medio); }
+  .tanques-inicio .label { margin: 0 0 6px; }
+  .tanques-inicio .meta { font-size: 13px; color: var(--texto-suave); }
+  .tanques-inicio .barras { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 18px; margin-top: 12px; }
+  .tq-barra .fila { display: flex; justify-content: space-between; font-size: 12.5px; gap: 6px; }
+  .tq-barra .fila span:last-child { color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+  .tq-barra .comb-barra { height: 7px; margin-top: 3px; }
+  .tanques-inicio .lastre { margin-top: 10px; font-size: 12px; color: var(--texto-suave); }
   .comb-aviso { color: var(--rojo); font-weight: 600; }
   .comb-nota { font-size: 12px; color: var(--texto-suave); margin-top: 5px; }
   .comb-carga { display: grid; grid-template-columns: 1.1fr 0.9fr 1.4fr auto; gap: 6px; margin-bottom: 6px; }
@@ -995,7 +1039,7 @@
     <button class="seccion" data-seccion="mantenimiento"><span class="ico">🔧</span><span class="txt">Mantenimiento</span><span id="badge-sec-mantenimiento" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="barco"><span class="ico">⚓</span><span class="txt">Barco</span><span id="badge-sec-barco" class="badge" style="display:none">0</span></button>
     <button class="seccion" data-seccion="panol"><span class="ico">📦</span><span class="txt">Pañol</span><span id="badge-sec-panol" class="badge" style="display:none">0</span></button>
-    <button class="seccion solo-combustible" data-seccion="combustible"><span class="ico">⛽</span><span class="txt">Combustible</span></button>
+    <button class="seccion solo-combustible" data-seccion="combustible"><span class="ico">⛽</span><span class="txt">Consumos</span></button>
     <button class="seccion solo-admin" data-seccion="admin"><span class="ico">⚙️</span><span class="txt">Admin</span></button>
   </div>
   <div class="subtabs" id="subtabs">
@@ -1011,6 +1055,7 @@
       <button class="tab" data-tab="stock" data-seccion="panol">📦 Stock <span id="badge-stock" class="badge" style="display:none">0</span></button>
       <button class="tab" data-tab="herramientas" data-seccion="panol">🔧 Herramientas</button>
       <button class="tab solo-combustible" data-tab="combustible" data-seccion="combustible">⛽ Combustible</button>
+      <button class="tab solo-combustible" data-tab="sondas" data-seccion="combustible">📏 Sondas</button>
       <button class="tab solo-admin" data-tab="admin-barcos" data-seccion="admin">🚢 Barcos</button>
       <button class="tab solo-admin" data-tab="admin-usuarios" data-seccion="admin">👥 Usuarios</button>
     </div>
@@ -1046,6 +1091,7 @@
     </div>
 
     <div id="dash-combustible" class="solo-combustible"></div>
+    <div id="dash-tanques" class="solo-combustible"></div>
 
     <div id="dash-postergadas"></div>
 
@@ -1264,6 +1310,17 @@
     <div id="comb-lista"></div>
     <h2 class="panel-titulo" style="margin-top:28px">Trasvases</h2>
     <div class="task-list" id="comb-trasvases"></div>
+  </section>
+
+  <!-- SONDAS: cuaderno de sondas por tanque (misma visibilidad que Combustible) -->
+  <section class="section" id="sec-sondas">
+    <h2 class="panel-titulo">Sondas</h2>
+    <div class="acciones-globales">
+      <button class="btn solo-operador" onclick="abrirModalSonda()">➕ Nueva sonda</button>
+      <button class="btn btn-sec" onclick="abrirModalTanques()">🛢 Tanques</button>
+      <button class="btn btn-acento" onclick="exportarSondasExcel()">📥 Exportar Excel</button>
+    </div>
+    <div id="sondas-lista"></div>
   </section>
 
   <!-- ADMINISTRACIÓN (solo admin_empresa): barcos y usuarios de la empresa del barco elegido -->
@@ -1835,6 +1892,7 @@
       <label>Fin del período (litros, sonda)</label>
       <input type="number" id="cb-fin" min="0" step="any" inputmode="decimal" oninput="combActualizarAvisos()">
       <div class="comb-nota" id="cb-fin-nota"></div>
+      <div class="comb-nota" id="cb-sonda-nota"></div>
     </div>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
@@ -1909,6 +1967,64 @@
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalTrasv()">Cancelar</button>
       <button class="btn" id="tv-btn-guardar" onclick="guardarTrasv()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: nueva/editar sonda (una fila por tanque) -->
+<div class="modal-bg" id="modal-sonda">
+  <div class="modal" style="max-width:640px">
+    <h2 id="modal-sonda-titulo">Nueva sonda</h2>
+    <div class="modal-sub">Litros de cada tanque. Una casilla vacía es "no medido" (distinto de 0).</div>
+    <div class="field" style="max-width:220px">
+      <label>Fecha *</label>
+      <input type="date" id="sd-fecha">
+    </div>
+    <div id="sd-tanques"></div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="sd-obs" rows="2"></textarea>
+    </div>
+    <div class="comb-nota" id="sd-autor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalSonda()">Cancelar</button>
+      <button class="btn" id="sd-btn-guardar" onclick="guardarSonda()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: lista de tanques del barco -->
+<div class="modal-bg" id="modal-tanques">
+  <div class="modal" style="max-width:640px">
+    <h2>Tanques</h2>
+    <div class="modal-sub">Los tanques del barco, en el orden de las columnas de sondas.</div>
+    <div id="tq-lista"></div>
+    <div class="modal-actions">
+      <button class="btn solo-jefe" onclick="abrirModalTanque()">➕ Agregar tanque</button>
+      <button class="btn btn-sec" onclick="cerrarModalTanques()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: agregar/editar tanque -->
+<div class="modal-bg" id="modal-tanque">
+  <div class="modal">
+    <h2 id="modal-tanque-titulo">Agregar tanque</h2>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Código *</label><input type="text" id="tq-codigo" placeholder="ej: TK 5"></div>
+      <div><label>Servicio *</label><select id="tq-servicio"></select></div>
+    </div>
+    <div class="field">
+      <label>Contenido</label>
+      <input type="text" id="tq-contenido" placeholder="ej: Mobil Delvac 15W40">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Capacidad (litros) *</label><input type="number" id="tq-capacidad" min="0" step="any" inputmode="decimal"></div>
+      <div><label>Orden</label><input type="number" id="tq-orden" step="1" inputmode="numeric"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalTanque()">Cancelar</button>
+      <button class="btn" onclick="guardarTanque()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -2511,7 +2627,7 @@ async function cambiarBarco(id) {
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
-  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null;
   if (equipoActualFicha) volverAEquipos();
   renderEncabezado();
   await cargarTodo();
@@ -2559,7 +2675,10 @@ async function cargarTodo() {
       {data: cp, error: e13},
       {data: cc, error: e14},
       {data: ct, error: e15},
-      {data: cb, error: e16}
+      {data: cb, error: e16},
+      {data: tq, error: e17},
+      {data: sd, error: e18},
+      {data: sl, error: e19}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2579,7 +2698,11 @@ async function cargarTodo() {
       // Trasvases que entregó o recibió este barco; y los nombres de los barcos de la empresa (para el otro lado)
       traerTodo(() => sb.from('mant_combustible_trasvases').select('*').or(`origen_barco_id.eq.${B},destino_barco_id.eq.${B}`)
         .order('fecha', { ascending: false }).order('id', { ascending: false })),
-      sb.rpc('mant_combustible_barcos')
+      sb.rpc('mant_combustible_barcos'),
+      // Sondas: todos los tanques (también los dados de baja, por su historial), las sondas y sus lecturas
+      traerTodo(() => sb.from('mant_tanques').select('*').eq('barco_id', B).order('orden').order('id')),
+      traerTodo(() => sb.from('mant_sondas').select('*').eq('barco_id', B).order('fecha', { ascending: false }).order('id')),
+      traerTodo(() => sb.from('mant_sondas_lecturas').select('*').eq('barco_id', B).order('id'))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -2599,6 +2722,9 @@ async function cargarTodo() {
     if (e14) throw e14;
     if (e15) throw e15;
     if (e16) throw e16;
+    if (e17) throw e17;
+    if (e18) throw e18;
+    if (e19) throw e19;
     tareasTodas = tt || [];
     tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
@@ -2624,6 +2750,9 @@ async function cargarTodo() {
     combCargas = cc || [];
     combTrasvases = ct || [];
     combBarcos = cb || [];
+    tanques = tq || [];
+    sondas = sd || [];
+    sondasLecturas = sl || [];
     renderTodo();
     await cargarUsuariosEmpresa();
   } catch (err) {
@@ -2648,6 +2777,8 @@ function renderTodo() {
   renderCertificados();
   renderCombustible();
   renderCombustibleInicio();
+  renderSondas();
+  renderTanquesInicio();
 }
 
 // ============ FILTROS ============
@@ -6001,6 +6132,25 @@ function combActualizarAvisos() {
     : `Cargado: <strong>${fmtLitros(cargado)} L</strong> · Consumo: <strong${consumo < 0 ? ' class="comb-aviso"' : ''}>${fmtLitros(consumo)} L</strong>` +
       ` · Promedio: <strong>${fmtPromedio(promedio)}</strong> l/h` +
       (consumo < 0 ? '<div class="comb-aviso">⚠️ El consumo da negativo: revisá los litros cargados.</div>' : '');
+  combNotaSonda(hasta);
+}
+
+// Junto a "Fin": la sonda más cercana al "hasta" (hasta DIAS_SONDA_CERCANA días) con su total de combustible
+// y un botón "Usar". No completa nada solo.
+function combNotaSonda(hasta) {
+  const nota = document.getElementById('cb-sonda-nota');
+  const s = hasta ? sondaCercana(hasta) : null;
+  const total = s ? totalCombustibleSonda(s.id) : null;
+  if (!s || total.medidos.length === 0) { nota.innerHTML = ''; return; }
+  const usar = document.getElementById('cb-fin').disabled ? ''
+    : ` <button class="btn btn-sec btn-pequeno" type="button" onclick="usarSondaComb(${total.litros})">Usar</button>`;
+  nota.innerHTML = `📏 Sonda del ${fmtFechaDMA(s.fecha).slice(0, 5)}: <strong>${fmtLitros(total.litros)} L</strong> ` +
+    `(${escape(total.medidos.join(' + '))})` +
+    (total.sinMedir.length ? ` · <span class="comb-aviso">${escape(total.sinMedir.join(', '))} sin medir</span>` : '') + usar;
+}
+function usarSondaComb(litros) {
+  document.getElementById('cb-fin').value = litros;
+  combActualizarAvisos();
 }
 
 async function guardarComb() {
@@ -6355,6 +6505,437 @@ function exportarCombExcel() {
   XLSX.utils.book_append_sheet(wb, hoja(trasvases, ['Fecha', 'Tipo', 'Otro buque', 'Fuera del sistema', 'Litros', 'Período', 'Notas']), 'Trasvases');
   XLSX.writeFile(wb, ['Combustible', nombreBarcoArchivo(), hoyLocalISO()].join('_') + '.xlsx');
   toast('✓ Excel descargado');
+}
+
+// ============ SONDAS ============
+// Cuaderno de sondas: tanques del barco (mant_tanques) y, por fecha, los litros de cada uno (mant_sondas +
+// mant_sondas_lecturas). Tanque sin medir = sin lectura (distinto de 0). Una sonda por día y por barco.
+// Permisos (los controla la base, mant_priv.sonda_permitida): operador carga sondas nuevas y edita solo la
+// más reciente; jefe y admin, cualquiera; borrar sondas y manejar tanques, jefe y admin.
+// Litros mayores a la capacidad: la app avisa pero deja guardar. Misma visibilidad que Combustible.
+// Los servicios también están en el check mant_tanques_servicio_check: si agregás uno, actualizá los dos.
+const SERVICIOS_TANQUE = ['Combustible', 'Aceite motor', 'Aceite hidráulico', 'Lastre', 'Agua dulce', 'Séptico', 'Sludge', 'Otro'];
+const COLOR_SERVICIO = {   // [fondo claro, color fuerte]
+  'Combustible': ['#fdf0d2', '#d99b29'], 'Aceite motor': ['#f6e3cf', '#b5702f'], 'Aceite hidráulico': ['#f8dcd3', '#c0583a'],
+  'Lastre': ['#dbe9f6', '#4a7fb5'], 'Agua dulce': ['#d6f0f2', '#2b9aa6'], 'Séptico': ['#e6def0', '#7a5ea8'],
+  'Sludge': ['#e7e1d6', '#7d6b4f'], 'Otro': ['#ececec', '#888888']
+};
+const DIAS_SONDA_CERCANA = 5;   // sonda que se ofrece como "Fin" de un período de combustible
+
+let tanques = [];         // del barco, también los dados de baja, por orden
+let sondas = [];          // de la más nueva a la más vieja
+let sondasLecturas = [];
+let sondaActual = null;   // sonda en edición (null = nueva)
+let tanqueActual = null;  // tanque en edición (null = nuevo)
+
+function colorServicio(s) { return COLOR_SERVICIO[s] || COLOR_SERVICIO.Otro; }
+function lecturaDe(sondaId, tanqueId) { return sondasLecturas.find(l => l.sonda_id === sondaId && l.tanque_id === tanqueId) || null; }
+function ultimaSonda() { return sondas[0] || null; }
+function esUltimaSonda(s) { return !sondas.some(o => o.id !== s.id && o.fecha >= s.fecha); }
+function puedeEditarSonda(s) { return puedeEditar() || (puedeRegistrar() && esUltimaSonda(s)); }
+// Columnas: los tanques activos y los dados de baja que tienen alguna lectura, por orden
+function tanquesColumnas() {
+  const conLectura = new Set(sondasLecturas.map(l => l.tanque_id));
+  return tanques.filter(t => t.activo || conLectura.has(t.id));
+}
+// Total de combustible de una sonda: suma de los tanques de combustible medidos; y cuáles faltan
+function totalCombustibleSonda(sondaId) {
+  const tqs = tanques.filter(t => t.servicio === 'Combustible');
+  const medidos = [], sinMedir = [];
+  let litros = 0;
+  for (const t of tqs) {
+    const l = lecturaDe(sondaId, t.id);
+    if (l) { medidos.push(t.codigo); litros += Number(l.litros); }
+    else if (t.activo) sinMedir.push(t.codigo);
+  }
+  return { litros: redondearLitros(litros), medidos, sinMedir };
+}
+function diasEntreFechas(a, b) { return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000); }
+// La sonda más cercana a una fecha, hasta DIAS_SONDA_CERCANA días antes o después; empate: la de después
+function sondaCercana(fecha) {
+  return sondas
+    .map(s => ({ s, d: diasEntreFechas(fecha, s.fecha) }))
+    .filter(x => Math.abs(x.d) <= DIAS_SONDA_CERCANA)
+    .sort((a, b) => Math.abs(a.d) - Math.abs(b.d) || b.d - a.d)[0]?.s || null;
+}
+function textoLecturaTanque(t, l) {
+  if (!l) return '—';
+  return fmtLitros(l.litros);
+}
+function sobreCapacidad(t, litros) { return litros != null && Number(litros) > Number(t.capacidad_litros); }
+
+// Celdas en orden: tanques y, después del último de combustible, el total (si hay dos o más de combustible)
+function celdasSondas() {
+  const cols = tanquesColumnas();
+  const comb = cols.filter(t => t.servicio === 'Combustible');
+  const celdas = [];
+  cols.forEach(t => {
+    celdas.push({ tipo: 'tanque', t });
+    if (comb.length > 1 && t === comb[comb.length - 1]) celdas.push({ tipo: 'total' });
+  });
+  return celdas;
+}
+
+function renderSondas() {
+  const div = document.getElementById('sondas-lista');
+  if (!puedeVerCombustible()) { div.innerHTML = ''; return; }
+  if (!tanques.length) {
+    div.innerHTML = '<div class="empty"><div class="big">🛢</div>No hay tanques cargados. Agregalos con "🛢 Tanques".</div>';
+    return;
+  }
+  if (!sondas.length) {
+    div.innerHTML = '<div class="empty"><div class="big">📏</div>Todavía no hay sondas cargadas</div>';
+    return;
+  }
+  const celdas = celdasSondas();
+  // Encabezado: fila de servicios (grupos seguidos del mismo color) y fila de códigos
+  let fila1 = '<th rowspan="2" style="text-align:left">Fecha</th>', fila2 = '';
+  for (let i = 0; i < celdas.length; i++) {
+    const c = celdas[i];
+    if (c.tipo === 'total') { fila1 += `<th rowspan="2" class="total" style="background:${colorServicio('Combustible')[0]}">Total<br>comb.</th>`; continue; }
+    let j = i;
+    while (j + 1 < celdas.length && celdas[j + 1].tipo === 'tanque' && celdas[j + 1].t.servicio === c.t.servicio) j++;
+    const [claro, fuerte] = colorServicio(c.t.servicio);
+    fila1 += `<th class="grupo" colspan="${j - i + 1}" style="background:${claro};border-top:3px solid ${fuerte}">${escape(c.t.servicio)}</th>`;
+    for (let k = i; k <= j; k++) {
+      const t = celdas[k].t;
+      fila2 += `<th class="${t.activo ? '' : 'baja'}" style="background:${claro}" title="${escape(t.contenido || t.servicio)} · ${fmtLitros(t.capacidad_litros)} L${t.activo ? '' : ' · dado de baja'}">${escape(t.codigo)}</th>`;
+    }
+    i = j;
+  }
+  fila1 += '<th rowspan="2" style="text-align:left">Obs.</th><th rowspan="2"></th>';
+
+  const acciones = s => [
+    puedeEditarSonda(s) ? `<button class="btn-ico" onclick="abrirModalSonda(${s.id})" title="Editar sonda" aria-label="Editar sonda">✏️</button>` : '',
+    `<button class="btn-ico peligro solo-jefe" onclick="borrarSonda(${s.id})" title="Borrar sonda" aria-label="Borrar sonda">🗑️</button>`
+  ].join('');
+
+  const filas = sondas.map(s => {
+    const tds = celdas.map(c => {
+      if (c.tipo === 'total') {
+        const tot = totalCombustibleSonda(s.id);
+        return `<td class="num total" style="background:${colorServicio('Combustible')[0]}" title="${escape(tot.medidos.join(' + '))}${tot.sinMedir.length ? ' · sin medir: ' + escape(tot.sinMedir.join(', ')) : ''}">${tot.medidos.length ? fmtLitros(tot.litros) : '—'}</td>`;
+      }
+      const l = lecturaDe(s.id, c.t.id);
+      const sobre = l && sobreCapacidad(c.t, l.litros);
+      return `<td class="num${sobre ? ' sobre' : ''}"${sobre ? ` title="Supera la capacidad (${fmtLitros(c.t.capacidad_litros)} L)"` : ''}>${sobre ? '⚠️ ' : ''}${textoLecturaTanque(c.t, l)}</td>`;
+    }).join('');
+    return `<tr><td><strong>${fmtFechaDMA(s.fecha)}</strong></td>${tds}<td class="obs" title="${escape(s.observaciones || '')}">${escape(s.observaciones || '')}</td><td class="acciones">${acciones(s)}</td></tr>`;
+  }).join('');
+
+  // Celular: una tarjeta por sonda, con los tanques agrupados por servicio
+  const tarjetas = sondas.map(s => {
+    const grupos = [];
+    tanquesColumnas().forEach(t => {
+      const g = grupos[grupos.length - 1];
+      if (g && g.servicio === t.servicio) g.tqs.push(t); else grupos.push({ servicio: t.servicio, tqs: [t] });
+    });
+    const tot = totalCombustibleSonda(s.id);
+    return `
+      <div class="sonda-tarjeta">
+        <div class="cab"><div class="fecha">${fmtFechaDMA(s.fecha)}</div><div>${acciones(s)}</div></div>
+        ${grupos.map(g => `
+          <div class="grupo" style="border-left-color:${colorServicio(g.servicio)[1]}">
+            <div class="nombre">${escape(g.servicio)}${g.servicio === 'Combustible' && tot.medidos.length > 1 ? ` · total ${fmtLitros(tot.litros)} L` : ''}</div>
+            <div class="grilla">${g.tqs.map(t => {
+              const l = lecturaDe(s.id, t.id);
+              const sobre = l && sobreCapacidad(t, l.litros);
+              return `<div${t.activo ? '' : ' style="opacity:.55"'}>${escape(t.codigo)}: <strong${sobre ? ' style="color:#9a6a00"' : ''}>${sobre ? '⚠️ ' : ''}${textoLecturaTanque(t, l)}</strong></div>`;
+            }).join('')}</div>
+          </div>`).join('')}
+        ${s.observaciones ? `<div class="obs">📝 ${escape(s.observaciones)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  div.innerHTML = `
+    <div class="sondas-tabla-wrap" style="overflow-x:auto">
+      <table class="tabla-minimos tabla-sondas">
+        <thead><tr>${fila1}</tr><tr>${fila2}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <div class="sondas-tarjetas">${tarjetas}</div>`;
+}
+
+// ---- Formulario de sonda ----
+function abrirModalSonda(id) {
+  sondaActual = id ? sondas.find(s => s.id === id) : null;
+  if (sondaActual ? !puedeEditarSonda(sondaActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (!tanques.some(t => t.activo)) { toast('Primero cargá los tanques del barco ("🛢 Tanques")', true); return; }
+  // Filas: los tanques activos y, al editar, los dados de baja que tienen lectura en esta sonda
+  const filas = tanques.filter(t => t.activo || (sondaActual && lecturaDe(sondaActual.id, t.id)));
+  document.getElementById('sd-tanques').innerHTML = filas.map(t => {
+    const l = sondaActual ? lecturaDe(sondaActual.id, t.id) : null;
+    return `
+      <div class="sd-fila" data-tanque="${t.id}" style="border-left-color:${colorServicio(t.servicio)[1]}">
+        <div class="tq">${escape(t.codigo)}${t.activo ? '' : ' (dado de baja)'}
+          <small>${escape(t.servicio)}${t.contenido ? ' · ' + escape(t.contenido) : ''} · capacidad ${fmtLitros(t.capacidad_litros)} L</small></div>
+        <input type="number" min="0" step="any" inputmode="decimal" placeholder="sin medir" aria-label="Litros de ${escape(t.codigo)}"
+          value="${l ? Number(l.litros) : ''}" oninput="sondaAvisoFila(this.closest('.sd-fila'))">
+        <div class="rapidos">
+          <button class="btn btn-sec btn-pequeno" type="button" onclick="sondaRapido(this, 0)">Vacío</button>
+          <button class="btn btn-sec btn-pequeno" type="button" onclick="sondaRapido(this, ${Number(t.capacidad_litros)})">Lleno</button>
+        </div>
+        <div class="aviso"></div>
+      </div>`;
+  }).join('');
+  document.querySelectorAll('#sd-tanques .sd-fila').forEach(sondaAvisoFila);
+  document.getElementById('modal-sonda-titulo').textContent = sondaActual ? 'Editar sonda del ' + fmtFechaDMA(sondaActual.fecha) : 'Nueva sonda';
+  document.getElementById('sd-fecha').value = sondaActual ? sondaActual.fecha : hoyLocalISO();
+  document.getElementById('sd-obs').value = sondaActual?.observaciones || '';
+  const partes = [];
+  if (sondaActual?.creado_por) partes.push(`Cargada por ${nombreUsuarioComb(sondaActual.creado_por)} el ${fmtFechaHora(sondaActual.creado_en)}`);
+  if (sondaActual?.actualizado_por && sondaActual.actualizado_en !== sondaActual.creado_en)
+    partes.push(`modificada por ${nombreUsuarioComb(sondaActual.actualizado_por)} el ${fmtFechaHora(sondaActual.actualizado_en)}`);
+  document.getElementById('sd-autor').textContent = partes.join(' · ');
+  document.getElementById('modal-sonda').classList.add('show');
+}
+function cerrarModalSonda() {
+  document.getElementById('modal-sonda').classList.remove('show');
+  sondaActual = null;
+}
+function sondaRapido(boton, litros) {
+  const fila = boton.closest('.sd-fila');
+  fila.querySelector('input').value = litros;
+  sondaAvisoFila(fila);
+}
+// Aviso en la fila: negativo (no deja guardar) o mayor a la capacidad (avisa, deja guardar)
+function sondaAvisoFila(fila) {
+  const t = tanques.find(x => x.id === Number(fila.dataset.tanque));
+  const v = numeroONull(fila.querySelector('input').value);
+  const aviso = fila.querySelector('.aviso');
+  if (v != null && (isNaN(v) || v < 0)) aviso.textContent = '⛔ Los litros no pueden ser negativos';
+  else if (sobreCapacidad(t, v)) aviso.textContent = `⚠️ Supera la capacidad del tanque (${fmtLitros(t.capacidad_litros)} L). Se puede guardar igual.`;
+  else aviso.textContent = '';
+}
+
+async function guardarSonda() {
+  const fecha = document.getElementById('sd-fecha').value;
+  if (!fecha) { toast('Falta la fecha', true); return; }
+  const otra = sondas.find(s => s.fecha === fecha && s.id !== sondaActual?.id);
+  if (otra) { toast(`Ya hay una sonda del ${fmtFechaDMA(fecha)}: editá esa`, true); return; }
+  if (!puedeEditar() && sondas.some(s => s.id !== sondaActual?.id && s.fecha >= fecha)) {
+    toast('Solo podés cargar o editar la sonda más reciente: la fecha tiene que ser posterior a las demás', true); return;
+  }
+  const valores = [...document.querySelectorAll('#sd-tanques .sd-fila')].map(f => ({
+    tanque_id: Number(f.dataset.tanque), litros: numeroONull(f.querySelector('input').value)
+  }));
+  if (valores.some(v => v.litros != null && (isNaN(v.litros) || v.litros < 0))) { toast('Hay litros negativos o inválidos', true); return; }
+  if (!valores.some(v => v.litros != null)) { toast('Cargá al menos un tanque', true); return; }
+  const datos = { fecha, observaciones: document.getElementById('sd-obs').value.trim() || null };
+
+  const btn = document.getElementById('sd-btn-guardar');
+  btn.disabled = true;
+  try {
+    // Con .select() se sabe si la base dejó (si no, vuelve vacío)
+    const { data, error } = sondaActual
+      ? await sb.from('mant_sondas').update(datos).eq('id', sondaActual.id).select()
+      : await sb.from('mant_sondas').insert(conBarco(datos)).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    await guardarLecturasSonda(data[0].id, valores);
+    const sobre = valores.filter(v => sobreCapacidad(tanques.find(t => t.id === v.tanque_id), v.litros)).length;
+    toast((sondaActual ? '✓ Sonda actualizada' : '✓ Sonda guardada') + (sobre ? ` (${sobre} tanque${sobre > 1 ? 's' : ''} sobre la capacidad)` : ''));
+    cerrarModalSonda();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(err && err.code === '23505' ? 'Ya hay una sonda de esa fecha' : textoError(err), true);
+    await cargarTodo();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Lecturas de una sonda: vacío = sin medir (se borra la lectura); si cambió, se actualiza; si no había, se agrega
+async function guardarLecturasSonda(sondaId, valores) {
+  const antes = sondasLecturas.filter(l => l.sonda_id === sondaId);
+  const borrar = [], nuevas = [];
+  for (const v of valores) {
+    const vieja = antes.find(l => l.tanque_id === v.tanque_id);
+    if (v.litros == null) { if (vieja) borrar.push(vieja.id); continue; }
+    if (!vieja) { nuevas.push({ sonda_id: sondaId, tanque_id: v.tanque_id, litros: v.litros }); continue; }
+    if (Number(vieja.litros) !== v.litros) {
+      const { error } = await sb.from('mant_sondas_lecturas').update({ litros: v.litros }).eq('id', vieja.id);
+      if (error) throw error;
+    }
+  }
+  if (borrar.length) {
+    const { error } = await sb.from('mant_sondas_lecturas').delete().in('id', borrar);
+    if (error) throw error;
+  }
+  if (nuevas.length) {
+    const { error } = await sb.from('mant_sondas_lecturas').insert(conBarco(nuevas));
+    if (error) throw error;
+  }
+}
+
+async function borrarSonda(id) {
+  const s = sondas.find(x => x.id === id);
+  if (!s || !puedeEditar()) return;
+  if (!confirm(`¿Borrar la sonda del ${fmtFechaDMA(s.fecha)} con todos sus tanques?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_sondas').delete().eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast('✓ Sonda borrada');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// ---- Tanques ----
+function abrirModalTanques() {
+  renderListaTanques();
+  document.getElementById('modal-tanques').classList.add('show');
+}
+function cerrarModalTanques() { document.getElementById('modal-tanques').classList.remove('show'); }
+function renderListaTanques() {
+  const div = document.getElementById('tq-lista');
+  if (!tanques.length) { div.innerHTML = '<div class="empty">No hay tanques cargados</div>'; return; }
+  div.innerHTML = tanques.map(t => `
+    <div class="tq-item${t.activo ? '' : ' baja'}">
+      <div class="chip" style="background:${colorServicio(t.servicio)[1]}"></div>
+      <div class="info"><strong>${escape(t.codigo)}</strong> · ${escape(t.servicio)}${t.activo ? '' : ' · dado de baja'}
+        <small>${t.contenido ? escape(t.contenido) + ' · ' : ''}${fmtLitros(t.capacidad_litros)} L · orden ${t.orden}</small></div>
+      <button class="btn-ico solo-jefe" onclick="abrirModalTanque(${t.id})" title="Editar tanque" aria-label="Editar tanque">✏️</button>
+      ${t.activo
+        ? `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoTanque(${t.id}, false)">Dar de baja</button>`
+        : `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoTanque(${t.id}, true)">↺ Reactivar</button>`}
+    </div>`).join('');
+}
+function abrirModalTanque(id) {
+  if (!puedeEditar()) return;
+  tanqueActual = id ? tanques.find(t => t.id === id) : null;
+  document.getElementById('tq-servicio').innerHTML = SERVICIOS_TANQUE.map(s => `<option value="${escape(s)}">${escape(s)}</option>`).join('');
+  document.getElementById('modal-tanque-titulo').textContent = tanqueActual ? 'Editar tanque ' + tanqueActual.codigo : 'Agregar tanque';
+  document.getElementById('tq-codigo').value = tanqueActual?.codigo || '';
+  document.getElementById('tq-servicio').value = tanqueActual?.servicio || 'Combustible';
+  document.getElementById('tq-contenido').value = tanqueActual?.contenido || '';
+  document.getElementById('tq-capacidad').value = tanqueActual ? Number(tanqueActual.capacidad_litros) : '';
+  document.getElementById('tq-orden').value = tanqueActual ? tanqueActual.orden : (Math.max(0, ...tanques.map(t => t.orden)) + 1);
+  document.getElementById('modal-tanque').classList.add('show');
+}
+function cerrarModalTanque() {
+  document.getElementById('modal-tanque').classList.remove('show');
+  tanqueActual = null;
+}
+async function guardarTanque() {
+  const codigo = document.getElementById('tq-codigo').value.trim();
+  const capacidad = numeroONull(document.getElementById('tq-capacidad').value);
+  const orden = parseInt(document.getElementById('tq-orden').value, 10);
+  if (!codigo) { toast('Falta el código del tanque', true); return; }
+  if (capacidad == null || isNaN(capacidad) || capacidad <= 0) { toast('La capacidad tiene que ser mayor a 0', true); return; }
+  if (tanques.some(t => t.id !== tanqueActual?.id && t.codigo.toLowerCase() === codigo.toLowerCase())) {
+    toast(`Ya hay un tanque "${codigo}" en este barco`, true); return;
+  }
+  const datos = {
+    codigo, servicio: document.getElementById('tq-servicio').value,
+    contenido: document.getElementById('tq-contenido').value.trim() || null,
+    capacidad_litros: capacidad, orden: isNaN(orden) ? 0 : orden
+  };
+  try {
+    const { data, error } = tanqueActual
+      ? await sb.from('mant_tanques').update(datos).eq('id', tanqueActual.id).select()
+      : await sb.from('mant_tanques').insert(conBarco(datos)).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(tanqueActual ? '✓ Tanque actualizado' : '✓ Tanque agregado');
+    cerrarModalTanque();
+    await cargarTodo();
+    renderListaTanques();
+  } catch (err) {
+    console.error(err);
+    toast(err && err.code === '23505' ? `Ya hay un tanque "${codigo}" en este barco` : textoError(err), true);
+  }
+}
+async function cambiarActivoTanque(id, activo) {
+  const t = tanques.find(x => x.id === id);
+  if (!t || !puedeEditar()) return;
+  if (!activo && !confirm(`¿Dar de baja el tanque ${t.codigo}?\n\nDeja de aparecer en las sondas nuevas. Sus lecturas viejas se conservan.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_tanques').update({ activo }).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(activo ? `✓ ${t.codigo} reactivado` : `✓ ${t.codigo} dado de baja`);
+    await cargarTodo();
+    renderListaTanques();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// Sondas_BM_Santa_Lucia_2026-11-03.xlsx: el mismo formato que la pantalla (fila de servicios, fila de tanques,
+// una fila por fecha de la más nueva a la más vieja, total de combustible y observaciones)
+function exportarSondasExcel() {
+  if (!sondas.length) { toast('No hay sondas para exportar'); return; }
+  const celdas = celdasSondas();
+  const fila1 = ['Fecha'], fila2 = [''], merges = [];
+  celdas.forEach((c, i) => {
+    const col = i + 1;
+    if (c.tipo === 'total') { fila1.push('Total combustible'); fila2.push(''); merges.push({ s: { r: 0, c: col }, e: { r: 1, c: col } }); return; }
+    const inicioGrupo = i === 0 || celdas[i - 1].tipo !== 'tanque' || celdas[i - 1].t.servicio !== c.t.servicio;
+    fila1.push(inicioGrupo ? c.t.servicio : '');
+    fila2.push(c.t.codigo);
+    if (inicioGrupo) {
+      let j = i;
+      while (j + 1 < celdas.length && celdas[j + 1].tipo === 'tanque' && celdas[j + 1].t.servicio === c.t.servicio) j++;
+      if (j > i) merges.push({ s: { r: 0, c: col }, e: { r: 0, c: j + 1 } });
+    }
+  });
+  fila1.push('Observaciones'); fila2.push('');
+  merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: fila1.length - 1 }, e: { r: 1, c: fila1.length - 1 } });
+  const filas = sondas.map(s => [
+    s.fecha,
+    ...celdas.map(c => {
+      if (c.tipo === 'total') { const tot = totalCombustibleSonda(s.id); return tot.medidos.length ? tot.litros : null; }
+      const l = lecturaDe(s.id, c.t.id);
+      return l ? Number(l.litros) : null;
+    }),
+    s.observaciones || null
+  ]);
+  const hoja = XLSX.utils.aoa_to_sheet([fila1, fila2, ...filas]);
+  hoja['!merges'] = merges;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, hoja, 'Sondas');
+  XLSX.writeFile(wb, ['Sondas', nombreBarcoArchivo(), hoyLocalISO()].join('_') + '.xlsx');
+  toast('✓ Excel descargado');
+}
+
+// ---- Tarjeta "📏 Tanques" del Inicio: última sonda, barra por tanque (lastre en texto) ----
+function renderTanquesInicio() {
+  const div = document.getElementById('dash-tanques');
+  const s = puedeVerCombustible() ? ultimaSonda() : null;
+  if (!s) { div.innerHTML = ''; return; }
+  const dias = -diasEntre(s.fecha);
+  const hace = textoHaceDias(dias);
+  const activos = tanques.filter(t => t.activo);
+  const barras = activos.filter(t => t.servicio !== 'Lastre').map(t => {
+    const l = lecturaDe(s.id, t.id);
+    const pct = l ? Math.round(Number(l.litros) / Number(t.capacidad_litros) * 100) : null;
+    return `
+      <div class="tq-barra" title="${escape(t.servicio)}${t.contenido ? ' · ' + escape(t.contenido) : ''}">
+        <div class="fila"><span>${escape(t.codigo)} <small style="color:var(--texto-suave)">${escape(t.contenido || t.servicio)}</small></span>
+          <span>${l ? `${fmtLitros(l.litros)} L · ${pct} %` : 'sin medir'}</span></div>
+        <div class="comb-barra"><div style="width:${l ? Math.min(Math.max(pct, 0), 100) : 0}%;background:${colorServicio(t.servicio)[1]}"></div></div>
+      </div>`;
+  }).join('');
+  const lastre = activos.filter(t => t.servicio === 'Lastre').map(t => {
+    const l = lecturaDe(s.id, t.id);
+    const txt = !l ? 'sin medir' : Number(l.litros) === 0 ? 'Vacío'
+      : Number(l.litros) >= Number(t.capacidad_litros) ? 'Lleno' : fmtLitros(l.litros) + ' L';
+    return `${escape(t.codigo)}: ${txt}`;
+  });
+  div.innerHTML = `
+    <div class="stat-card tanques-inicio" onclick="cambiarTab('sondas')" title="Ver Sondas">
+      <div class="label">📏 Tanques</div>
+      <div class="meta">Sonda del ${fmtFechaDMA(s.fecha)}${hace ? ' · ' + hace : ''}</div>
+      ${barras ? `<div class="barras">${barras}</div>` : ''}
+      ${lastre.length ? `<div class="lastre">Lastre: ${lastre.join(' · ')}</div>` : ''}
+    </div>`;
 }
 
 // ============ NAVEGACIÓN TABS ============
