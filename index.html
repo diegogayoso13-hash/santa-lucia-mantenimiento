@@ -689,6 +689,35 @@
     .rl-tabla-wrap { display: none; }
     .rl-tarjetas { display: block; }
   }
+  /* Consumo de aceite por sonda: tarjetas de tanques, tablas (tarjetas en el celular) y avisos */
+  .ac-tanques { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .ac-tanque-card { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 12px 14px; }
+  .ac-tanque-card .cab { font-size: 14px; }
+  .ac-tanque-card .contenido { font-size: 12.5px; color: var(--texto-suave); }
+  .ac-tanque-card .litros { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; color: var(--azul-profundo); margin-top: 4px; }
+  .ac-tanque-card .meta { font-size: 12px; color: var(--texto-suave); margin-top: 4px; }
+  .ac-titulo { font-size: 15px; color: var(--azul-profundo); margin: 22px 0 8px; }
+  .tabla-ac th, .tabla-ac td { padding: 7px 8px; font-size: 13px; white-space: nowrap; }
+  .tabla-ac td.num, .tabla-ac th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabla-ac tr.ac-amarillo td { background: #fff8e6; }
+  .tabla-ac tr.ac-rojo td { background: #fde0df; }
+  .tabla-ac tr.ac-aviso td { font-size: 12.5px; font-weight: 600; padding-top: 2px; white-space: normal; }
+  .tabla-ac tr.ac-amarillo.ac-aviso td { color: #9a6a00; }
+  .tabla-ac tr.ac-rojo.ac-aviso td { color: var(--rojo); }
+  .ac-tarjetas-mov { display: none; }
+  .ac-tarjeta { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  .ac-tarjeta.ac-amarillo { background: #fff8e6; border-color: var(--ambar); }
+  .ac-tarjeta.ac-rojo { background: #fde0df; border-color: var(--rojo); }
+  .ac-tarjeta .titulo { font-weight: 700; font-size: 14px; }
+  .ac-tarjeta .grilla { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 12px; margin-top: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .ac-tarjeta .grilla .k { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--texto-suave); }
+  .ac-tarjeta .aviso { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
+  .ac-tarjeta.ac-amarillo .aviso { color: #9a6a00; }
+  .ac-tarjeta.ac-rojo .aviso { color: var(--rojo); }
+  @media (max-width: 700px) {
+    .ac-tabla-wrap { display: none; }
+    .ac-tarjetas-mov { display: block; }
+  }
   .ficha-rellenos-tot { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
   .ficha-rellenos-tot div { background: white; border: 1px solid var(--gris-2); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--texto-suave); }
   .ficha-rellenos-tot strong { display: block; font-size: 18px; color: var(--azul-profundo); }
@@ -1355,9 +1384,14 @@
     <h2 class="panel-titulo">Rellenos de aceite</h2>
     <div class="acciones-globales">
       <button class="btn solo-operador" onclick="abrirModalRelleno()">➕ Relleno</button>
+      <button class="btn solo-operador" onclick="abrirModalCargaAceite()">➕ Carga a tanque</button>
       <button class="btn btn-sec" onclick="abrirModalAceites()">🛢️ Aceites</button>
       <button class="btn btn-acento" onclick="exportarRellenosExcel()">📥 Exportar Excel</button>
     </div>
+    <!-- Consumo de aceite por sonda: tanques, reserva, sistema, tambor/bidón y cargas a tanque -->
+    <div class="ac-tanques" id="ac-tanques"></div>
+    <div id="ac-consumo"></div>
+    <h2 class="panel-titulo" style="margin-top:28px">Rellenos</h2>
     <div class="toolbar">
       <select id="rl-filtro-equipo" onchange="renderRellenos()" aria-label="Equipo"></select>
       <select id="rl-filtro-aceite" onchange="renderRellenos()" aria-label="Aceite"></select>
@@ -2061,7 +2095,15 @@
     <h2 id="modal-tanque-titulo">Agregar tanque</h2>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label>Código *</label><input type="text" id="tq-codigo" placeholder="ej: TK 5"></div>
-      <div><label>Servicio *</label><select id="tq-servicio"></select></div>
+      <div><label>Servicio *</label><select id="tq-servicio" onchange="tanqueServicioCambiado()"></select></div>
+    </div>
+    <div class="field" id="tq-uso-campo" style="max-width:320px">
+      <label>Uso (tanques de aceite)</label>
+      <select id="tq-uso">
+        <option value="">—</option>
+        <option value="Reserva">Reserva: de acá se rellenan los equipos</option>
+        <option value="Sistema">Sistema: depósito del sistema (el nivel debería mantenerse)</option>
+      </select>
     </div>
     <div class="field">
       <label>Contenido</label>
@@ -2109,6 +2151,36 @@
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalRelleno()">Cancelar</button>
       <button class="btn" id="rl-btn-guardar" onclick="guardarRelleno()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: nueva/editar carga a un tanque de aceite -->
+<div class="modal-bg" id="modal-carga-aceite">
+  <div class="modal">
+    <h2 id="modal-carga-aceite-titulo">Nueva carga a tanque</h2>
+    <div class="modal-sub">Aceite que entra a un tanque de aceite (de un proveedor o de un tambor/bidón).</div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Fecha *</label><input type="date" id="ca-fecha"></div>
+      <div><label>Origen *</label>
+        <select id="ca-origen"><option value="Proveedor">Proveedor</option><option value="Tambor/bidón">Tambor/bidón</option></select></div>
+    </div>
+    <div class="field">
+      <label>Tanque *</label>
+      <select id="ca-tanque"></select>
+    </div>
+    <div class="field" style="max-width:200px">
+      <label>Litros *</label>
+      <input type="number" id="ca-litros" min="0" step="any" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="ca-obs" rows="2" placeholder="ej: nombre del proveedor"></textarea>
+    </div>
+    <div class="comb-nota" id="ca-autor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="cerrarModalCargaAceite()">Cancelar</button>
+      <button class="btn" id="ca-btn-guardar" onclick="guardarCargaAceite()">✓ Guardar</button>
     </div>
   </div>
 </div>
@@ -2743,7 +2815,7 @@ async function cambiarBarco(id) {
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
   tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
-  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null; rellenoActual = null; aceiteActual = null;
+  repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null; rellenoActual = null; aceiteActual = null; cargaAceiteActual = null;
   if (equipoActualFicha) volverAEquipos();
   renderEncabezado();
   await cargarTodo();
@@ -2796,7 +2868,8 @@ async function cargarTodo() {
       {data: sd, error: e18},
       {data: sl, error: e19},
       {data: ac, error: e20},
-      {data: rl, error: e21}
+      {data: rl, error: e21},
+      {data: ca, error: e22}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2825,6 +2898,8 @@ async function cargarTodo() {
       // embebido, así se ven aunque el equipo se haya dado de baja
       traerTodo(() => sb.from('mant_aceites').select('*').eq('barco_id', B).order('nombre').order('id')),
       traerTodo(() => sb.from('mant_rellenos').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B)
+        .order('fecha', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_cargas_aceite').select('*').eq('barco_id', B)
         .order('fecha', { ascending: false }).order('id', { ascending: false }))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
@@ -2850,6 +2925,7 @@ async function cargarTodo() {
     if (e19) throw e19;
     if (e20) throw e20;
     if (e21) throw e21;
+    if (e22) throw e22;
     tareasTodas = tt || [];
     tareas = tareasTodas.filter(t => t.activa);
     historial = hh || [];
@@ -2880,6 +2956,7 @@ async function cargarTodo() {
     sondasLecturas = sl || [];
     aceites = ac || [];
     rellenos = rl || [];
+    cargasAceite = ca || [];
     renderTodo();
     await cargarUsuariosEmpresa();
   } catch (err) {
@@ -6960,7 +7037,7 @@ function renderListaTanques() {
     <div class="tq-item${t.activo ? '' : ' baja'}">
       <div class="chip" style="background:${colorServicio(t.servicio)[1]}"></div>
       <div class="info"><strong>${escape(t.codigo)}</strong> · ${escape(t.servicio)}${t.activo ? '' : ' · dado de baja'}
-        <small>${t.contenido ? escape(t.contenido) + ' · ' : ''}${fmtLitros(t.capacidad_litros)} L · orden ${t.orden}</small></div>
+        <small>${t.contenido ? escape(t.contenido) + ' · ' : ''}${fmtLitros(t.capacidad_litros)} L · orden ${t.orden}${t.uso_aceite ? ' · ' + escape(t.uso_aceite) : ''}</small></div>
       <button class="btn-ico solo-jefe" onclick="abrirModalTanque(${t.id})" title="Editar tanque" aria-label="Editar tanque">✏️</button>
       ${t.activo
         ? `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoTanque(${t.id}, false)">Dar de baja</button>`
@@ -6977,7 +7054,15 @@ function abrirModalTanque(id) {
   document.getElementById('tq-contenido').value = tanqueActual?.contenido || '';
   document.getElementById('tq-capacidad').value = tanqueActual ? Number(tanqueActual.capacidad_litros) : '';
   document.getElementById('tq-orden').value = tanqueActual ? tanqueActual.orden : (Math.max(0, ...tanques.map(t => t.orden)) + 1);
+  document.getElementById('tq-uso').value = tanqueActual?.uso_aceite || '';
+  tanqueServicioCambiado();
   document.getElementById('modal-tanque').classList.add('show');
+}
+// "Uso" (Reserva / Sistema) solo para tanques de aceite (la base también lo exige)
+const SERVICIOS_ACEITE = ['Aceite motor', 'Aceite hidráulico'];
+function tanqueServicioCambiado() {
+  const deAceite = SERVICIOS_ACEITE.includes(document.getElementById('tq-servicio').value);
+  document.getElementById('tq-uso-campo').style.display = deAceite ? '' : 'none';
 }
 function cerrarModalTanque() {
   document.getElementById('modal-tanque').classList.remove('show');
@@ -6992,10 +7077,12 @@ async function guardarTanque() {
   if (tanques.some(t => t.id !== tanqueActual?.id && t.codigo.toLowerCase() === codigo.toLowerCase())) {
     toast(`Ya hay un tanque "${codigo}" en este barco`, true); return;
   }
+  const servicio = document.getElementById('tq-servicio').value;
   const datos = {
-    codigo, servicio: document.getElementById('tq-servicio').value,
+    codigo, servicio,
     contenido: document.getElementById('tq-contenido').value.trim() || null,
-    capacidad_litros: capacidad, orden: isNaN(orden) ? 0 : orden
+    capacidad_litros: capacidad, orden: isNaN(orden) ? 0 : orden,
+    uso_aceite: SERVICIOS_ACEITE.includes(servicio) ? (document.getElementById('tq-uso').value || null) : null
   };
   try {
     const { data, error } = tanqueActual
@@ -7162,9 +7249,12 @@ function renderRellenos() {
   if (!puedeVerCombustible()) {
     document.getElementById('rl-lista').innerHTML = '';
     document.getElementById('rl-total').innerHTML = '';
+    document.getElementById('ac-tanques').innerHTML = '';
+    document.getElementById('ac-consumo').innerHTML = '';
     renderRellenosFicha();
     return;
   }
+  renderConsumoAceite();
   // Filtros: equipos y aceites que tienen rellenos, más los activos
   const eqIds = new Set([...equipos.map(e => e.id), ...rellenos.map(r => r.equipo_id)]);
   const eqOpc = [...eqIds].map(id => ({ id, nombre: equipos.find(e => e.id === id)?.nombre || nombreEquipoRelleno(rellenos.find(r => r.equipo_id === id)) }))
@@ -7417,11 +7507,251 @@ async function cambiarActivoAceite(id, activo) {
   }
 }
 
-// Rellenos_BM_Santa_Lucia[_<equipo>][_<aceite>][_desde-..][_hasta-..]_2026-11-03.xlsx: lo que se ve en pantalla
+// ---- Consumo de aceite por sonda ----
+// Tanques de aceite (mant_tanques.uso_aceite): Reserva (de ahí se rellenan los equipos: consumo = inicial +
+// cargado − final, comparado con los rellenos anotados de los aceites guardados en ese tanque) o Sistema
+// (depósito del sistema: si el nivel baja, posible pérdida). Las sondas que no midieron el tanque se saltan.
+// Cargas y rellenos cuentan en un lapso si su fecha es > desde y ≤ hasta.
+const AVISO_RESERVA_LITROS = 10, AVISO_RESERVA_PORC = 0.2;  // amarillo si |diferencia| supera los DOS
+const PERDIDA_SISTEMA_AMARILLO = 5, PERDIDA_SISTEMA_ROJO = 20;
+const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+let cargasAceite = [];        // cargas a tanques de aceite (mant_cargas_aceite), de la más nueva a la más vieja
+let cargaAceiteActual = null; // carga en edición (null = nueva)
+
+function tanquesDeAceite() { return tanques.filter(t => t.activo && SERVICIOS_ACEITE.includes(t.servicio)); }
+// Sondas en que se midió un tanque, de la más vieja a la más nueva: [{ fecha, litros }]
+function medicionesTanque(tq) {
+  return sondas.map(s => ({ fecha: s.fecha, l: lecturaDe(s.id, tq.id) })).filter(x => x.l)
+    .map(x => ({ fecha: x.fecha, litros: Number(x.l.litros) }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+function enLapso(fecha, desde, hasta) { return fecha > desde && fecha <= hasta; }
+function cargadoTanque(tq, desde, hasta) {
+  return sumaLitros(cargasAceite.filter(c => c.tanque_id === tq.id && enLapso(c.fecha, desde, hasta)));
+}
+function rellenosDeTanque(tq, desde, hasta) {
+  const ids = new Set(aceites.filter(a => a.tanque_id === tq.id).map(a => a.id));
+  return sumaLitros(rellenos.filter(r => ids.has(r.aceite_id) && enLapso(r.fecha, desde, hasta)));
+}
+// Reserva: una fila por cada par de sondas consecutivas con el tanque medido (la más nueva primero)
+function filasReserva(tq) {
+  const m = medicionesTanque(tq), filas = [];
+  for (let i = 1; i < m.length; i++) {
+    const desde = m[i - 1].fecha, hasta = m[i].fecha;
+    const cargado = cargadoTanque(tq, desde, hasta);
+    const consumo = redondearLitros(m[i - 1].litros + cargado - m[i].litros);
+    const anotados = rellenosDeTanque(tq, desde, hasta);
+    const dif = redondearLitros(consumo - anotados);
+    const estado = consumo < 0 ? 'rojo'
+      : (Math.abs(dif) > AVISO_RESERVA_LITROS && Math.abs(dif) > AVISO_RESERVA_PORC * consumo) ? 'amarillo' : '';
+    filas.push({ desde, hasta, inicial: m[i - 1].litros, cargado, final: m[i].litros, consumo, anotados, dif, estado });
+  }
+  return filas.reverse();
+}
+// Sistema: una fila por sonda con el tanque medido (la más nueva primero); la primera no tiene anterior
+function filasSistema(tq) {
+  const m = medicionesTanque(tq);
+  return m.map((x, i) => {
+    if (i === 0) return { fecha: x.fecha, nivel: x.litros, cambio: null, cargado: null, perdida: null, estado: '' };
+    const ant = m[i - 1];
+    const cargado = cargadoTanque(tq, ant.fecha, x.fecha);
+    const perdida = redondearLitros(ant.litros + cargado - x.litros);
+    const estado = perdida > PERDIDA_SISTEMA_ROJO ? 'rojo' : perdida > PERDIDA_SISTEMA_AMARILLO ? 'amarillo' : '';
+    return { fecha: x.fecha, nivel: x.litros, cambio: redondearLitros(x.litros - ant.litros), cargado, perdida, estado };
+  }).reverse();
+}
+// Aceites en tambor/bidón (sin tanque): total de rellenos por mes, una columna por aceite
+function aceitesTambor() { return aceites.filter(a => !a.tanque_id && (a.activo || rellenos.some(r => r.aceite_id === a.id))); }
+function filasTamborPorMes() {
+  const ids = new Set(aceitesTambor().map(a => a.id));
+  const meses = {};
+  rellenos.filter(r => ids.has(r.aceite_id)).forEach(r => {
+    const m = (meses[r.fecha.slice(0, 7)] = meses[r.fecha.slice(0, 7)] || {});
+    m[r.aceite_id] = redondearLitros((m[r.aceite_id] || 0) + Number(r.litros));
+  });
+  return Object.keys(meses).sort().reverse().map(mes => ({ mes, porAceite: meses[mes] }));
+}
+function textoMes(mes) { const [a, m] = mes.split('-'); return `${MESES_LARGOS[Number(m) - 1]} ${a}`; }
+function fmtSigno(n) { return n == null ? '—' : (n > 0 ? '+' : n < 0 ? '−' : '') + fmtLitros(Math.abs(n)); }
+function fmtSiHayL(n) { return n ? fmtLitros(n) : '—'; }
+
+// Tabla en PC y tarjetas en el celular con las mismas columnas.
+// filas: [{ celdas: [html], cls: '' | 'amarillo' | 'rojo', aviso: texto }]; la primera columna es el título de la tarjeta
+function tablaConTarjetas(titulos, filas, numericas) {
+  const num = i => numericas.includes(i) ? ' class="num"' : '';
+  return `
+    <div class="ac-tabla-wrap" style="overflow-x:auto">
+      <table class="tabla-minimos tabla-ac">
+        <thead><tr>${titulos.map((t, i) => `<th${num(i)}>${t}</th>`).join('')}</tr></thead>
+        <tbody>${filas.map(f => `
+          <tr class="${f.cls ? 'ac-' + f.cls : ''}">${f.celdas.map((c, i) => `<td${num(i)}>${c}</td>`).join('')}</tr>
+          ${f.aviso ? `<tr class="ac-${f.cls} ac-aviso"><td colspan="${titulos.length}">⚠️ ${escape(f.aviso)}</td></tr>` : ''}`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="ac-tarjetas-mov">${filas.map(f => `
+      <div class="ac-tarjeta${f.cls ? ' ac-' + f.cls : ''}">
+        <div class="titulo">${f.celdas[0]}</div>
+        <div class="grilla">${f.celdas.slice(1).map((c, i) => `<div><span class="k">${titulos[i + 1]}</span>${c}</div>`).join('')}</div>
+        ${f.aviso ? `<div class="aviso">⚠️ ${escape(f.aviso)}</div>` : ''}
+      </div>`).join('')}</div>`;
+}
+
+function renderConsumoAceite() {
+  const tqs = tanquesDeAceite();
+  // Tarjetas: última sonda de cada tanque de aceite
+  document.getElementById('ac-tanques').innerHTML = tqs.map(t => {
+    const m = medicionesTanque(t), u = m[m.length - 1];
+    const pct = u ? Math.round(u.litros / Number(t.capacidad_litros) * 100) : null;
+    return `
+      <div class="ac-tanque-card">
+        <div class="cab"><strong>${escape(t.codigo)}</strong>${t.uso_aceite ? ` <span class="badge-tipo">${escape(t.uso_aceite)}</span>` : ''}</div>
+        <div class="contenido">${escape(t.contenido || t.servicio)}</div>
+        ${u ? `<div class="litros">${fmtLitros(u.litros)} L</div>
+          <div class="comb-barra"><div style="width:${Math.min(Math.max(pct, 0), 100)}%;background:${colorServicio(t.servicio)[1]}"></div></div>
+          <div class="meta">${pct} % de ${fmtLitros(t.capacidad_litros)} L · sonda del ${fmtFechaDMA(u.fecha)}</div>`
+          : '<div class="meta">Sin sondas que lo midan</div>'}
+      </div>`;
+  }).join('');
+
+  const faltanSondas = '<div class="empty">Hacen falta al menos dos sondas con el tanque medido</div>';
+  const bloques = [];
+  tqs.forEach(t => {
+    const titulo = `${escape(t.codigo)} · ${escape(t.contenido || t.servicio)}`;
+    if (t.uso_aceite === 'Reserva') {
+      const filas = filasReserva(t);
+      bloques.push(`<h3 class="ac-titulo">🛢️ Consumo del tanque de reserva: ${titulo}</h3>` + (filas.length ? tablaConTarjetas(
+        ['Desde', 'Hasta', 'Sonda inicial', '+ Cargado', 'Sonda final', 'Consumo', 'Rellenos anotados', 'Diferencia'],
+        filas.map(f => ({
+          celdas: [fmtFechaDMA(f.desde), fmtFechaDMA(f.hasta), fmtLitros(f.inicial), fmtSiHayL(f.cargado), fmtLitros(f.final),
+            `<strong>${fmtLitros(f.consumo)}</strong>`, fmtLitros(f.anotados), fmtSigno(f.dif)],
+          cls: f.estado,
+          aviso: f.estado === 'rojo' ? 'El consumo da negativo: revisá las sondas y las cargas'
+            : f.estado === 'amarillo' ? (f.dif > 0 ? `Salieron ${fmtLitros(f.dif)} L del tanque que no figuran en los rellenos anotados`
+              : `Hay ${fmtLitros(-f.dif)} L de rellenos anotados de más respecto de lo que bajó el tanque`) : ''
+        })), [2, 3, 4, 5, 6, 7]) : faltanSondas));
+    } else if (t.uso_aceite === 'Sistema') {
+      const filas = filasSistema(t);
+      bloques.push(`<h3 class="ac-titulo">🔧 Nivel del tanque de sistema: ${titulo}</h3>` + (filas.length > 1 ? tablaConTarjetas(
+        ['Fecha', 'Nivel', 'Cambio vs. sonda anterior', '+ Cargado en ese lapso', 'Pérdida aparente'],
+        filas.map(f => ({
+          celdas: [fmtFechaDMA(f.fecha), `<strong>${fmtLitros(f.nivel)}</strong>`, fmtSigno(f.cambio),
+            f.cargado == null ? '—' : fmtSiHayL(f.cargado), f.perdida == null ? '—' : fmtLitros(f.perdida)],
+          cls: f.estado,
+          aviso: f.estado ? `Posible pérdida en el sistema hidráulico (${fmtLitros(f.perdida)} L)` : ''
+        })), [1, 2, 3, 4]) : faltanSondas));
+    } else {
+      bloques.push(`<h3 class="ac-titulo">${titulo}</h3><div class="empty">Elegí si es de reserva o de sistema en "🛢 Tanques" (Sondas) para ver su consumo</div>`);
+    }
+  });
+
+  // Aceites en tambor/bidón: total de rellenos por mes
+  const tambor = aceitesTambor();
+  if (tambor.length) {
+    const filas = filasTamborPorMes();
+    bloques.push('<h3 class="ac-titulo">🛢️ Aceites en tambor/bidón: rellenos por mes</h3>' + (filas.length ? tablaConTarjetas(
+      ['Mes', ...tambor.map(a => escape(a.nombre))],
+      filas.map(f => ({ celdas: [textoMes(f.mes), ...tambor.map(a => fmtSiHayL(f.porAceite[a.id]))] })),
+      tambor.map((_, i) => i + 1)) : '<div class="empty">Sin rellenos de estos aceites</div>'));
+  }
+
+  // Cargas a tanque
+  const acciones = c => [
+    puedeEditarRelleno(c) ? `<button class="btn-ico" onclick="abrirModalCargaAceite(${c.id})" title="Editar carga" aria-label="Editar carga">✏️</button>` : '',
+    `<button class="btn-ico peligro solo-jefe" onclick="borrarCargaAceite(${c.id})" title="Borrar carga" aria-label="Borrar carga">🗑️</button>`
+  ].join('');
+  const tqCod = id => tanques.find(t => t.id === id)?.codigo || '(tanque)';
+  bloques.push('<h3 class="ac-titulo">⬆️ Cargas a tanque</h3>' + (cargasAceite.length ? tablaConTarjetas(
+    ['Fecha', 'Tanque', 'Litros', 'Origen', 'Observaciones', 'Cargado por', ''],
+    cargasAceite.map(c => ({ celdas: [fmtFechaDMA(c.fecha), escape(tqCod(c.tanque_id)), `<strong>${fmtLitros(c.litros)}</strong>`,
+      escape(c.origen), escape(c.observaciones || ''), c.creado_por ? escape(nombreUsuarioComb(c.creado_por)) : '', acciones(c)] })),
+    [2]) : '<div class="empty">Todavía no hay cargas a tanque</div>'));
+
+  document.getElementById('ac-consumo').innerHTML = bloques.join('');
+}
+
+// ---- Formulario de carga a tanque (mismos permisos que un relleno) ----
+function abrirModalCargaAceite(id) {
+  cargaAceiteActual = id ? cargasAceite.find(c => c.id === id) : null;
+  if (cargaAceiteActual ? !puedeEditarRelleno(cargaAceiteActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  const tqs = tanquesDeAceite();
+  if (cargaAceiteActual && !tqs.some(t => t.id === cargaAceiteActual.tanque_id)) {
+    const t = tanques.find(x => x.id === cargaAceiteActual.tanque_id);
+    if (t) tqs.push(t);
+  }
+  if (!tqs.length) { toast('No hay tanques de aceite cargados ("🛢 Tanques" en Sondas)', true); return; }
+  document.getElementById('ca-tanque').innerHTML = tqs.map(t =>
+    `<option value="${t.id}">${escape(t.codigo)} · ${escape(t.contenido || t.servicio)}${t.uso_aceite ? ' · ' + escape(t.uso_aceite) : ''}</option>`).join('');
+  const c = cargaAceiteActual;
+  document.getElementById('modal-carga-aceite-titulo').textContent = c ? 'Editar carga a tanque' : 'Nueva carga a tanque';
+  document.getElementById('ca-fecha').value = c ? c.fecha : hoyLocalISO();
+  document.getElementById('ca-tanque').value = String(c ? c.tanque_id : (tqs.find(t => t.uso_aceite === 'Reserva') || tqs[0]).id);
+  document.getElementById('ca-origen').value = c?.origen || 'Proveedor';
+  document.getElementById('ca-litros').value = c ? Number(c.litros) : '';
+  document.getElementById('ca-obs').value = c?.observaciones || '';
+  const partes = [];
+  if (c?.creado_por) partes.push(`Cargada por ${nombreUsuarioComb(c.creado_por)} el ${fmtFechaHora(c.creado_en)}`);
+  if (c?.actualizado_por && c.actualizado_en !== c.creado_en) partes.push(`modificada por ${nombreUsuarioComb(c.actualizado_por)} el ${fmtFechaHora(c.actualizado_en)}`);
+  document.getElementById('ca-autor').textContent = partes.join(' · ');
+  document.getElementById('modal-carga-aceite').classList.add('show');
+}
+function cerrarModalCargaAceite() {
+  document.getElementById('modal-carga-aceite').classList.remove('show');
+  cargaAceiteActual = null;
+}
+async function guardarCargaAceite() {
+  const datos = {
+    fecha: document.getElementById('ca-fecha').value,
+    tanque_id: parseInt(document.getElementById('ca-tanque').value) || null,
+    litros: numeroONull(document.getElementById('ca-litros').value),
+    origen: document.getElementById('ca-origen').value,
+    observaciones: document.getElementById('ca-obs').value.trim() || null
+  };
+  if (!datos.fecha) { toast('Falta la fecha', true); return; }
+  if (!datos.tanque_id) { toast('Falta el tanque', true); return; }
+  if (datos.litros == null || isNaN(datos.litros) || datos.litros <= 0) { toast('Los litros tienen que ser mayores a 0', true); return; }
+  const btn = document.getElementById('ca-btn-guardar');
+  btn.disabled = true;
+  try {
+    const { data, error } = cargaAceiteActual
+      ? await sb.from('mant_cargas_aceite').update(datos).eq('id', cargaAceiteActual.id).select()
+      : await sb.from('mant_cargas_aceite').insert(conBarco(datos)).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast(cargaAceiteActual ? '✓ Carga actualizada' : `✓ Carga de ${fmtLitros(datos.litros)} L guardada`);
+    cerrarModalCargaAceite();
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function borrarCargaAceite(id) {
+  const c = cargasAceite.find(x => x.id === id);
+  if (!c || !puedeEditar()) return;
+  const tq = tanques.find(t => t.id === c.tanque_id);
+  if (!confirm(`¿Borrar la carga del ${fmtFechaDMA(c.fecha)} (${tq ? tq.codigo : 'tanque'}, ${fmtLitros(c.litros)} L)?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const { data, error } = await sb.from('mant_cargas_aceite').delete().eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    toast('✓ Carga borrada');
+    await cargarTodo();
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+}
+
+// Rellenos_BM_Santa_Lucia[_<equipo>][_<aceite>][_desde-..][_hasta-..]_2026-11-03.xlsx: hoja "Rellenos" con lo que se
+// ve en pantalla, y hojas de consumo por tanque (reserva y sistema), tambor/bidón por mes y cargas a tanque
 function exportarRellenosExcel() {
-  if (!rellenos.length) { toast('No hay rellenos para exportar'); return; }
   const lista = rellenosFiltrados();
-  if (!lista.length) { toast('No hay rellenos con esos filtros para exportar'); return; }
+  const tqs = tanquesDeAceite();
+  if (!rellenos.length && !cargasAceite.length && !tqs.some(t => medicionesTanque(t).length > 1)) {
+    toast('No hay rellenos, cargas ni consumos para exportar'); return;
+  }
   const data = lista.map(r => ({
     Fecha: r.fecha,
     Equipo: nombreEquipoRelleno(r),
@@ -7432,9 +7762,37 @@ function exportarRellenosExcel() {
     'Cargado por': r.creado_por ? nombreUsuarioComb(r.creado_por) : null
   }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Rellenos');
+  // json_to_sheet de una lista vacía no tiene encabezados: se arman a mano
+  const hoja = (filas, cols) => filas.length ? XLSX.utils.json_to_sheet(filas) : XLSX.utils.aoa_to_sheet([cols]);
+  const nombreHoja = s => s.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
+  XLSX.utils.book_append_sheet(wb, hoja(data, ['Fecha', 'Equipo', 'Aceite', 'Tipo', 'Litros', 'Observaciones', 'Cargado por']), 'Rellenos');
+  tqs.forEach(t => {
+    if (t.uso_aceite === 'Reserva') {
+      const filas = filasReserva(t).map(x => ({
+        Desde: x.desde, Hasta: x.hasta, 'Sonda inicial': x.inicial, '+ Cargado': x.cargado, 'Sonda final': x.final,
+        Consumo: x.consumo, 'Rellenos anotados': x.anotados, Diferencia: x.dif,
+        Aviso: x.estado === 'rojo' ? 'Consumo negativo' : x.estado === 'amarillo' ? 'Diferencia' : null }));
+      XLSX.utils.book_append_sheet(wb, hoja(filas, ['Desde', 'Hasta', 'Sonda inicial', '+ Cargado', 'Sonda final', 'Consumo',
+        'Rellenos anotados', 'Diferencia', 'Aviso']), nombreHoja(`Reserva ${t.codigo}`));
+    } else if (t.uso_aceite === 'Sistema') {
+      const filas = filasSistema(t).map(x => ({
+        Fecha: x.fecha, Nivel: x.nivel, 'Cambio vs anterior': x.cambio, '+ Cargado': x.cargado, 'Pérdida aparente': x.perdida,
+        Aviso: x.estado ? 'Posible pérdida en el sistema hidráulico' : null }));
+      XLSX.utils.book_append_sheet(wb, hoja(filas, ['Fecha', 'Nivel', 'Cambio vs anterior', '+ Cargado', 'Pérdida aparente', 'Aviso']),
+        nombreHoja(`Sistema ${t.codigo}`));
+    }
+  });
+  const tambor = aceitesTambor();
+  if (tambor.length) {
+    const filas = filasTamborPorMes().map(x => Object.fromEntries([['Mes', x.mes], ...tambor.map(a => [a.nombre, x.porAceite[a.id] ?? null])]));
+    XLSX.utils.book_append_sheet(wb, hoja(filas, ['Mes', ...tambor.map(a => a.nombre)]), 'Tambor-bidón por mes');
+  }
+  const cargas = cargasAceite.map(c => ({
+    Fecha: c.fecha, Tanque: tanques.find(t => t.id === c.tanque_id)?.codigo || null, Litros: Number(c.litros), Origen: c.origen,
+    Observaciones: c.observaciones, 'Cargado por': c.creado_por ? nombreUsuarioComb(c.creado_por) : null }));
+  XLSX.utils.book_append_sheet(wb, hoja(cargas, ['Fecha', 'Tanque', 'Litros', 'Origen', 'Observaciones', 'Cargado por']), 'Cargas a tanque');
   const f = filtrosRellenos();
-  const eqNombre = f.equipo ? equipos.find(e => e.id === f.equipo)?.nombre || nombreEquipoRelleno(lista[0]) : '';
+  const eqNombre = f.equipo ? equipos.find(e => e.id === f.equipo)?.nombre || (lista[0] ? nombreEquipoRelleno(lista[0]) : '') : '';
   const partes = ['Rellenos', nombreBarcoArchivo(), textoArchivo(eqNombre), f.aceite ? textoArchivo(nombreAceite(f.aceite)) : '',
     f.desde ? 'desde-' + f.desde : '', f.hasta ? 'hasta-' + f.hasta : '', hoyLocalISO()];
   XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');

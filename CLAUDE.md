@@ -262,7 +262,7 @@ Stage 1 (section `============ SONDAS ============`, sub-tab `sondas` of ⛽ Con
 
 ### Rellenos de aceite (oil top-ups)
 
-Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos, same visibility switch as Combustible. It started on 2026-11-03 with no history. Soundings-based oil consumption and the soundings vs top-ups cross-check are not built yet.
+Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos, same visibility switch as Combustible. It started on 2026-11-03 with no history. Not built yet: importing history, and an automatic oil change when a task is completed.
 
 - **Oils (`mant_aceites`):**
   - Each oil has `nombre` (unique per ship), `tipo`, and `tanque_id` (where it's stored: a tank of `mant_tanques`; null = "tambor/bidón").
@@ -285,6 +285,23 @@ Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos
   - the "🛢️ Relleno" button (`abrirModalRelleno(null, equipoId)`);
   - the totals of the last 30 and 90 days, counting today;
   - the last 5 top-ups.
+- **Oil consumption by sounding:** it sits at the top of the same sub-tab (`renderConsumoAceite()`, called from `renderRellenos()`).
+  - **Tank use:** each oil tank has `mant_tanques.uso_aceite`: `'Reserva'` (equipment is topped up from it) or `'Sistema'` (a system's reservoir, whose level should hold).
+    - A check allows it only on oil tanks. It's set with the "Uso" select in the tank modal (`tanqueServicioCambiado()`, `SERVICIOS_ACEITE`), and `guardarTanque()` clears it for other services.
+  - **Tank loads (`mant_cargas_aceite`):** each one has `fecha`, `tanque_id` (oil tanks only, checked by trigger `mant_priv.carga_aceite_tanque_valido`), `litros` and `origen` (`'Proveedor'|'Tambor/bidón'`); the supplier's name goes in `observaciones`.
+    - Same permissions as top-ups: the app reuses `puedeEditarRelleno()`.
+    - Entered with "➕ Carga a tanque" (`#modal-carga-aceite`, `abrirModalCargaAceite()` / `guardarCargaAceite()` / `borrarCargaAceite()`).
+  - **Readings:** `medicionesTanque()` gives the soundings that measured the tank, oldest first. Soundings that didn't measure it are skipped. Loads and top-ups count in a span when `fecha > desde && fecha <= hasta` (`enLapso()`).
+  - **Cards:** one per oil tank, with its latest measured sounding and %.
+  - **Reserve (`filasReserva()`):** one row per pair of consecutive measured soundings.
+    - consumo = inicial + cargado − final; rellenos anotados = top-ups of the oils stored in that tank (`mant_aceites.tanque_id`); diferencia = consumo − anotados.
+    - Red if consumo < 0. Yellow only if |diferencia| > `AVISO_RESERVA_LITROS` (10) **and** > `AVISO_RESERVA_PORC` (20 %) of consumo.
+  - **System (`filasSistema()`):** one row per measured sounding.
+    - pérdida aparente = anterior + cargado − actual.
+    - Yellow > `PERDIDA_SISTEMA_AMARILLO` (5), red > `PERDIDA_SISTEMA_ROJO` (20), with "Posible pérdida en el sistema hidráulico".
+  - **Drum/bucket oils** (no tank): monthly totals of top-ups per oil (`filasTamborPorMes()`).
+  - **Layout:** `tablaConTarjetas()` draws each of these as a table on PC and as cards at 700 px or less, with the row tinted and a warning line.
+  - **Excel:** `exportarRellenosExcel()` adds the sheets "Reserva TK x", "Sistema TK x", "Tambor-bidón por mes" and "Cargas a tanque" after the filtered "Rellenos" sheet. The rellenos filters don't affect these sheets.
 
 ### Dates
 
@@ -316,6 +333,8 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_aceites` — `nombre` (unique per ship), `tipo` (check-constrained), `tanque_id` → `mant_tanques(barco_id, id)` (null = tambor/bidón), `activo`, `creado_en/por`, `actualizado_en/por`.
 - `mant_rellenos` — `fecha`, `equipo_id` → `mant_equipos(barco_id, id)`, `aceite_id` → `mant_aceites(barco_id, id)`, `litros` (> 0), `tipo` (`'Relleno'|'Cambio'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 - `mant_equipos.aceite_id` → `mant_aceites(barco_id, id)` (nullable): the equipment's oil.
+- `mant_tanques.uso_aceite` — `'Reserva'|'Sistema'|null`, only on oil tanks.
+- `mant_cargas_aceite` — `fecha`, `tanque_id` → `mant_tanques(barco_id, id)` (oil tanks only), `litros` (> 0), `origen` (`'Proveedor'|'Tambor/bidón'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
 
