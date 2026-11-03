@@ -607,11 +607,31 @@
   .tabla-minimos th, .tabla-minimos td { padding: 10px 12px; border-bottom: 1px solid var(--gris-2); font-size: 13.5px; text-align: left; }
   .tabla-minimos th { background: var(--gris-1); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--texto-suave); }
   .tabla-minimos tr:last-child td { border-bottom: none; }
-  /* Combustible: tabla de períodos (se desliza de costado en el celular) */
-  .tabla-comb th, .tabla-comb td { white-space: nowrap; }
+  /* Combustible: tabla de períodos compacta (entra entera desde ~1.140 px de contenido); en el celular, tarjetas */
+  .tabla-comb th, .tabla-comb td { white-space: nowrap; padding: 7px 8px; font-size: 12.5px; }
+  .tabla-comb th { font-size: 10.5px; letter-spacing: 0.03em; }
   .tabla-comb td.num, .tabla-comb th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .tabla-comb tr.comb-detalle td { white-space: normal; background: var(--gris-1); font-size: 12.5px; color: var(--texto-suave); }
-  .tabla-comb .comb-negativo { color: var(--rojo); font-weight: 700; }
+  .tabla-comb td.consumo { font-weight: 700; color: var(--azul-profundo); }
+  .tabla-comb tr.comb-detalle td { white-space: normal; background: var(--gris-1); font-size: 12px; color: var(--texto-suave); padding: 5px 8px; }
+  .tabla-comb .badge-tipo { display: block; width: fit-content; margin: 2px 0 0; font-size: 10px; }
+  .tabla-comb td.acciones { text-align: right; padding: 4px 6px; }
+  .comb-negativo, .tabla-comb td.consumo.comb-negativo { color: var(--rojo); font-weight: 700; }
+  .btn-ico { background: none; border: 0; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px 6px; border-radius: 6px; }
+  .btn-ico:hover { background: var(--gris-2); }
+  .btn-ico.peligro:hover { background: #fde0df; }
+  .comb-tarjetas { display: none; }
+  .comb-tarjeta { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .comb-tarjeta .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .comb-tarjeta .periodo { font-weight: 700; font-size: 14px; }
+  .comb-tarjeta .consumo-fila { margin-top: 6px; font-size: 12px; color: var(--texto-suave); }
+  .comb-tarjeta .consumo { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; color: var(--azul-profundo); margin-right: 4px; }
+  .comb-tarjeta .grilla { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 10px; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .comb-tarjeta .grilla .k { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--texto-suave); }
+  .comb-tarjeta .detalle { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--gris-2); font-size: 12px; color: var(--texto-suave); }
+  @media (max-width: 700px) {
+    .comb-tabla-wrap { display: none; }
+    .comb-tarjetas { display: block; }
+  }
   .comb-aviso { color: var(--rojo); font-weight: 600; }
   .comb-nota { font-size: 12px; color: var(--texto-suave); margin-top: 5px; }
   .comb-carga { display: grid; grid-template-columns: 1.1fr 0.9fr 1.4fr auto; gap: 6px; margin-bottom: 6px; }
@@ -5782,7 +5802,7 @@ function renderCombustible() {
     div.innerHTML = '<div class="empty"><div class="big">⛽</div>Todavía no hay períodos de combustible cargados</div>';
     return;
   }
-  const filas = combPeriodos.map(p => {
+  const periodos = combPeriodos.map(p => {
     const { cargado, entregado, recibido, consumo, promedio } = datosPeriodoComb(p);
     const avisos = [];
     const avisoInicio = avisoInicioComb(Number(p.inicio_litros), periodoAnteriorComb(p.desde, p.id));
@@ -5799,38 +5819,65 @@ function renderCombustible() {
       p.observaciones ? `<div>📝 ${escape(p.observaciones)}</div>` : ''
     ].filter(Boolean).join('');
     const acciones = [
-      puedeEditarPeriodo(p) ? `<button class="btn btn-sec btn-pequeno" onclick="abrirModalComb(${p.id})">✏️ Editar</button>` : '',
-      `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="borrarComb(${p.id})" style="background:#fde0df;color:var(--rojo)">🗑 Borrar</button>`
-    ].join(' ');
-    return `
+      puedeEditarPeriodo(p) ? `<button class="btn-ico" onclick="abrirModalComb(${p.id})" title="Editar período" aria-label="Editar período">✏️</button>` : '',
+      `<button class="btn-ico peligro solo-jefe" onclick="borrarComb(${p.id})" title="Borrar período" aria-label="Borrar período">🗑️</button>`
+    ].join('');
+    const negativo = consumo != null && consumo < 0;
+    const enCurso = p.fin_litros == null ? '<span class="badge-tipo">en curso</span>' : '';
+    // Columnas después de Período, en el orden de la pantalla. Consumo va aparte (en negrita)
+    const cols = [
+      ['Inicio', fmtLitros(p.inicio_litros)],
+      ['Cargado', fmtSiHayComb(cargado)],
+      ['Recibido', fmtSiHayComb(recibido)],
+      ['Entregado', fmtSiHayComb(entregado)],
+      ['Fin', fmtLitros(p.fin_litros)],
+      ['Consumo', `${negativo ? '⚠️ ' : ''}${fmtLitros(consumo)}`],
+      ['l/h', fmtPromedio(promedio)],
+      ['H nav', fmtSiHayComb(p.horas_navegacion)],
+      ['MMPP', fmtSiHayComb(p.horas_mmpp)],
+      ['MGAs', fmtSiHayComb(p.horas_mga)],
+      ['Millas', fmtSiHayComb(p.millas)]
+    ];
+    const fila = `
       <tr>
-        <td><strong>${textoPeriodoComb(p)}</strong>${p.fin_litros == null ? ' <span class="badge-tipo">en curso</span>' : ''}</td>
-        <td class="num">${fmtLitros(p.inicio_litros)}</td>
-        <td class="num${consumo != null && consumo < 0 ? ' comb-negativo' : ''}">${consumo != null && consumo < 0 ? '⚠️ ' : ''}${fmtLitros(consumo)}</td>
-        <td class="num">${fmtLitros(entregado)}</td>
-        <td class="num">${fmtLitros(recibido)}</td>
-        <td class="num">${fmtLitros(cargado)}</td>
-        <td class="num">${fmtLitros(p.fin_litros)}</td>
-        <td class="num">${fmtLitros(p.horas_mmpp)}</td>
-        <td class="num">${fmtLitros(p.horas_mga)}</td>
-        <td class="num">${fmtLitros(p.millas)}</td>
-        <td class="num">${fmtLitros(p.horas_navegacion)}</td>
-        <td class="num">${fmtPromedio(promedio)}</td>
-        <td>${acciones}</td>
+        <td><strong>${textoPeriodoCortoComb(p)}</strong>${enCurso}</td>
+        ${cols.map(([t, v]) => `<td class="num${t === 'Consumo' ? ' consumo' + (negativo ? ' comb-negativo' : '') : ''}">${v}</td>`).join('')}
+        <td class="acciones">${acciones}</td>
       </tr>
       ${detalle ? `<tr class="comb-detalle"><td colspan="13">${detalle}</td></tr>` : ''}`;
-  }).join('');
+    const sinConsumo = ['Consumo', 'l/h'];
+    const tarjeta = `
+      <div class="comb-tarjeta">
+        <div class="cab">
+          <div><div class="periodo">${textoPeriodoCortoComb(p)}</div>${enCurso}</div>
+          <div>${acciones}</div>
+        </div>
+        <div class="consumo-fila"><span class="consumo${negativo ? ' comb-negativo' : ''}">${negativo ? '⚠️ ' : ''}${fmtLitros(consumo)}</span>${consumo != null ? 'L consumidos' : 'consumo'} · ${fmtPromedio(promedio)} l/h</div>
+        <div class="grilla">${cols.filter(([t]) => !sinConsumo.includes(t)).map(([t, v]) => `<div><span class="k">${t}</span>${v}</div>`).join('')}</div>
+        ${detalle ? `<div class="detalle">${detalle}</div>` : ''}
+      </div>`;
+    return { fila, tarjeta };
+  });
+  const titulos = ['Inicio', 'Cargado', 'Recibido', 'Entregado', 'Fin', 'Consumo', 'l/h', 'H nav', 'MMPP', 'MGAs', 'Millas'];
   div.innerHTML = `
-    <div style="overflow-x:auto">
+    <div class="comb-tabla-wrap" style="overflow-x:auto">
       <table class="tabla-minimos tabla-comb">
         <thead><tr>
-          <th>Período</th><th class="num">Inicio</th><th class="num">Consumo</th><th class="num">Trasvase a otro buque</th>
-          <th class="num">Recibido de otro buque</th><th class="num">Cargado</th><th class="num">Fin</th><th class="num">MMPP</th><th class="num">MGAs</th>
-          <th class="num">Millas</th><th class="num">Hr navegación</th><th class="num">l/h</th><th></th>
+          <th>Período</th>${titulos.map(t => `<th class="num">${t}</th>`).join('')}<th></th>
         </tr></thead>
-        <tbody>${filas}</tbody>
+        <tbody>${periodos.map(x => x.fila).join('')}</tbody>
       </table>
-    </div>`;
+    </div>
+    <div class="comb-tarjetas">${periodos.map(x => x.tarjeta).join('')}</div>`;
+}
+// En la tabla, 0 o vacío en cargas, trasvases, horas y millas es "no hubo": se muestra "—" igual que lo vacío
+function fmtSiHayComb(n) { return n == null || Number(n) === 0 ? '—' : fmtLitros(n); }
+// Período corto: 01/10–31/10/26; si cruza de año, 15/12/25–15/01/26
+function textoPeriodoCortoComb(p) {
+  const [a1, m1, d1] = p.desde.split('-'), [a2, m2, d2] = p.hasta.split('-');
+  return a1 === a2
+    ? `${d1}/${m1}–${d2}/${m2}/${a2.slice(2)}`
+    : `${d1}/${m1}/${a1.slice(2)}–${d2}/${m2}/${a2.slice(2)}`;
 }
 
 // Fechas propuestas para un período nuevo: el mes que sigue al último; si el último iba "del 15 al 15", igual

@@ -184,6 +184,12 @@ Stages 1 and 2 of 3 (section `============ COMBUSTIBLE ============`). Fuel is t
   - Periods of a ship can't overlap, but they may share the boundary day. The trigger `mant_priv.combustible_sin_solape` enforces this, and the app checks it first.
   - `fin_litros` null means the period is "en curso".
 - **Inicio:** `inicio_litros` is prefilled from the previous period's `fin_litros` (`periodoAnteriorComb()`: latest `hasta` ≤ this `desde`) and stored. Without a previous period it's typed in. When it differs from the previous end, `avisoInicioComb()` shows a warning, both in the modal and in the list.
+- **Periods list (`renderCombustible()`):** one row per period builds both a compact table and a phone card. CSS shows the table above 700 px and the cards (`.comb-tarjetas`) at 700 px or less.
+  - **Columns:** Período | Inicio | Cargado | Recibido | Entregado | Fin | Consumo | l/h | H nav | MMPP | MGAs | Millas | icons. The table fits without horizontal scroll at 1366 px; a scroll is kept only as a fallback for widths between 700 and about 1.140 px.
+  - **Período** is short (`textoPeriodoCortoComb()`: `01/10–31/10/26`, or with both years when it crosses a year); forms and Excel keep the long `textoPeriodoComb()`.
+  - **Consumo** is bold.
+  - **Edit/delete** are icon-only buttons (`.btn-ico`) with a `title`.
+  - **Empty cells:** Cargado, Recibido, Entregado, H nav, MMPP, MGAs and Millas show "—" for both empty and 0 (`fmtSiHayComb()`), while Inicio/Fin/Consumo show a real 0.
 - **Calculated, never stored:**
   - consumo = inicio + cargado + recibido − entregado − fin (`consumoComb()`); `datosPeriodoComb()` adds the period's transfers.
   - l/h = consumo / `horas_navegacion` (`promedioComb()`), shown as "—" with 0 or no hours.
