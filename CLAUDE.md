@@ -109,6 +109,13 @@ The "Horas" sub-tab (`sec-horas`) has the monthly hours entry on top (`renderCar
 
 Monthly hours are entered per top-level equipment. Equipment with "Toma las horas de" (`mant_equipos.horas_de_id`, e.g. each `Caja Reductora Babor/Estribor` takes its `Motor Principal`'s hours) silently receives the same hours when hours are saved for its source (`guardarCarga()`, `equiposQueTomanHorasDe()`), and is hidden from the manual entry form (`equiposOcultosCarga()`). Saving hours also finds tasks that just became `VENCIDO`/`PROXIMO` as a side effect and prompts the user to confirm which were actually completed (`abrirConfirm`/`aplicarConfirm`) before writing `mant_historial` rows.
 
+**Hours-entry form (`renderCarga()`):** hours are entered as service hours for the month; there's deliberately no hour-meter field, because the hour meters aren't trusted.
+
+- **Last reading:** each row shows the equipment's latest reading ("Última carga: dd/mm/aaaa · total h", from `ultimaLecturaEquipo()`), or "Sin cargas".
+- **Impossible hours:** `avisoHorasPosibles()` shows a yellow warning when "Horas del mes" is more than the hours possible since that reading (days between its date and "Fecha de la carga" × 24), or when the entry date isn't later than the reading. Saving is still allowed.
+  - Changing the entry date re-checks all rows (`revisarAvisosHoras()`).
+  - With no readings there's nothing to compare against.
+
 Each save also inserts one `mant_lecturas_horas` row per equipment (including the cascaded gearbox) with `horas_mes` (hours added this month) and `hrs_total` (cumulative). Readings are keyed by the equipment **name** (`equipo` text), not by `equipo_id`. They're only read by the history part of the Horas tab (`renderHoras()`).
 
 ### Ship & equipment fichas ("Mi Barco" / "Equipos" tabs)

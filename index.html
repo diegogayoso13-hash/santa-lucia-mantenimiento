@@ -478,6 +478,9 @@
   }
   .equipo-row:nth-child(odd) { background: var(--gris-1); }
   .equipo-row label { font-size: 13px; font-weight: 500; }
+  .equipo-row .ultima-carga { font-size: 12px; color: var(--texto-suave); }
+  .equipo-row .aviso-horas { font-size: 12px; color: #9a6a00; font-weight: 600; margin-top: 4px; }
+  .equipo-row .aviso-horas:empty { display: none; }
 
   /* HISTORIAL */
   .hist-item {
@@ -1267,7 +1270,7 @@
       </p>
       <div class="field" style="max-width:220px;margin-bottom:16px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--texto-suave);text-transform:uppercase;letter-spacing:0.05em">Fecha de la carga</label>
-        <input type="date" id="carga-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--gris-2);border-radius:7px;font:inherit;font-size:14px;background:var(--gris-1)">
+        <input type="date" id="carga-fecha" onchange="revisarAvisosHoras()" style="width:100%;padding:9px 12px;border:1px solid var(--gris-2);border-radius:7px;font:inherit;font-size:14px;background:var(--gris-1)">
       </div>
       <div id="carga-equipos"></div>
       <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
@@ -3597,16 +3600,20 @@ function renderCarga() {
     const hrs_actuales = Math.max(...tareas.filter(t => t.equipo === eq).map(t => Number(t.hrs_totales || 0)));
     const reciben = equiposQueTomanHorasDe(eq);
     const nota = reciben.length ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(reciben.join(', '))}</div>` : '';
+    const ultima = ultimaLecturaEquipo(eq);
     return `
       <div class="equipo-row">
         <div>
           <label>${escape(eq)}</label>
           <div style="font-size:12px;color:var(--texto-suave)">Anterior: ${hrs_actuales} hrs</div>
+          <div class="ultima-carga">${ultima ? `Última carga: ${fmtFechaDMA(ultima.fecha)} · ${fmtHoras(ultima.hrs_total)} h` : 'Sin cargas'}</div>
           ${nota}
         </div>
         <div>
           <label>Horas del mes</label>
-          <input type="number" min="0" data-equipo="${escape(eq)}" data-actual="${hrs_actuales}" oninput="actualizarNuevoTotal(this)" placeholder="0">
+          <input type="number" min="0" data-equipo="${escape(eq)}" data-actual="${hrs_actuales}" data-ultima-fecha="${ultima ? ultima.fecha : ''}"
+            oninput="actualizarNuevoTotal(this); avisoHorasPosibles(this)" placeholder="0">
+          <div class="aviso-horas"></div>
         </div>
         <div>
           <label>Nuevo total</label>
@@ -3620,6 +3627,34 @@ function renderCarga() {
   const cf = document.getElementById('carga-fecha');
   if (cf && !cf.value) cf.value = new Date().toISOString().split('T')[0];
   renderChequeosFecha();
+}
+
+// Última lectura de horas de un equipo (mant_lecturas_horas, por nombre): la de fecha más reciente
+function ultimaLecturaEquipo(eq) {
+  return lecturas.filter(l => l.equipo === eq && l.hrs_total != null)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id)[0] || null;
+}
+function fmtHoras(n) { return Number(n).toLocaleString('es-UY', { maximumFractionDigits: 1 }); }
+
+// Aviso (deja guardar igual) si las horas del mes superan las horas posibles desde la última carga:
+// días entre la fecha de esa lectura y la fecha de esta carga × 24. Sin lecturas, no hay con qué comparar.
+function avisoHorasPosibles(inp) {
+  const aviso = inp.closest('.equipo-row').querySelector('.aviso-horas');
+  const ultimaFecha = inp.dataset.ultimaFecha;
+  const fechaCarga = document.getElementById('carga-fecha').value;
+  const horas = parseFloat(inp.value);
+  aviso.textContent = '';
+  if (!ultimaFecha || !fechaCarga || isNaN(horas) || horas <= 0) return;
+  const dias = diasEntreFechas(ultimaFecha, fechaCarga);
+  if (dias <= 0) {
+    aviso.textContent = `⚠️ La fecha de la carga no es posterior a la última (${fmtFechaDMA(ultimaFecha)}). Se puede guardar igual.`;
+  } else if (horas > dias * 24) {
+    aviso.textContent = `⚠️ Más de las horas posibles desde la última carga: ${dias} día${dias > 1 ? 's' : ''} × 24 = ${fmtHoras(dias * 24)} h. Se puede guardar igual.`;
+  }
+}
+// Al cambiar la fecha de la carga cambian las horas posibles de todos los equipos
+function revisarAvisosHoras() {
+  document.querySelectorAll('#carga-equipos [data-equipo]').forEach(avisoHorasPosibles);
 }
 
 function actualizarNuevoTotal(inp) {
@@ -3772,6 +3807,7 @@ async function aplicarChequeos() {
 
 function resetCarga() {
   document.querySelectorAll('[data-equipo]').forEach(i => i.value = '');
+  document.querySelectorAll('.aviso-horas').forEach(a => { a.textContent = ''; });
 }
 
 // Variable global para guardar las horas pendientes de aplicar
