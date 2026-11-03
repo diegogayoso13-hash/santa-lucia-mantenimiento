@@ -207,6 +207,14 @@ Stages 1 and 2 of 3 (section `============ COMBUSTIBLE ============`). Fuel is t
 - **Excel:** `exportarCombExcel()` writes two sheets to `Combustible_<barco>_<fecha>.xlsx`:
   - "Combustible": Período, Inicio, Consumo, Trasvase a otro buque (= entregado), Recibido de otro buque, Cargado, Fin, MMPP, MGAs, Millas, Hr navegación, Consumo promedio (l/h).
   - "Trasvases": Fecha, Tipo, Otro buque, Fuera del sistema, Litros, Período, Notas.
+- **Dashboard card "⛽ Combustible a bordo"** (`#dash-combustible`, `renderCombustibleInicio()`): it's drawn by its own function, called from `renderTodo()`, and `renderDashboard()` doesn't touch it. It follows the tab's visibility (`.solo-combustible`).
+  - **Shows** the last sounding: `fin_litros` of the most recent period that has one (`ultimaSondaComb()`), with its `hasta` date and "hace X días".
+    - With `mant_buque.capacidad_combustible_litros`, it adds a bar with the % (rounded).
+    - It adds a "Desde esa sonda: +cargados · +recibidos · −trasvasados" line (`movimientosDesdeSondaComb()`: loads and transfers that count in later periods, or transfers dated after the sounding that fall in no period). There is never an estimate.
+  - **Turns yellow** when the sounding is older than `DIAS_SONDA_VIEJA` (45) days.
+  - **Hidden** when there's no period with an end.
+  - Clicking it opens ⛽ Combustible.
+  - The capacity field is hidden when adding a ship, because `mant_barco_crear` doesn't copy that column; it's set later by editing the ficha.
 
 ### Dates
 
@@ -220,7 +228,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 
 `docs/esquema.sql` documents all `mant_*` tables of `ncughlkgdgigwkggnxri` plus their indexes, functions/triggers and RLS policies, as of 2026-11-01. **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six (besides `mant_empresas`, `mant_accesos` and `mant_perfiles`, described below):
 
-- `mant_buque` — the ships table, one row per ship.
+- `mant_buque` — the ships table, one row per ship. `capacidad_combustible_litros` (nullable, ≥ 0) is the total tank capacity, edited in Mi Barco.
 - `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
 - `mant_lecturas_horas` — `equipo` (text name), `fecha`, `horas_mes`, `hrs_total`.
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.

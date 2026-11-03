@@ -60,6 +60,8 @@ CREATE TABLE public.mant_buque (
   trb NUMERIC,
   trn NUMERIC,
   rango_accion_millas NUMERIC,
+  capacidad_combustible_litros NUMERIC CONSTRAINT mant_buque_capacidad_combustible_check
+    CHECK (capacidad_combustible_litros >= 0),   -- suma de los tanques; % de la tarjeta "Combustible a bordo"
   material_casco TEXT,
   tipo_navegacion TEXT,
   clase_buque TEXT,

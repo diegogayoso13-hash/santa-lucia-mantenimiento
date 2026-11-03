@@ -207,6 +207,17 @@
     margin-top: 8px;
     font-weight: 600;
   }
+  /* Inicio: combustible a bordo (última sonda); amarilla si la sonda es vieja */
+  .comb-inicio { margin-bottom: 24px; }
+  .comb-inicio::after { background: var(--azul-medio); }
+  .comb-inicio .label { margin: 0 0 8px; }
+  .comb-inicio .num { color: var(--azul-profundo); }
+  .comb-inicio .meta { font-size: 13px; color: var(--texto-suave); margin-top: 6px; }
+  .comb-inicio.vieja { background: #fff8e6; border-color: var(--ambar); }
+  .comb-inicio.vieja::after { background: var(--ambar); }
+  .comb-inicio.vieja .aviso { color: #9a6a00; font-weight: 600; }
+  .comb-barra { height: 10px; background: var(--gris-2); border-radius: 5px; overflow: hidden; margin-top: 12px; }
+  .comb-barra > div { height: 100%; background: var(--azul-medio); border-radius: 5px; }
 
   /* FILTROS */
   .toolbar {
@@ -1014,6 +1025,8 @@
       </div>
     </div>
 
+    <div id="dash-combustible" class="solo-combustible"></div>
+
     <div id="dash-postergadas"></div>
 
     <h2 class="panel-titulo">Más urgentes</h2>
@@ -1510,6 +1523,10 @@
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label>TRB</label><input type="number" step="0.01" id="bq-trb"></div>
       <div><label>TRN</label><input type="number" step="0.01" id="bq-trn"></div>
+    </div>
+    <!-- No se muestra al agregar un barco: mant_barco_crear no la guarda; se carga después editando la ficha -->
+    <div class="field" id="bq-cap-comb-campo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Capacidad combustible (L)</label><input type="number" step="any" min="0" id="bq-cap-comb" placeholder="Suma de los tanques"></div>
     </div>
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Otros</h3>
@@ -2610,6 +2627,7 @@ function renderTodo() {
   renderDeficiencias();
   renderCertificados();
   renderCombustible();
+  renderCombustibleInicio();
 }
 
 // ============ FILTROS ============
@@ -6038,6 +6056,60 @@ async function borrarComb(id) {
   }
 }
 
+// ---- Tarjeta "Combustible a bordo" del Inicio ----
+// Muestra la última sonda (fin del período más reciente que lo tenga) y lo que se movió después, sin estimar.
+const DIAS_SONDA_VIEJA = 45;   // con más días, la tarjeta se pone amarilla
+
+function ultimaSondaComb() {
+  return combPeriodos.filter(p => p.fin_litros != null)
+    .sort((a, b) => b.hasta.localeCompare(a.hasta) || b.id - a.id)[0] || null;
+}
+// Lo que cuenta después de una sonda: cargas de períodos posteriores; trasvases de períodos posteriores
+// (por la regla de siempre) o, si no caen en ningún período, con fecha posterior a la sonda
+function movimientosDesdeSondaComb(sonda) {
+  const posterior = p => !!p && p.id !== sonda.id && p.desde >= sonda.hasta;
+  const cargado = redondearLitros(combCargas
+    .filter(c => posterior(combPeriodos.find(p => p.id === c.periodo_id)))
+    .reduce((s, c) => s + Number(c.litros), 0));
+  const trasv = combTrasvases.filter(t => {
+    const p = periodoDeFechaComb(t.fecha);
+    return p ? posterior(p) : t.fecha > sonda.hasta;
+  });
+  return { cargado, ...sumasTrasvasesComb(trasv) };
+}
+function textoHaceDias(dias) {
+  if (dias <= 0) return dias === 0 ? 'hoy' : '';
+  return `hace ${dias} día${dias > 1 ? 's' : ''}`;
+}
+
+function renderCombustibleInicio() {
+  const div = document.getElementById('dash-combustible');
+  const sonda = puedeVerCombustible() ? ultimaSondaComb() : null;
+  if (!sonda) { div.innerHTML = ''; return; }
+  const dias = -diasEntre(sonda.hasta);
+  const vieja = dias > DIAS_SONDA_VIEJA;
+  const litros = Number(sonda.fin_litros);
+  const capacidad = Number(buque?.capacidad_combustible_litros) || null;
+  const pct = capacidad ? Math.round(litros / capacidad * 100) : null;
+  const m = movimientosDesdeSondaComb(sonda);
+  const desde = [
+    m.cargado ? `+${fmtLitros(m.cargado)} L cargados` : '',
+    m.recibido ? `+${fmtLitros(m.recibido)} L recibidos` : '',
+    m.entregado ? `−${fmtLitros(m.entregado)} L trasvasados` : ''
+  ].filter(Boolean);
+  const hace = textoHaceDias(dias);
+  div.innerHTML = `
+    <div class="stat-card comb-inicio${vieja ? ' vieja' : ''}" onclick="cambiarTab('combustible')" title="Ver Combustible">
+      <div class="label">⛽ Combustible a bordo</div>
+      <div class="num">${fmtLitros(litros)} L</div>
+      <div class="meta">Sonda del ${fmtFechaDMA(sonda.hasta)}${hace ? ' · ' + hace : ''}${vieja ? ` · <span class="aviso">⚠️ Sonda de hace más de ${DIAS_SONDA_VIEJA} días</span>` : ''}</div>
+      ${capacidad ? `
+        <div class="comb-barra" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width:${Math.min(Math.max(pct, 0), 100)}%"></div></div>
+        <div class="meta">${pct} % de ${fmtLitros(capacidad)} L de capacidad</div>` : ''}
+      ${desde.length ? `<div class="meta">Desde esa sonda: ${desde.join(' · ')}</div>` : ''}
+    </div>`;
+}
+
 // ---- Trasvases ----
 // En la app solo se sabe el período de este barco; el del otro barco lo controla la base
 function puedeEditarTrasvUI(t) {
@@ -6413,6 +6485,7 @@ function renderBarco() {
         <div class="ficha-row"><span class="key">Tonelaje total</span><span class="val">${v(buque.tonelaje_total_t, ' t')}</span></div>
         <div class="ficha-row"><span class="key">Desplazamiento</span><span class="val">${v(buque.desplazamiento_tm, ' tm')}</span></div>
         <div class="ficha-row"><span class="key">Rango de acción</span><span class="val">${v(buque.rango_accion_millas, ' millas')}</span></div>
+        <div class="ficha-row"><span class="key">Capacidad combustible</span><span class="val">${buque.capacidad_combustible_litros != null ? fmtLitros(buque.capacidad_combustible_litros) + ' L' : '—'}</span></div>
       </div>
 
       <div class="ficha-card">
@@ -6468,6 +6541,8 @@ function abrirModalBuque() {
   set('bq-rango', buque.rango_accion_millas);
   set('bq-trb', buque.trb);
   set('bq-trn', buque.trn);
+  set('bq-cap-comb', buque.capacidad_combustible_litros);
+  document.getElementById('bq-cap-comb-campo').style.display = 'grid';
   set('bq-material', buque.material_casco);
   set('bq-naveg', buque.tipo_navegacion);
   set('bq-clase-b', buque.clase_buque);
@@ -6521,6 +6596,9 @@ async function guardarBuque() {
     notas: txt('bq-notas'),
   };
   if (buqueNuevo) { await crearBarco(data); return; }
+  const capacidad = num('bq-cap-comb');
+  if (capacidad != null && capacidad < 0) { toast('La capacidad de combustible no puede ser negativa', true); return; }
+  data.capacidad_combustible_litros = capacidad;
   try {
     const { error } = await sb.from('mant_buque').update(data).eq('id', buque.id);
     if (error) throw error;
@@ -7075,6 +7153,7 @@ function abrirNuevoBarco() {
   document.getElementById('bq-btn-guardar').textContent = '✓ Crear barco';
   document.querySelectorAll('#modal-buque input, #modal-buque textarea').forEach(i => { if (i.type !== 'checkbox') i.value = ''; });
   document.getElementById('bq-bandera').value = 'Uruguay';
+  document.getElementById('bq-cap-comb-campo').style.display = 'none';
   document.getElementById('bq-origen').innerHTML = '<option value="">— No copiar nada (barco vacío) —</option>' +
     barcosDeMiEmpresa().map(b => `<option value="${b.id}">${escape(b.nombre)}</option>`).join('');
   document.querySelectorAll('input[name="bq-copiar"]').forEach(c => { c.checked = true; });
