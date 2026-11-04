@@ -689,6 +689,20 @@
     .rl-tabla-wrap { display: none; }
     .rl-tarjetas { display: block; }
   }
+  /* Historial de la ficha del equipo: filtro y línea de tiempo (tareas, deficiencias, aceite) */
+  .ficha-hist-barra { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ficha-hist-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ficha-hist-filtros button { border: 1px solid var(--gris-2); background: white; border-radius: 16px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--texto); }
+  .ficha-hist-filtros button.activo { background: var(--azul-profundo); border-color: var(--azul-profundo); color: white; }
+  .hist-item.hist-def, .hist-item.hist-aceite { cursor: default; }
+  .hist-item.hist-def { cursor: pointer; }
+  .hist-item.hist-def:hover { background: var(--gris-1); }
+  .hist-item.def-abierta { border-left: 4px solid var(--ambar); background: #fff8e6; }
+  .hist-item.def-abierta.urgente { border-left-color: var(--rojo); background: #fde0df; }
+  .hist-item .tipo-hist { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--texto-suave); }
+  .hist-abiertas-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--rojo); margin: 4px 0 6px; }
+  .def-detalle-fila { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gris-2); font-size: 14px; }
+  .def-detalle-fila .k { flex: 0 0 140px; color: var(--texto-suave); font-size: 12.5px; }
   /* Fotos: miniatura del encabezado, foto del barco, visor y recorte circular */
   .header-foto img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; vertical-align: middle; border: 2px solid rgba(255,255,255,0.7); cursor: pointer; margin-top: -4px; }
   .barco-foto { margin-bottom: 16px; text-align: center; }
@@ -2263,6 +2277,20 @@
   </div>
 </div>
 
+<!-- MODAL: detalle de una deficiencia (solo lectura; si está abierta, Cerrar / Editar) -->
+<div class="modal-bg" id="modal-def-detalle">
+  <div class="modal">
+    <h2 id="def-detalle-titulo">Deficiencia</h2>
+    <div class="modal-sub" id="def-detalle-sub"></div>
+    <div id="def-detalle-cuerpo"></div>
+    <div class="modal-actions">
+      <button class="btn solo-operador" id="def-detalle-cerrar-def">✓ Cerrar deficiencia</button>
+      <button class="btn btn-sec solo-operador" id="def-detalle-editar">✏️ Editar</button>
+      <button class="btn btn-sec" onclick="cerrarDetalleDef()">Cerrar ventana</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: cerrar deficiencia -->
 <div class="modal-bg" id="modal-def-cerrar">
   <div class="modal">
@@ -3036,6 +3064,7 @@ function renderTodo() {
   renderSondas();
   renderTanquesInicio();
   renderRellenos();
+  renderHistorialFicha();   // si hay una ficha de equipo abierta (por ejemplo, después de cerrar una deficiencia)
 }
 
 // ============ FILTROS ============
@@ -6099,6 +6128,20 @@ function exportarPlan() {
     }));
     XLSX.utils.book_append_sheet(wb, hd.length ? XLSX.utils.json_to_sheet(hd)
       : XLSX.utils.json_to_sheet([{ Historial: 'No hay registros con esa elección' }]), 'Historial');
+    // Deficiencias de los mismos equipos (por nombre) y en el mismo rango (por fecha en que se detectaron)
+    const sel = cfg.equipos === 'elegir' ? new Set(cfg.elegidos) : null;
+    const fechas = cfg.histRango === 'fechas';
+    const defs = deficiencias.filter(d => (!sel || sel.has(nombreEquipoDef(d))) &&
+      (!fechas || !cfg.desde || d.fecha_detectada >= cfg.desde) && (!fechas || !cfg.hasta || d.fecha_detectada <= cfg.hasta))
+      .sort((a, b) => b.fecha_detectada.localeCompare(a.fecha_detectada) || b.id - a.id)
+      .map(d => ({
+        'N°': numeroDef(d), Equipo: nombreEquipoDef(d), Descripción: d.descripcion, Crítica: d.critica ? 'Sí' : 'No',
+        'Fecha detectada': d.fecha_detectada, 'Detectada por': d.detectada_por, 'Fecha límite': d.fecha_limite,
+        Estado: d.estado === 'abierta' ? (defVencida(d) ? 'Abierta, vencida' : 'Abierta') : 'Cerrada',
+        'Fecha de cierre': d.fecha_cierre, 'Cerrada por': d.estado === 'abierta' ? null : quienCerroDef(d),
+        'Acción realizada': d.accion_realizada }));
+    XLSX.utils.book_append_sheet(wb, defs.length ? XLSX.utils.json_to_sheet(defs)
+      : XLSX.utils.json_to_sheet([{ Deficiencias: 'No hay deficiencias con esa elección' }]), 'Deficiencias');
   }
   XLSX.writeFile(wb, nombreArchivoPlan(cfg));
   cerrarExportarPlan();
@@ -8561,6 +8604,7 @@ function abrirFichaEquipo(id) {
   const eq = equiposTodos.find(e => e.id === id);
   if (!eq) { toast('Equipo no encontrado', true); return; }
   equipoActualFicha = eq;
+  filtroHistFicha = 'todo';
 
   // Cambiar a tab equipos si no estamos
   cambiarTab('equipos');
@@ -8682,7 +8726,11 @@ function renderFichaEquipo() {
     <h3 class="panel-titulo">${eq.activo ? '🔧 Próximas tareas' : '⏸ Tareas en pausa (equipo de baja)'} (${tareasEq.length})</h3>
     <div class="task-list" id="ficha-tareas-list"></div>
 
-    <h3 class="panel-titulo" style="margin-top:24px">📜 Historial (${histEq.length})</h3>
+    <h3 class="panel-titulo" style="margin-top:24px">📜 Historial</h3>
+    <div class="ficha-hist-barra">
+      <div class="ficha-hist-filtros" id="ficha-hist-filtros"></div>
+      <button class="btn btn-acento btn-pequeno" onclick="exportarHistorialEquipo()">📥 Exportar historial</button>
+    </div>
     <div id="ficha-historial-list"></div>
   `;
 
@@ -8700,31 +8748,8 @@ function renderFichaEquipo() {
       : ordTareas.map(t => `<div class="tarea-en-pausa"><span class="badge-tipo">En pausa (equipo de baja)</span>${renderTaskCard(t)}</div>`).join('');
   }
 
-  // Render historial del equipo
-  const listaH = document.getElementById('ficha-historial-list');
-  if (histEq.length === 0) {
-    listaH.innerHTML = '<div class="empty">Aún no hay registros para este equipo</div>';
-  } else {
-    const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    listaH.innerHTML = histEq.map(h => {
-      const t = idMapTodas[h.tarea_id];
-      const f = new Date(h.fecha_realizado + 'T00:00:00');
-      return `
-        <div class="hist-item">
-          <div class="hist-fecha">
-            <div class="dia">${f.getDate()}</div>
-            <div class="mes">${meses[f.getMonth()]} ${f.getFullYear()}</div>
-          </div>
-          <div class="hist-info">
-            <div class="tarea">${htmlTareaHist(t)}</div>
-            <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
-            ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
-          </div>
-          <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-          <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
-        </div>`;
-    }).join('');
-  }
+  // Historial del equipo: línea de tiempo de tareas realizadas, deficiencias y rellenos de aceite
+  renderHistorialFicha();
 
   // Renderizar gráficos
   setTimeout(() => renderGraficosEquipo(eq, tareasEq, histEq), 50);
@@ -8814,6 +8839,161 @@ function renderGraficosEquipo(eq, tareasEq, histEq) {
       cvsM.parentElement.innerHTML = '<h4>Mantenimientos por mes</h4><div style="text-align:center;padding:30px;color:var(--texto-suave);font-size:13px">Aún no hay registros recientes</div>';
     }
   }
+}
+
+// ============ HISTORIAL DEL EQUIPO (ficha) ============
+// Línea de tiempo de la ficha: tareas realizadas (mant_historial), deficiencias del equipo (mant_deficiencias) y
+// rellenos/cambios de aceite (mant_rellenos, solo si se ve Consumos: puedeVerCombustible). Las deficiencias abiertas
+// van arriba (críticas primero, después por fecha límite); el resto, lo más nuevo primero. Solo muestra: no cambia datos.
+let filtroHistFicha = 'todo';   // 'todo' | 'tareas' | 'deficiencias' | 'aceite'
+const TIPO_FILTRO_HIST = { tareas: 'tarea', deficiencias: 'def', aceite: 'aceite' };
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function itemsHistorialEquipo(eq) {
+  const idMap = Object.fromEntries(tareasTodas.map(t => [t.id, t]));
+  const tareasIt = historial.filter(h => idMap[h.tarea_id]?.equipo_id === eq.id)
+    .map(h => ({ tipo: 'tarea', fecha: h.fecha_realizado, h, t: idMap[h.tarea_id] }));
+  const defs = deficiencias.filter(d => d.equipo_id === eq.id);
+  const abiertas = defs.filter(d => d.estado === 'abierta')
+    .sort((a, b) => (a.critica === b.critica ? 0 : a.critica ? -1 : 1) || a.fecha_limite.localeCompare(b.fecha_limite))
+    .map(d => ({ tipo: 'def', fecha: d.fecha_detectada, d }));
+  const cerradas = defs.filter(d => d.estado !== 'abierta').map(d => ({ tipo: 'def', fecha: d.fecha_detectada, d }));
+  const aceite = puedeVerCombustible() ? rellenos.filter(r => r.equipo_id === eq.id).map(r => ({ tipo: 'aceite', fecha: r.fecha, r })) : [];
+  const resto = [...tareasIt, ...cerradas, ...aceite].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  return { abiertas, resto, cuentas: { todo: abiertas.length + resto.length, tareas: tareasIt.length, deficiencias: defs.length, aceite: aceite.length } };
+}
+function filtrarHist(lista) {
+  return filtroHistFicha === 'todo' ? lista : lista.filter(i => i.tipo === TIPO_FILTRO_HIST[filtroHistFicha]);
+}
+function quienCerroDef(d) { return d.cerrada_por ? nombreUsuarioComb(d.cerrada_por) : '—'; }
+
+function htmlFechaHist(fecha) {
+  const f = new Date(fecha + 'T00:00:00');
+  return `<div class="hist-fecha"><div class="dia">${f.getDate()}</div><div class="mes">${MESES_CORTOS[f.getMonth()]} ${f.getFullYear()}</div></div>`;
+}
+function htmlItemHist(i) {
+  if (i.tipo === 'tarea') {
+    const h = i.h;
+    return `
+      <div class="hist-item">
+        ${htmlFechaHist(h.fecha_realizado)}
+        <div class="hist-info">
+          <div class="tipo-hist">🔧 Tarea realizada</div>
+          <div class="tarea">${htmlTareaHist(i.t)}</div>
+          <div class="por">Realizado por: ${escape(h.realizado_por || '—')}</div>
+          ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
+        </div>
+        <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
+        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+      </div>`;
+  }
+  if (i.tipo === 'def') {
+    const d = i.d, abierta = d.estado === 'abierta', vencida = defVencida(d);
+    const cls = abierta ? ' def-abierta' + (vencida || d.critica ? ' urgente' : '') : '';
+    return `
+      <div class="hist-item hist-def${cls}" onclick="abrirDetalleDef(${d.id})" title="Ver el detalle de la deficiencia">
+        ${htmlFechaHist(d.fecha_detectada)}
+        <div class="hist-info">
+          <div class="tipo-hist">⚠️ Deficiencia ${numeroDef(d)} · ${abierta ? (vencida ? 'abierta, vencida' : 'abierta') : 'cerrada'}${d.critica ? ' <span class="badge-critico">⚠️ CRÍTICA</span>' : ''}</div>
+          <div class="tarea">${escape(d.descripcion)}</div>
+          <div class="por">Detectada el ${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}${abierta ? ` · Límite: ${fmtFechaDMA(d.fecha_limite)}` : ''}</div>
+          ${abierta ? '' : `<div class="notas">✔ Cerrada el ${fmtFechaDMA(d.fecha_cierre)} por ${escape(quienCerroDef(d))}: ${escape(d.accion_realizada || '')}</div>`}
+        </div>
+      </div>`;
+  }
+  const r = i.r;
+  return `
+    <div class="hist-item hist-aceite">
+      ${htmlFechaHist(r.fecha)}
+      <div class="hist-info">
+        <div class="tipo-hist">🛢️ ${r.tipo === 'Cambio' ? 'Cambio de aceite' : 'Relleno de aceite'}</div>
+        <div class="tarea">${escape(nombreAceite(r.aceite_id))}</div>
+        ${r.observaciones ? `<div class="notas">📝 ${escape(r.observaciones)}</div>` : ''}
+      </div>
+      <div class="hist-hrs">${fmtLitros(r.litros)} L</div>
+    </div>`;
+}
+
+function renderHistorialFicha() {
+  const lista = document.getElementById('ficha-historial-list');
+  if (!lista || !equipoActualFicha) return;
+  const eq = equiposTodos.find(e => e.id === equipoActualFicha.id) || equipoActualFicha;
+  if (filtroHistFicha === 'aceite' && !puedeVerCombustible()) filtroHistFicha = 'todo';
+  const { abiertas, resto, cuentas } = itemsHistorialEquipo(eq);
+  const opciones = [['todo', 'Todo'], ['tareas', '🔧 Tareas'], ['deficiencias', '⚠️ Deficiencias']];
+  if (puedeVerCombustible()) opciones.push(['aceite', '🛢️ Aceite']);
+  document.getElementById('ficha-hist-filtros').innerHTML = opciones.map(([k, t]) =>
+    `<button class="${filtroHistFicha === k ? 'activo' : ''}" onclick="cambiarFiltroHistFicha('${k}')">${t} (${cuentas[k]})</button>`).join('');
+  const verAbiertas = ['todo', 'deficiencias'].includes(filtroHistFicha) ? abiertas : [];
+  const items = filtrarHist(resto);
+  if (!verAbiertas.length && !items.length) {
+    lista.innerHTML = '<div class="empty">Aún no hay registros para este equipo</div>';
+    return;
+  }
+  lista.innerHTML =
+    (verAbiertas.length ? `<div class="hist-abiertas-titulo">Deficiencias abiertas (${verAbiertas.length})</div>${verAbiertas.map(htmlItemHist).join('')}` : '') +
+    (verAbiertas.length && items.length ? '<div class="hist-abiertas-titulo" style="color:var(--texto-suave);margin-top:14px">Historial</div>' : '') +
+    items.map(htmlItemHist).join('');
+}
+function cambiarFiltroHistFicha(f) {
+  filtroHistFicha = f;
+  renderHistorialFicha();
+}
+
+// Detalle de una deficiencia (solo lectura); si está abierta, Cerrar / Editar con las ventanas de la pestaña Deficiencias
+function abrirDetalleDef(id) {
+  const d = deficiencias.find(x => x.id === id);
+  if (!d) return;
+  const abierta = d.estado === 'abierta', vencida = defVencida(d);
+  document.getElementById('def-detalle-titulo').textContent = `Deficiencia ${numeroDef(d)}`;
+  document.getElementById('def-detalle-sub').textContent = nombreEquipoDef(d);
+  const fila = (k, v) => `<div class="def-detalle-fila"><span class="k">${k}</span><span>${v}</span></div>`;
+  document.getElementById('def-detalle-cuerpo').innerHTML = [
+    fila('Estado', abierta ? (vencida ? '<strong style="color:var(--rojo)">Abierta, vencida</strong>' : '<strong>Abierta</strong>') : 'Cerrada'),
+    fila('Crítica', d.critica ? '<span class="badge-critico">⚠️ CRÍTICA</span>' : 'No'),
+    fila('Descripción', escape(d.descripcion)),
+    fila('Detectada', `${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}`),
+    fila('Fecha límite', fmtFechaDMA(d.fecha_limite)),
+    abierta ? '' : fila('Cerrada', `${fmtFechaDMA(d.fecha_cierre)} por ${escape(quienCerroDef(d))}`),
+    abierta ? '' : fila('Acción realizada', escape(d.accion_realizada || ''))
+  ].join('');
+  const cerrar = document.getElementById('def-detalle-cerrar-def'), editar = document.getElementById('def-detalle-editar');
+  cerrar.style.display = editar.style.display = abierta ? '' : 'none';
+  cerrar.onclick = () => { cerrarDetalleDef(); abrirModalDefCerrar(id); };
+  editar.onclick = () => { cerrarDetalleDef(); abrirModalDef(id); };
+  document.getElementById('modal-def-detalle').classList.add('show');
+}
+function cerrarDetalleDef() { document.getElementById('modal-def-detalle').classList.remove('show'); }
+
+// Historial_BM_Santa_Lucia_<equipo>[_<filtro>]_2026-11-04.xlsx: lo que muestra el filtro, en el mismo orden
+function exportarHistorialEquipo() {
+  if (!equipoActualFicha) return;
+  const eq = equiposTodos.find(e => e.id === equipoActualFicha.id) || equipoActualFicha;
+  const { abiertas, resto } = itemsHistorialEquipo(eq);
+  const items = [...(['todo', 'deficiencias'].includes(filtroHistFicha) ? abiertas : []), ...filtrarHist(resto)];
+  if (!items.length) { toast('No hay registros para exportar'); return; }
+  const vacia = { Fecha: null, Tipo: null, Descripción: null, Estado: null, Crítica: null, 'Hrs equipo': null, Litros: null,
+    Por: null, 'Cierre (fecha)': null, 'Cerrada por': null, 'Acción o notas': null };
+  const data = items.map(i => {
+    if (i.tipo === 'tarea') return { ...vacia, Fecha: i.h.fecha_realizado, Tipo: 'Tarea',
+      Descripción: i.t ? i.t.tarea + (i.t.activa ? '' : ' (dada de baja)') : '', Estado: 'Realizada',
+      'Hrs equipo': i.h.hrs_equipo, Por: i.h.realizado_por, 'Acción o notas': i.h.notas };
+    if (i.tipo === 'def') {
+      const d = i.d, abierta = d.estado === 'abierta';
+      return { ...vacia, Fecha: d.fecha_detectada, Tipo: `Deficiencia ${numeroDef(d)}`, Descripción: d.descripcion,
+        Estado: abierta ? (defVencida(d) ? 'Abierta, vencida' : 'Abierta') : 'Cerrada', Crítica: d.critica ? 'Sí' : 'No',
+        Por: d.detectada_por, 'Cierre (fecha)': abierta ? null : d.fecha_cierre, 'Cerrada por': abierta ? null : quienCerroDef(d),
+        'Acción o notas': abierta ? `Límite: ${d.fecha_limite}` : d.accion_realizada };
+    }
+    return { ...vacia, Fecha: i.r.fecha, Tipo: i.r.tipo === 'Cambio' ? 'Cambio de aceite' : 'Relleno de aceite',
+      Descripción: nombreAceite(i.r.aceite_id), Litros: Number(i.r.litros),
+      Por: i.r.creado_por ? nombreUsuarioComb(i.r.creado_por) : null, 'Acción o notas': i.r.observaciones };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Historial');
+  const partes = ['Historial', nombreBarcoArchivo(), textoArchivo(eq.nombre), filtroHistFicha === 'todo' ? '' : filtroHistFicha, hoyLocalISO()];
+  XLSX.writeFile(wb, partes.filter(Boolean).join('_') + '.xlsx');
+  toast('✓ Excel descargado');
 }
 
 // ============ MODAL EDITAR EQUIPO ============

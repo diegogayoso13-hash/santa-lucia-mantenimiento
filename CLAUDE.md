@@ -136,6 +136,23 @@ Each save also inserts one `mant_lecturas_horas` row per equipment (including th
 - **Equipos tab:** "Mostrar dados de baja" (`#eq-mostrar-bajas`, remembered in `localStorage` key `eq-mostrar-bajas`) lists the retired equipment last, greyed, labelled "De baja".
 - **Retired equipment's ficha:** it shows "De baja", "↺ Reactivar" (`reactivarEquipo()`, jefe/admin) instead of "Editar ficha", and its paused tasks greyed (they can't be registered while paused).
 
+### Equipment ficha history
+
+`renderHistorialFicha()` (section `============ HISTORIAL DEL EQUIPO (ficha) ============`) draws one timeline in `#ficha-historial-list`. It only displays data; nothing is changed.
+
+- **What it mixes:**
+  - completed tasks (`mant_historial`, with the ✏️ fix button);
+  - the equipment's deficiencies (`mant_deficiencias` by `equipo_id`, placed by `fecha_detectada`);
+  - oil top-ups and changes (`mant_rellenos`). These appear only when `puedeVerCombustible()`, like the rest of Consumos.
+- **Order** (`itemsHistorialEquipo()`): open deficiencies first (critical, then by deadline; red when critical or overdue), then everything else newest first.
+- **Filter:** Todo / Tareas / Deficiencias / Aceite (`filtroHistFicha`, reset when opening a ficha), with counts.
+- **Deficiency detail:** tapping a deficiency opens the read-only `#modal-def-detalle` (`abrirDetalleDef()`), with "Cerrar" / "Editar" for open ones, using the Deficiencias tab modals.
+  - "Quién la cerró" comes from `cerrada_por` through `nombreUsuarioComb()`; it's "—" when empty.
+  - `renderTodo()` calls `renderHistorialFicha()`, so the open ficha refreshes after closing or editing.
+- **Excel:**
+  - "📥 Exportar historial" (`exportarHistorialEquipo()`) exports what the filter shows.
+  - The Tareas tab's plan export adds a "Deficiencias" sheet when Historial is chosen. It uses the same equipment (matched by name) and date range (by `fecha_detectada`).
+
 ### Critical equipment
 
 `mant_equipos.critico` (boolean, default false) marks equipment whose failure is a safety risk; it's set with the "Equipo crítico" checkbox in the equipment modal. `esTareaCritica(t)` derives criticality for a task through `t.equipo_id` (it's never stored on the task). Effects: a `⚠️ CRÍTICO` badge in `renderTaskCard()`; in `renderDashboard()` critical tasks sort first within each status (VENCIDO, then PROXIMO) in "Más urgentes", plus a separate "X tareas críticas vencidas" banner; a "Solo críticos" checkbox filter in the Tareas tab (`#filtro-critico`).
