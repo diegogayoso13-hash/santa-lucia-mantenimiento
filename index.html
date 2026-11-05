@@ -718,6 +718,18 @@
   .recorte-area { position: relative; margin: 0 auto; overflow: hidden; touch-action: none; user-select: none; background: #000; border-radius: 8px; }
   .recorte-area canvas { display: block; }
   .recorte-circulo { position: absolute; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); cursor: move; touch-action: none; }
+  /* Fotos de deficiencias (detalle) */
+  .def-fotos { margin-top: 14px; }
+  .def-fotos-cab { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+  .def-fotos-cuenta { font-size: 12px; color: var(--texto-suave); }
+  .def-fotos-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+  .def-foto { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--gris-2); }
+  .def-foto img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+  .def-foto.error::after { content: '⚠️'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .def-foto-borrar { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.6); color: white; font-size: 14px; cursor: pointer; }
+  .def-fotos-vacio { font-size: 13px; color: var(--texto-suave); padding: 4px 0; }
+  .def-fotos-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .def-fotos-aviso { width: 100%; font-size: 13px; background: #fff8e6; border-left: 4px solid var(--ambar); padding: 8px 10px; border-radius: 6px; }
   /* Consumo de aceite por sonda: tarjetas de tanques, tablas (tarjetas en el celular) y avisos */
   .ac-tanques { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 8px; }
   .ac-tanque-card { background: white; border: 1px solid var(--gris-2); border-radius: 10px; padding: 12px 14px; }
@@ -2157,6 +2169,8 @@
 
 <!-- FOTOS: selector de archivo (cámara o galería en el celular), visor grande y recorte circular de la miniatura -->
 <input type="file" id="foto-input" accept="image/*" style="display:none">
+<input type="file" id="foto-input-varias" accept="image/*" multiple style="display:none">
+<input type="file" id="foto-input-camara" accept="image/*" capture="environment" style="display:none">
 <div class="visor-foto" id="visor-foto" onclick="if (event.target === this) cerrarVisorFoto()">
   <button class="visor-cerrar" onclick="cerrarVisorFoto()" aria-label="Cerrar">✕</button>
   <img id="visor-foto-img" alt="Foto">
@@ -2284,6 +2298,7 @@
     <h2 id="def-detalle-titulo">Deficiencia</h2>
     <div class="modal-sub" id="def-detalle-sub"></div>
     <div id="def-detalle-cuerpo"></div>
+    <div class="def-fotos" id="def-detalle-fotos"></div>
     <div class="modal-actions">
       <button class="btn solo-operador" id="def-detalle-cerrar-def">✓ Cerrar deficiencia</button>
       <button class="btn btn-sec solo-operador" id="def-detalle-editar">✏️ Editar</button>
@@ -2642,6 +2657,7 @@ let barcoActual = null;    // barco elegido: todo se lee filtrado por él y todo
 let equipos = [];          // fichas de equipos activos (todas las listas y selectores usan estos)
 let equiposTodos = [];     // también los dados de baja (para verlos con "Mostrar dados de baja" y reactivarlos)
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
+let fotosDef = [];         // fotos de deficiencias (mant_deficiencias_fotos)
 let defActual = null;      // deficiencia en edición o cierre
 let certificados = [];     // certificados del barco (solo activos)
 let certHistorial = [];    // renovaciones de certificados
@@ -2890,7 +2906,7 @@ async function cambiarBarco(id) {
   try { localStorage.setItem('barco', String(b.id)); } catch (e) {}
   // Nada de lo abierto pertenece al barco nuevo
   document.querySelectorAll('.modal-bg.show:not(#modal-clave)').forEach(m => m.classList.remove('show'));
-  tareaActual = null; histActual = null; defActual = null; certActual = null; tripActual = null;
+  tareaActual = null; histActual = null; defActual = null; defDetalleId = null; certActual = null; tripActual = null;
   repuestoActual = null; herrActual = null; movRepuestoActual = null; cargaPendiente = null; combActual = null; trasvActual = null; sondaActual = null; tanqueActual = null; rellenoActual = null; aceiteActual = null; cargaAceiteActual = null;
   if (equipoActualFicha) volverAEquipos();
   cerrarVisorFoto();
@@ -2947,7 +2963,8 @@ async function cargarTodo() {
       {data: sl, error: e19},
       {data: ac, error: e20},
       {data: rl, error: e21},
-      {data: ca, error: e22}
+      {data: ca, error: e22},
+      {data: fd, error: e23}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2979,7 +2996,8 @@ async function cargarTodo() {
       traerTodo(() => sb.from('mant_rellenos').select('*, equipo:mant_equipos(nombre)').eq('barco_id', B)
         .order('fecha', { ascending: false }).order('id', { ascending: false })),
       traerTodo(() => sb.from('mant_cargas_aceite').select('*').eq('barco_id', B)
-        .order('fecha', { ascending: false }).order('id', { ascending: false }))
+        .order('fecha', { ascending: false }).order('id', { ascending: false })),
+      traerTodo(() => sb.from('mant_deficiencias_fotos').select('*').eq('barco_id', B).order('creado_en').order('id'))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -3005,6 +3023,7 @@ async function cargarTodo() {
     if (e20) throw e20;
     if (e21) throw e21;
     if (e22) throw e22;
+    if (e23) throw e23;
     equiposTodos = eq || [];
     equipos = equiposTodos.filter(e => e.activo);
     tareasTodas = tt || [];
@@ -3038,7 +3057,9 @@ async function cargarTodo() {
     aceites = ac || [];
     rellenos = rl || [];
     cargasAceite = ca || [];
+    fotosDef = fd || [];
     renderTodo();
+    limpiarFotosPorBorrar();   // en segundo plano
     await cargarUsuariosEmpresa();
   } catch (err) {
     console.error(err);
@@ -3066,6 +3087,7 @@ function renderTodo() {
   renderTanquesInicio();
   renderRellenos();
   renderHistorialFicha();   // si hay una ficha de equipo abierta (por ejemplo, después de cerrar una deficiencia)
+  if (defDetalleId) renderFotosDef(defDetalleId);   // si está abierto el detalle de una deficiencia
 }
 
 // ============ FILTROS ============
@@ -5259,18 +5281,20 @@ function renderDefCard(d) {
     ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
   const acciones = abierta
     ? `<div class="def-acciones">
-         <button class="btn solo-operador" onclick="abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
-         <button class="btn btn-sec btn-pequeno solo-operador" onclick="abrirModalDef(${d.id})">✏️ Editar</button>
+         <button class="btn solo-operador" onclick="event.stopPropagation();abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
+         <button class="btn btn-sec btn-pequeno solo-operador" onclick="event.stopPropagation();abrirModalDef(${d.id})">✏️ Editar</button>
        </div>`
     : '<div></div>';
 
+  const nFotos = fotosDeDef(d.id).length;
+
   return `
-    <div class="task-card ${cls}">
+    <div class="task-card ${cls}" onclick="abrirDetalleDef(${d.id})" style="cursor:pointer" title="Ver el detalle y las fotos">
       <div class="estado-icon">${icono}</div>
       <div class="task-info">
         <div class="equipo"><span class="badge-tipo">${numeroDef(d)}</span>${equipoHtml}${criticaHtml}</div>
         <div class="tarea">${escape(d.descripcion)}</div>
-        <div class="meta">Detectada: ${fmtFecha(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''} · Límite: ${fmtFecha(d.fecha_limite)}</div>
+        <div class="meta">Detectada: ${fmtFecha(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''} · Límite: ${fmtFecha(d.fecha_limite)}${nFotos ? ` · 📷 ${nFotos}` : ''}</div>
         ${cierreHtml}
       </div>
       <div class="proxima-box">
@@ -5428,7 +5452,8 @@ function exportarDefExcel() {
     Estado: d.estado === 'abierta' ? 'Abierta' : 'Cerrada',
     Vencida: defVencida(d) ? 'Sí' : 'No',
     'Fecha de cierre': d.fecha_cierre,
-    'Acción realizada': d.accion_realizada
+    'Acción realizada': d.accion_realizada,
+    Fotos: fotosDeDef(d.id).length
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Deficiencias');
@@ -8071,12 +8096,14 @@ document.getElementById('modal-buque').addEventListener('click', e => { if (e.ta
 document.getElementById('modal-equipo').addEventListener('click', e => { if (e.target.id === 'modal-equipo') cerrarModalEquipo(); });
 
 // ============ FOTOS ============
-// Reutilizable (hoy la foto del barco; después, deficiencias). Depósito privado mant-fotos de Supabase Storage,
+// Reutilizable (la foto del barco y las de deficiencias). Depósito privado mant-fotos de Supabase Storage,
 // rutas empresa/barco/tipo/archivo.jpg; la miniatura es la misma ruta con _min.jpg. Las fotos se ven solo con
 // enlaces firmados de corta duración. Permisos en Storage (mant_priv.foto_permitida): ver quien tenga el barco;
-// subir, cambiar y quitar jefe/admin. Se achican en el navegador antes de subir.
+// subir, cambiar y quitar jefe/admin; en la carpeta deficiencias el operador sube y borra archivos sin fila.
+// Se achican en el navegador antes de subir.
 const FOTOS_BUCKET = 'mant-fotos';
 const FOTO_LADO_MAX = 1600;          // lado mayor de la foto grande
+const FOTO_LADO_REDUCIDO = 1280;     // si con la calidad más baja sigue pasando de FOTO_KB_OBJETIVO
 const FOTO_MINI_LADO = 300;          // miniatura cuadrada (se muestra redonda)
 const FOTO_KB_OBJETIVO = 300;        // si pasa de esto, se baja la calidad
 const FOTO_CALIDADES = [0.8, 0.72, 0.64, 0.56];
@@ -8124,19 +8151,28 @@ async function prepararFoto(archivo) {
   try { img = await leerImagen(archivo); } catch (e) {
     throw new Error('No se pudo abrir la imagen. Si es HEIC (iPhone), elegila desde el teléfono o guardala como JPG');
   }
-  const escala = Math.min(1, FOTO_LADO_MAX / Math.max(img.width, img.height));
-  const lienzo = dibujarEn(img, Math.round(img.width * escala), Math.round(img.height * escala));
-  if (img.close) img.close();
-  let grande;
-  for (const q of FOTO_CALIDADES) {
-    grande = await canvasABlob(lienzo, q);
+  // Primero baja la calidad; si con la más baja sigue pesando de más, prueba con el lado más chico
+  let lienzo, grande;
+  for (const lado of [FOTO_LADO_MAX, FOTO_LADO_REDUCIDO]) {
+    const escala = Math.min(1, lado / Math.max(img.width, img.height));
+    lienzo = dibujarEn(img, Math.round(img.width * escala), Math.round(img.height * escala));
+    for (const q of FOTO_CALIDADES) {
+      grande = await canvasABlob(lienzo, q);
+      if (grande.size <= FOTO_KB_OBJETIVO * 1024) break;
+    }
     if (grande.size <= FOTO_KB_OBJETIVO * 1024) break;
   }
+  if (img.close) img.close();
   return { grande, lienzo };
 }
 // Miniatura cuadrada a partir de un recorte { x, y, lado } en píxeles del lienzo
 function miniaturaDesde(lienzo, recorte) {
   return canvasABlob(dibujarEn(lienzo, FOTO_MINI_LADO, FOTO_MINI_LADO, recorte.x, recorte.y, recorte.lado, recorte.lado), 0.8);
+}
+// Miniatura de la foto entera, con el lado mayor de FOTO_MINI_LADO (sin recortar)
+function miniaturaProporcional(lienzo) {
+  const escala = Math.min(1, FOTO_MINI_LADO / Math.max(lienzo.width, lienzo.height));
+  return canvasABlob(dibujarEn(lienzo, Math.round(lienzo.width * escala), Math.round(lienzo.height * escala)), 0.75);
 }
 
 // Sube foto y miniatura a empresa/barco/tipo/; devuelve la ruta de la grande
@@ -8183,6 +8219,15 @@ function elegirArchivoFoto() {
     const input = document.getElementById('foto-input');
     input.value = '';
     input.onchange = () => resolver(input.files[0] || null);
+    input.click();
+  });
+}
+// Una foto de la cámara o varias de la galería (en la compu las dos abren el selector de archivos); devuelve un array
+function elegirArchivosFoto(camara) {
+  return new Promise(resolver => {
+    const input = document.getElementById(camara ? 'foto-input-camara' : 'foto-input-varias');
+    input.value = '';
+    input.onchange = () => resolver([...input.files]);
     input.click();
   });
 }
@@ -8352,6 +8397,128 @@ async function quitarFotoBarco() {
   } catch (err) {
     console.error(err);
     toast(textoError(err), true);
+  }
+}
+
+// ---- Fotos de deficiencias (mant_deficiencias_fotos) ----
+// Agregan operador+ (también en deficiencias cerradas); borran jefe/admin cualquiera y el operador solo las suyas
+// del día. Subir: primero el archivo y después la fila (si la fila falla, se borra el archivo). Borrar: la fila; el
+// trigger anota el archivo en mant_fotos_por_borrar (también al borrar la deficiencia, en cascada) y
+// limpiarFotosPorBorrar() lo borra del depósito.
+const FOTOS_POR_DEF_MAX = 10;   // también lo controla la base (mant_priv.deficiencia_foto_validar)
+let defDetalleId = null;        // deficiencia abierta en #modal-def-detalle
+let subiendoFotosDef = false;
+
+function fotosDeDef(id) { return fotosDef.filter(f => f.deficiencia_id === id); }
+function puedeBorrarFotoDef(f) {
+  return puedeEditar() || (puedeRegistrar() && f.creado_por === usuarioId && fechaLocalDe(f.creado_en) === hoyLocalISO());
+}
+
+function renderFotosDef(defId) {
+  const div = document.getElementById('def-detalle-fotos');
+  if (!div) return;
+  const fotos = fotosDeDef(defId);
+  const lleno = fotos.length >= FOTOS_POR_DEF_MAX;
+  div.innerHTML = `
+    <div class="def-fotos-cab"><strong>📷 Fotos</strong><span class="def-fotos-cuenta">${fotos.length} de ${FOTOS_POR_DEF_MAX}</span></div>
+    ${fotos.length
+      ? `<div class="def-fotos-grilla">${fotos.map(f => `
+          <div class="def-foto" data-ruta="${escape(f.ruta)}">
+            <img alt="Foto de la deficiencia" title="Ver en grande" onclick="abrirVisorFoto(this.parentElement.dataset.ruta)">
+            ${puedeBorrarFotoDef(f) ? `<button class="def-foto-borrar" title="Borrar foto" onclick="borrarFotoDef(${f.id})">✕</button>` : ''}
+          </div>`).join('')}</div>`
+      : '<div class="def-fotos-vacio">Sin fotos</div>'}
+    <div class="def-fotos-acciones solo-operador">
+      ${lleno
+        ? `<div class="def-fotos-aviso">Llegó al máximo de ${FOTOS_POR_DEF_MAX} fotos. Para agregar otra, borrá una.</div>`
+        : `<button class="btn btn-sec btn-pequeno" onclick="agregarFotosDef(${defId}, true)">📷 Sacar foto</button>
+           <button class="btn btn-sec btn-pequeno" onclick="agregarFotosDef(${defId}, false)">🖼 Galería</button>`}
+    </div>`;
+  div.querySelectorAll('.def-foto').forEach(async el => {
+    try { el.querySelector('img').src = await urlFoto(el.dataset.ruta, true); }
+    catch (err) { console.error(err); el.classList.add('error'); }
+  });
+}
+
+async function agregarFotosDef(defId, camara) {
+  if (!puedeRegistrar() || subiendoFotosDef) return;
+  const libres = FOTOS_POR_DEF_MAX - fotosDeDef(defId).length;
+  if (libres <= 0) { toast(`Esta deficiencia ya tiene ${FOTOS_POR_DEF_MAX} fotos (el máximo). Borrá una para agregar otra.`, true); return; }
+  let archivos = await elegirArchivosFoto(camara);
+  if (!archivos.length) return;
+  if (archivos.length > libres) {
+    if (!confirm(`Elegiste ${archivos.length} fotos, pero solo entran ${libres} más (el máximo es ${FOTOS_POR_DEF_MAX} por deficiencia).\n\n¿Subir las primeras ${libres}?`)) return;
+    archivos = archivos.slice(0, libres);
+  }
+  subiendoFotosDef = true;
+  let subidas = 0;
+  const errores = [];
+  try {
+    for (let i = 0; i < archivos.length; i++) {
+      toast(archivos.length > 1 ? `Subiendo ${i + 1} de ${archivos.length}…` : 'Subiendo foto…');
+      let ruta = null;
+      try {
+        const { grande, lienzo } = await prepararFoto(archivos[i]);
+        ruta = await subirFoto('deficiencias', grande, await miniaturaProporcional(lienzo));
+        const { data, error } = await sb.from('mant_deficiencias_fotos')
+          .insert(conBarco({ deficiencia_id: defId, ruta })).select().single();
+        if (error) throw error;
+        fotosDef.push(data);
+        subidas++;
+        if (defDetalleId === defId) renderFotosDef(defId);
+      } catch (err) {
+        console.error(err);
+        if (ruta) { try { await borrarFoto(ruta); } catch (e) { /* queda suelta, sin enlazar */ } }
+        errores.push(textoError(err));
+      }
+    }
+  } finally {
+    subiendoFotosDef = false;
+  }
+  renderDeficiencias();
+  if (defDetalleId === defId) renderFotosDef(defId);
+  if (errores.length) {
+    const falla = errores.length === 1 ? 'No se pudo subir 1 foto' : `No se pudieron subir ${errores.length} fotos`;
+    toast(`${subidas ? `✓ ${subidas} subida${subidas !== 1 ? 's' : ''}. ` : ''}${falla} (${errores[0]})`, true);
+  } else {
+    toast(subidas > 1 ? `✓ ${subidas} fotos subidas` : '✓ Foto subida');
+  }
+}
+
+async function borrarFotoDef(id) {
+  const f = fotosDef.find(x => x.id === id);
+  if (!f || !puedeBorrarFotoDef(f)) return;
+  if (!confirm('¿Borrar esta foto?\n\nSe borra del depósito (la foto y su miniatura). Esta acción no se puede deshacer.')) return;
+  try {
+    const { data, error } = await sb.from('mant_deficiencias_fotos').delete().eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) throw { code: '42501' };
+    fotosDef = fotosDef.filter(x => x.id !== id);
+    await limpiarFotosPorBorrar();   // el trigger anotó el archivo: se borra ya
+    toast('✓ Foto borrada');
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
+  renderDeficiencias();
+  if (defDetalleId === f.deficiencia_id) renderFotosDef(f.deficiencia_id);
+}
+
+// Borra del depósito los archivos anotados en mant_fotos_por_borrar (fotos borradas o de deficiencias borradas).
+// La base solo deja quitar la anotación cuando el archivo ya no está, así que si algo falla queda para la próxima.
+async function limpiarFotosPorBorrar() {
+  if (!barcoActual || !puedeRegistrar()) return;
+  try {
+    const { data, error } = await sb.from('mant_fotos_por_borrar').select('id, ruta').eq('barco_id', barcoActual.id).order('id').limit(100);
+    if (error) throw error;
+    for (const p of data || []) {
+      try {
+        await borrarFoto(p.ruta);
+        await sb.from('mant_fotos_por_borrar').delete().eq('id', p.id);
+      } catch (err) { console.error('No se pudo borrar la foto', p.ruta, err); }
+    }
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -8949,7 +9116,7 @@ function htmlItemHist(i) {
         <div class="hist-info">
           <div class="tipo-hist">⚠️ Deficiencia ${numeroDef(d)} · ${abierta ? (vencida ? 'abierta, vencida' : 'abierta') : 'cerrada'}${d.critica ? ' <span class="badge-critico">⚠️ CRÍTICA</span>' : ''}</div>
           <div class="tarea">${escape(d.descripcion)}</div>
-          <div class="por">Detectada el ${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}${abierta ? ` · Límite: ${fmtFechaDMA(d.fecha_limite)}` : ''}</div>
+          <div class="por">Detectada el ${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}${abierta ? ` · Límite: ${fmtFechaDMA(d.fecha_limite)}` : ''}${fotosDeDef(d.id).length ? ` · 📷 ${fotosDeDef(d.id).length}` : ''}</div>
           ${abierta ? '' : `<div class="notas">✔ Cerrada el ${fmtFechaDMA(d.fecha_cierre)} por ${escape(quienCerroDef(d))}: ${escape(d.accion_realizada || '')}</div>`}
         </div>
       </div>`;
@@ -9014,9 +9181,14 @@ function abrirDetalleDef(id) {
   cerrar.style.display = editar.style.display = abierta ? '' : 'none';
   cerrar.onclick = () => { cerrarDetalleDef(); abrirModalDefCerrar(id); };
   editar.onclick = () => { cerrarDetalleDef(); abrirModalDef(id); };
+  defDetalleId = id;
+  renderFotosDef(id);
   document.getElementById('modal-def-detalle').classList.add('show');
 }
-function cerrarDetalleDef() { document.getElementById('modal-def-detalle').classList.remove('show'); }
+function cerrarDetalleDef() {
+  defDetalleId = null;
+  document.getElementById('modal-def-detalle').classList.remove('show');
+}
 
 // Historial_BM_Santa_Lucia_<equipo>[_<filtro>]_2026-11-04.xlsx: lo que muestra el filtro, en el mismo orden
 function exportarHistorialEquipo() {

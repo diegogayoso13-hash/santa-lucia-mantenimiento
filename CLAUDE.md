@@ -174,7 +174,7 @@ Don't confuse it with `#nt-tipo` in the "Agregar tarea" modal, which is the hour
 - **Numbering:** `2026-001` style, consecutive and restarting every year. It's assigned **by the database**, not the client: the `before insert` trigger `mant_deficiencias_numerar()` sets `anio` from the year of `fecha_detectada` and `numero = max(numero) + 1` for that year (with an advisory lock), protected by `unique (anio, numero)`. Insert without `anio`/`numero` and read them back with `.select().single()`. `numeroDef(d)` formats the display string. Because the year defines the number, `fecha_detectada` is read-only when editing.
 - **Deadline:** `fecha_limite` defaults to `fecha_detectada` + 7 days if `critica`, else + 60 (`DIAS_LIMITE_DEF`, `defRecalcularLimite()`), recalculated when the date or the critical checkbox changes but editable by hand. Choosing an equipment pre-checks `critica` from `mant_equipos.critico`.
 - **Lifecycle:** `estado` is `'abierta'` or `'cerrada'`; closing requires `fecha_cierre` and `accion_realizada` (enforced by a table `check` too). Open ones can be edited; there's intentionally no delete in the UI (traceability, no gaps in numbering). `defVencida(d)` = open and `fecha_limite` before today (the deadline day itself is not overdue).
-- **UI:** open first (critical first, then by deadline), closed by most recent close date; tab badge with the open count; Dashboard stat card "Deficiencias abiertas" plus a banner when any are overdue or critical; separate Excel export (`exportarDefExcel()`).
+- **UI:** tapping a card opens the detail with its photos (`abrirDetalleDef()`, see "Photos"); open first (critical first, then by deadline), closed by most recent close date; tab badge with the open count; Dashboard stat card "Deficiencias abiertas" plus a banner when any are overdue or critical; separate Excel export (`exportarDefExcel()`).
 - Loaded with an embed so names survive equipment soft-deletes: `select('*, equipo:mant_equipos(nombre)')`; use `nombreEquipoDef(d)` to display it.
 
 ### Certificados tab
@@ -340,22 +340,28 @@ Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos
 
 ### Photos
 
-Section `============ FOTOS ============`. It's reusable: today it holds the ship photo, and later it will hold deficiencies.
+Section `============ FOTOS ============`. It's reusable: it holds the ship photo and the deficiency photos.
 
 - **Storage:**
   - The private Supabase Storage bucket `mant-fotos` only takes JPG up to 2 MB.
   - Paths are `empresa/barco/tipo/<uuid>.jpg`; the thumbnail is the same path ending in `_min.jpg` (`rutaMiniatura()`).
-  - Policies on `storage.objects` use `mant_priv.foto_permitida(name, nivel)`: the company folder must be the ship's company, and the user needs that ship at the level. Viewing needs level 1; upload, overwrite and delete need 3 (jefe/admin) for every folder type. A new type that needs different rules (e.g. operador uploading deficiency photos) needs its own policy condition.
+  - Policies on `storage.objects` use `mant_priv.foto_permitida(name, nivel)`: the company folder must be the ship's company, and the user needs that ship at the level. Viewing needs level 1; upload, overwrite and delete need 3 (jefe/admin) for every folder type. The `deficiencias` folder adds its own policies (`mant_fotos_def_subir` / `mant_fotos_def_quitar`): operador uploads, and deletes only files no `mant_deficiencias_fotos` row uses. Another type with different rules needs its own policy condition too.
   - Storage doesn't allow deleting objects with SQL; use the Storage API (`sb.storage.from(...).remove`).
 - **Helpers:**
-  - `prepararFoto(archivo)` rejects non-images and files over `FOTO_MB_MAX` (15 MB), then resizes in the browser: longest side `FOTO_LADO_MAX` (1600), JPG quality from 0.8 down until it's ≤ `FOTO_KB_OBJETIVO` (300 KB), keeping the camera's orientation. It returns `{ grande, lienzo }`.
-  - `elegirRecorteCircular(lienzo)` opens `#modal-recorte` (drag the circle, resize with the slider or the wheel) and returns `{x, y, lado}` or null. `miniaturaDesde(lienzo, recorte)` makes the 300×300 thumbnail.
+  - `prepararFoto(archivo)` rejects non-images and files over `FOTO_MB_MAX` (15 MB), then resizes in the browser: longest side `FOTO_LADO_MAX` (1600), JPG quality from 0.8 down until it's ≤ `FOTO_KB_OBJETIVO` (300 KB), and if the lowest quality is still over, again at `FOTO_LADO_REDUCIDO` (1280), keeping the camera's orientation. It returns `{ grande, lienzo }`.
+  - `elegirRecorteCircular(lienzo)` opens `#modal-recorte` (drag the circle, resize with the slider or the wheel) and returns `{x, y, lado}` or null. `miniaturaDesde(lienzo, recorte)` makes the 300×300 thumbnail; `miniaturaProporcional(lienzo)` makes an uncropped one (longest side 300).
   - `subirFoto(tipo, grande, mini)`, `reemplazarMiniatura()`, `borrarFoto()` and `urlFoto(ruta, miniatura)` (signed URLs, `FOTO_URL_SEGUNDOS` = 600, cached in `urlsFotos`).
-  - `lienzoDeFoto()` downloads the big photo to re-crop. `abrirVisorFoto()` is the full-size viewer (`#visor-foto`, Esc closes it). `elegirArchivoFoto()` opens `#foto-input` (`accept="image/*"`: camera or gallery on a phone).
+  - `lienzoDeFoto()` downloads the big photo to re-crop. `abrirVisorFoto()` is the full-size viewer (`#visor-foto`, Esc closes it). `elegirArchivoFoto()` opens `#foto-input` (`accept="image/*"`: camera or gallery on a phone). `elegirArchivosFoto(camara)` returns an array: `#foto-input-camara` (`capture="environment"`, opens the camera) or `#foto-input-varias` (`multiple`).
 - **Ship photo:** `mant_buque.foto_ruta` holds the path of the big image.
   - Mi Barco shows it whole with a maximum height (`htmlFotoBarco()` / `cargarFotoBarco()`), with "Subir foto" / "Cambiar" / "Ajustar miniatura" / "Quitar" (jefe/admin).
   - The header shows the round thumbnail in `#header-foto` (`mostrarFotoEncabezado()`), or ⚓ if there's none.
   - `subirFotoBarco()` uploads the new photo, saves the path, then deletes the old one; if saving fails, it deletes the new upload. `ajustarMiniaturaBarco()` re-crops and overwrites only the thumbnail. `quitarFotoBarco()` clears the field, then deletes both files.
+- **Deficiency photos (`mant_deficiencias_fotos`):** one row per photo (`deficiencia_id`, `ruta`, authorship), at most `FOTOS_POR_DEF_MAX` (10) per deficiency, also enforced by the trigger `mant_priv.deficiencia_foto_validar` (which also checks the path is `empresa/barco/deficiencias/…` of its ship).
+  - Shown in `#modal-def-detalle` (`renderFotosDef()`, `defDetalleId`): thumbnails that open the viewer, "📷 Sacar foto" / "🖼 Galería", a ✕ per photo, and a warning at the limit. Deficiency cards and the ficha history show "📷 N"; the Excel has a "Fotos" column.
+  - Permissions: everyone sees; operador+ adds, also on closed deficiencies; jefe/admin deletes any, operador only its own on the day (`puedeBorrarFotoDef()`, same rule as rellenos).
+  - **Pending test (2026-11-05):** the operador rules haven't been tried in the app yet, because there are no operador users. When there is one, check that it can add photos (also on a closed deficiency), sees the ✕ only on its own photos of the day, and that deleting one also removes the files from Storage.
+  - `agregarFotosDef()` uploads the file, then inserts the row; if the row fails, it deletes the file.
+  - **Deleting:** `borrarFotoDef()` deletes the row. The trigger `mant_priv.deficiencia_foto_anotar_borrado` writes the path to `mant_fotos_por_borrar`, also when a deficiency is deleted (cascade). `limpiarFotosPorBorrar()` (right after, and on every `cargarTodo()` for operador+) deletes those files through the Storage API and removes the entry; RLS only allows removing it once the file is gone (`mant_priv.foto_existe`), so a failure is retried next time.
 
 ### Dates
 
@@ -389,6 +395,8 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_equipos.aceite_id` → `mant_aceites(barco_id, id)` (nullable): the equipment's oil.
 - `mant_tanques.uso_aceite` — `'Reserva'|'Sistema'|null`, only on oil tanks.
 - `mant_buque.foto_ruta` — path of the ship photo in the `mant-fotos` Storage bucket (see "Photos").
+- `mant_deficiencias_fotos` — `deficiencia_id` → `mant_deficiencias(barco_id, id)` on delete cascade (new `unique (barco_id, id)` on deficiencias), `ruta` (unique), `creado_en/por`. Max 10 per deficiency (trigger).
+- `mant_fotos_por_borrar` — `ruta` of photo files whose row was deleted, waiting for the app to delete them from Storage (see "Photos").
 - `mant_cargas_aceite` — `fecha`, `tanque_id` → `mant_tanques(barco_id, id)` (oil tanks only), `litros` (> 0), `origen` (`'Proveedor'|'Tambor/bidón'`), `observaciones`, `creado_en/por`, `actualizado_en/por`.
 
 Every `mant_*` table has RLS enabled, with policies by company, ship and role (see below). New `mant_*` tables need `barco_id` and the same kind of policies. Apply schema changes as migrations (`apply_migration`), then run the security advisors. Known pre-existing advisor warning: Auth's leaked password protection is disabled.
