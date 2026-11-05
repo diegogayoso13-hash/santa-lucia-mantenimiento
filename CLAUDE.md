@@ -84,7 +84,8 @@ The top bar has these sections, each with its sub-tabs underneath:
   - The monthly hours confirmation (`aplicarConfirm()`) also recalculates `proxima_fecha` for `'ambos'`.
   - "Registrar varias" lists only `'fecha'` tasks: `'ambos'` are left out on purpose, so their hours are checked in the Registrar modal.
 - **Editing:** "✏️ Editar tarea" in the Registrar modal (`abrirEditarTarea()`) reuses `#modal-tarea` in edit mode.
-  - It changes the name, priority, work type and control. The equipment is fixed, because hour cascading and filters match on its name.
+  - It changes the equipment, name, priority, work type and control.
+  - **Equipment:** the `#nt-equipo` select lists the active fichas by category (`llenarSelectorEquipoTarea()`), both when creating and editing, and saving without one is refused. The task always stores `equipo_id` and the ficha's name in `equipo`. Changing it also sets `hrs_totales` to the new equipment's hours (`horasActualesEquipo()`); history follows the task, and a warning says the hours due still count from the last completion.
   - Next hours/date are recalculated only when the control or an interval changes (`controlCambia()`), counting from `ult_hrs` / `fecha_ult`. If those are missing, it asks for "contar desde".
   - The side that stops being used is cleared.
 
@@ -97,7 +98,7 @@ The top bar has these sections, each with its sub-tabs underneath:
   - They're out of `tareas`, so they don't show in the Dashboard, alerts, badges, hours entry or Registrar varias.
   - The "Mostrar dadas de baja" checkbox in Tareas (`#filtro-bajas`) lists them last, greyed (`renderTaskCardBaja()`), filtered by the same non-status filters, with "↺ Reactivar" (`reactivarTarea()`).
   - Their history still shows everywhere (Historial tab, equipment ficha and charts, Excel), marked "(dada de baja)" through `htmlTareaHist()`. History lists must resolve tasks through `tareasTodas`, not `tareas`.
-  - Hour loads update `hrs_totales` by equipment name for all rows, so a reactivated task has current hours.
+  - Hour loads update `hrs_totales` by `equipo_id` for all rows, so a reactivated task has current hours.
 - **Historial tab list and Excel:** `historialFiltrado()` applies the equipment filter and the search box (`filtrosHist()`), sorts newest first and includes retired tasks. Both `renderHistorial()` and the tab's "📥 Exportar Excel" (`exportarHistExcel()`) use it, so the file is exactly what's on screen.
   - The file has one "Historial" sheet with Fecha, Equipo, Tarea (with "(dada de baja)"), Hrs equipo, Realizado por and Notas.
   - It's named `Historial_<equipo or Todos>[_busqueda-<text>]_<date>.xlsx`. With no rows it doesn't download and shows a toast instead.
@@ -124,7 +125,7 @@ Each save also inserts one `mant_lecturas_horas` row per equipment (including th
 
 ### Ship & equipment fichas ("Mi Barco" / "Equipos" tabs)
 
-`mant_buque` (one row per ship; the app shows the selected ship's) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Tasks can optionally link to an equipment row via `tarea.equipo_id`, which makes the equipment name clickable to jump to its ficha. Note that tasks also carry the equipment name as free text (`tarea.equipo`), and the Tareas filters, hour cascading and `mant_lecturas_horas` match on that name, not on `equipo_id`.
+`mant_buque` (one row per ship; the app shows the selected ship's) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Every task links to an equipment row via `tarea.equipo_id` (`not null` in the database), which makes the equipment name clickable to jump to its ficha. Tasks also carry the ficha's name in `tarea.equipo`: the hours form and hour cascading go by `equipo_id`, but the Tareas and Historial filters, the plan export and `mant_lecturas_horas` still match on the name. Renaming a ficha doesn't update `tarea.equipo` or the readings.
 
 ### Retired equipment
 
@@ -132,7 +133,6 @@ Each save also inserts one `mant_lecturas_horas` row per equipment (including th
 - **While retired**, the equipment's active tasks (`activa = true`, linked by `equipo_id`) are **paused** (`tareaEnPausa()`):
   - they're left out of `tareas`, so they count nowhere (Dashboard, alerts, Tareas list, badges, hours entry, Registrar varias);
   - they're not changed in the database, so they come back by themselves when the equipment is reactivated;
-  - tasks linked only by the equipment's name (no `equipo_id`) are not paused.
 - **Equipos tab:** "Mostrar dados de baja" (`#eq-mostrar-bajas`, remembered in `localStorage` key `eq-mostrar-bajas`) lists the retired equipment last, greyed, labelled "De baja".
 - **Retired equipment's ficha:** it shows "De baja", "↺ Reactivar" (`reactivarEquipo()`, jefe/admin) instead of "Editar ficha", and its paused tasks greyed (they can't be registered while paused).
 
@@ -373,7 +373,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (nullable, see "Certificates without a date"), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
-- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(id)`, `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
+- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(barco_id, id)` (`not null`; equipment with tasks can't be hard-deleted), `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
 - `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
 - `mant_combustible_cargas` — `periodo_id` → `mant_combustible_periodos(barco_id, id)` on delete cascade, `fecha`, `litros` (> 0), `proveedor`, `creado_en/por`.
 - `mant_combustible_trasvases` — `origen_barco_id` / `destino_barco_id` → `mant_buque(id)` (one may be null), `otro_buque` (name, only when one side is null), `fecha`, `litros` (> 0), `notas`, `creado_en/por`, `actualizado_en/por`. It has no `barco_id`: it belongs to both ships.
@@ -419,8 +419,8 @@ Every `mant_*` table has RLS enabled, with policies by company, ship and role (s
   - **Reads and writes:**
     - Every read in `cargarTodo()` filters `.eq('barco_id', B)` (`mant_buque` by `id`) and ignores a late answer for a ship that's no longer selected.
     - Every insert wraps its data in `conBarco()`.
-    - The hour updates by equipment name also filter by `barco_id`.
-  - **Hour cascading:** `equiposQueTomanHorasDe(nombre)` gives the equipment that receives a piece of equipment's hours (also down a chain), and `equiposOcultosCarga()` hides those from the hours form. The "Toma las horas de" select (`llenarSelectorHorasDe()`) leaves out the equipment itself and anything that already takes its hours.
+    - The hour updates by `equipo_id` (`actualizarHorasTareas()`) also filter by `barco_id`.
+  - **Hour cascading:** `equiposQueTomanHorasDe(id)` gives the equipment rows that receive a piece of equipment's hours (also down a chain), and `equiposOcultosCarga()` hides those from the hours form. The "Toma las horas de" select (`llenarSelectorHorasDe()`) leaves out the equipment itself and anything that already takes its hours.
   - **Excel files:**
     - **Names** carry the ship (`nombreBarcoArchivo()`) and go through `textoArchivo()`, so they have no accents, ñ, signs or spaces (`Stock_BM_Santa_Lucia_2026-10-29.xlsx`). `busquedaArchivo()` adds the search text.
     - **Plan export:** the Tareas tab's "📥 Exportar Excel" opens `#modal-export-plan` (`abrirExportarPlan()` / `exportarPlan()`). It offers all equipment or a choice grouped by ficha category, plan and/or history, all tasks or only overdue and upcoming ones (postponed included), and full history or a date range.
@@ -433,7 +433,7 @@ Every `mant_*` table has RLS enabled, with policies by company, ship and role (s
 - **Administration (section `ADMINISTRACIÓN`, only `admin_empresa`):** a fifth top section "⚙️ Admin" (`.solo-admin`, body class `puede-administrar`) with sub-tabs `admin-barcos` and `admin-usuarios`. It works on the company of the selected ship. `cambiarTab()` sends non-admins back to the dashboard.
   - **Adding a ship:** it reuses `#modal-buque` (`buqueNuevo = true`, `abrirNuevoBarco()`) plus "Copiar desde otro barco". `crearBarco()` calls the RPC `mant_barco_crear(p_empresa, p_ficha, p_origen, p_copiar)`, which creates everything or nothing.
     - **Copied:** active equipment, with no serial number, years, state or notes; "Toma las horas de" is remapped to the new equipment.
-    - **Copied with values reset:** active tasks without last date or hours (so "sin registrar"); spare parts with stock 0; tools with quantity 0; ship certificates without an expiry date.
+    - **Copied with values reset:** active tasks of the copied equipment, without last date or hours (so "sin registrar"); copying tasks requires copying equipment (the RPC rejects it, and the checkbox is disabled); spare parts with stock 0; tools with quantity 0; ship certificates without an expiry date.
     - **Never copied:** history, readings, deficiencies, movements, crew or stock.
   - **Certificates without a date:** `fecha_vencimiento` can be null. `estadoCert()` gives `SIN_FECHA`, shown as "📅 Falta cargar el vencimiento". It counts in the tab badge, has no "Renovar" button, and `mant_certificados_renovar` rejects it.
   - **Users:** the list comes from `mant_accesos` plus `mant_perfiles` (`cargarUsuariosEmpresa()`).

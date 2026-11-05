@@ -1743,8 +1743,8 @@
       <div class="field" id="bq-copiar-que">
         <label>Qué copiar</label>
         <div style="display:grid;gap:6px">
-          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="equipos" checked> Equipos (con "Toma las horas de")</label>
-          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="tareas" checked> Plan de tareas, sin registrar (sin fechas ni horas)</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="equipos" checked onchange="actualizarCopiarBarco()"> Equipos (con "Toma las horas de")</label>
+          <label class="exp-op"><input type="checkbox" name="bq-copiar" value="tareas" checked> Plan de tareas, sin registrar (sin fechas ni horas; necesita los equipos)</label>
           <label class="exp-op"><input type="checkbox" name="bq-copiar" value="repuestos" checked> Catálogo de repuestos, con stock en 0</label>
           <label class="exp-op"><input type="checkbox" name="bq-copiar" value="herramientas" checked> Herramientas, con cantidad en 0</label>
           <label class="exp-op"><input type="checkbox" name="bq-copiar" value="certificados" checked> Certificados del barco, sin fecha de vencimiento</label>
@@ -2516,8 +2516,8 @@
     <div class="modal-sub" id="nt-sub">Creá un mantenimiento nuevo. Si ya lo hiciste, cargá la fecha/horas y la app calcula sola la próxima vez que toca.</div>
     <div class="field">
       <label>Equipo *</label>
-      <input type="text" id="nt-equipo" list="lista-equipos-nt" placeholder="ej: Motor Principal">
-      <datalist id="lista-equipos-nt"></datalist>
+      <select id="nt-equipo" onchange="equipoTareaCambiado()"></select>
+      <div class="meta" id="nt-equipo-aviso" style="font-size:12.5px;color:var(--texto-suave);margin-top:4px"></div>
     </div>
     <div class="field">
       <label>Nombre de la tarea *</label>
@@ -3611,20 +3611,65 @@ async function guardarSoloTipo() {
 
 // ============ AGREGAR / EDITAR TAREA ============
 // El mismo modal sirve para crear (registra la realización inicial en el historial) y para editar
-// nombre, prioridad, tipo de trabajo y control. Al editar, las próximas horas/fecha se recalculan
+// equipo, nombre, prioridad, tipo de trabajo y control. El equipo sale siempre de una ficha: la tarea guarda
+// equipo_id (obligatorio en la base) y el nombre de la ficha. Al editar, las próximas horas/fecha se recalculan
 // solo si cambia el control o el intervalo, contando desde la última realización.
 let tareaEditando = null;  // tarea en edición (null = alta)
 
+// Selector de equipo: las fichas activas, agrupadas por categoría. La tarea guarda equipo_id y el nombre de la ficha.
+function llenarSelectorEquipoTarea(elegido) {
+  const grupos = {};
+  equipos.forEach(e => {
+    const cat = e.categoria || 'Sin categoría';
+    (grupos[cat] = grupos[cat] || []).push(e);
+  });
+  const cats = Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'es'));
+  document.getElementById('nt-equipo').innerHTML = '<option value="">— Elegí el equipo —</option>' +
+    cats.map(c => `<optgroup label="${escape(c)}">` +
+      grupos[c].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        .map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join('') +
+      '</optgroup>').join('');
+  document.getElementById('nt-equipo').value = elegido != null ? String(elegido) : '';
+  document.getElementById('nt-equipo-aviso').textContent = equipos.length ? '' :
+    'Este barco no tiene equipos: primero creá la ficha en ⚓ Barco → Equipos.';
+}
+function equipoElegidoTarea() {
+  const id = parseInt(document.getElementById('nt-equipo').value);
+  return equipos.find(e => e.id === id) || null;
+}
+
+// Horas actuales de un equipo: las de sus tareas (las que actualiza la carga de horas) o, si no tiene, la última lectura
+function horasActualesEquipo(eq) {
+  const hrs = tareasTodas.filter(t => t.equipo_id === eq.id).map(t => Number(t.hrs_totales || 0));
+  if (hrs.length) return Math.max(...hrs);
+  const ultima = ultimaLecturaEquipo(eq.nombre);
+  return ultima ? Number(ultima.hrs_total) : null;
+}
+
+function equipoTareaCambiado() {
+  const eq = equipoElegidoTarea();
+  const aviso = document.getElementById('nt-equipo-aviso');
+  if (!tareaEditando) {
+    // Alta: propone las horas del equipo (se pueden corregir)
+    const hrs = eq ? horasActualesEquipo(eq) : null;
+    document.getElementById('nt-hrs-actual').value = hrs != null ? hrs : '';
+    return;
+  }
+  const t = tareaEditando;
+  if (!eq || eq.id === t.equipo_id) { aviso.textContent = ''; return; }
+  const hrs = horasActualesEquipo(eq);
+  aviso.textContent = `Cambia de equipo: las horas de la tarea pasan a ser las de ${eq.nombre} ` +
+    (hrs != null ? `(${fmtHoras(hrs)} h)` : '(no tiene horas cargadas: quedan en 0)') +
+    ` y su historial se ve en esa ficha.` +
+    (usaHoras(t) && t.ult_hrs != null ? ` El vencimiento por horas sigue contando desde la última realización (${fmtHoras(t.ult_hrs)} h): revisalo si el horómetro es otro.` : '');
+}
+
 function abrirModalTarea() {
   tareaEditando = null;
-  const equipos = [...new Set(tareas.map(t => t.equipo))].sort();
-  document.getElementById('lista-equipos-nt').innerHTML = equipos.map(e => `<option value="${escape(e)}">`).join('');
   document.getElementById('nt-titulo').textContent = 'Agregar tarea nueva';
   document.getElementById('nt-sub').textContent = 'Creá un mantenimiento nuevo. Si ya lo hiciste, cargá la fecha/horas y la app calcula sola la próxima vez que toca.';
   document.getElementById('nt-btn-guardar').textContent = '✓ Crear tarea';
-  const eq = document.getElementById('nt-equipo');
-  eq.value = '';
-  eq.disabled = false;
+  llenarSelectorEquipoTarea(null);
   document.getElementById('nt-tarea').value = '';
   document.getElementById('nt-tipo-trabajo').value = '';
   document.getElementById('nt-tipo').value = 'hrs';
@@ -3649,9 +3694,7 @@ function abrirEditarTarea() {
   document.getElementById('nt-titulo').textContent = 'Editar tarea';
   document.getElementById('nt-sub').innerHTML = `<strong>${escape(t.equipo)}</strong> — ${escape(t.tarea)}`;
   document.getElementById('nt-btn-guardar').textContent = '✓ Guardar cambios';
-  const eq = document.getElementById('nt-equipo');
-  eq.value = t.equipo;
-  eq.disabled = true;  // la carga de horas y los filtros van por el nombre del equipo
+  llenarSelectorEquipoTarea(t.equipo_id);
   document.getElementById('nt-tarea').value = t.tarea;
   document.getElementById('nt-tipo-trabajo').value = t.tipo_trabajo || '';
   document.getElementById('nt-prioridad').value = t.prioridad || 'MEDIA';
@@ -3738,7 +3781,7 @@ function errorControl({ unidad, hrs, meses }) {
 async function guardarTarea() {
   if (tareaEditando) return guardarEdicionTarea();
 
-  const equipo = document.getElementById('nt-equipo').value.trim();
+  const eq = equipoElegidoTarea();
   const tarea = document.getElementById('nt-tarea').value.trim();
   const c = controlElegido();
   const fechaUlt = document.getElementById('nt-fecha-ult').value;
@@ -3746,13 +3789,13 @@ async function guardarTarea() {
   const quien = document.getElementById('nt-quien').value.trim() || 'Maquinista';
   const notas = document.getElementById('nt-notas').value.trim();
 
-  if (!equipo) { toast('Falta el equipo', true); return; }
+  if (!eq) { toast('Elegí el equipo', true); return; }
   if (!tarea) { toast('Falta el nombre de la tarea', true); return; }
   const err = errorControl(c);
   if (err) { toast(err, true); return; }
 
   const data = {
-    equipo, tarea, prioridad,
+    equipo: eq.nombre, equipo_id: eq.id, tarea, prioridad,
     realizado_por: quien,
     activa: true,
     observaciones: notas || null,
@@ -3801,6 +3844,8 @@ async function guardarEdicionTarea() {
   const t = tareaEditando;
   const nombre = document.getElementById('nt-tarea').value.trim();
   if (!nombre) { toast('Falta el nombre de la tarea', true); return; }
+  const eq = equipoElegidoTarea();
+  if (!eq) { toast('Elegí el equipo', true); return; }
   const c = controlElegido();
   const err = errorControl(c);
   if (err) { toast(err, true); return; }
@@ -3810,6 +3855,13 @@ async function guardarEdicionTarea() {
     prioridad: document.getElementById('nt-prioridad').value,
     tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null
   };
+  // Cambio de equipo: id, nombre de la ficha y horas del equipo nuevo van juntos (el historial sigue a la tarea)
+  const cambiaEquipo = eq.id !== t.equipo_id;
+  if (cambiaEquipo) {
+    data.equipo_id = eq.id;
+    data.equipo = eq.nombre;
+    data.hrs_totales = horasActualesEquipo(eq) ?? 0;
+  }
 
   if (controlCambia(t, c)) {
     data.unidad = c.unidad;
@@ -3836,7 +3888,8 @@ async function guardarEdicionTarea() {
   try {
     const { error } = await sb.from('mant_tareas').update(data).eq('id', t.id);
     if (error) throw error;
-    toast(data.unidad ? '✓ Tarea actualizada y vencimientos recalculados' : '✓ Tarea actualizada');
+    toast((data.unidad ? '✓ Tarea actualizada y vencimientos recalculados' : '✓ Tarea actualizada') +
+      (cambiaEquipo ? ` · ahora en ${eq.nombre}` : ''));
     cerrarModalTarea();
     await cargarTodo();
   } catch (err) {
@@ -3852,55 +3905,54 @@ async function guardarEdicionTarea() {
 // Un equipo puede tomar las horas de otro del mismo barco ("Toma las horas de", mant_equipos.horas_de_id),
 // p. ej. cada caja reductora las de su motor principal: no se carga a mano y recibe las mismas horas
 // cuando se cargan las del equipo de origen (también en cadena). La base impide círculos.
+// Las tareas se actualizan por equipo_id; las lecturas (mant_lecturas_horas) siguen guardando el nombre de la ficha.
 
-// Nombres de los equipos que reciben las horas del equipo `nombre` (directa o indirectamente)
-function equiposQueTomanHorasDe(nombre) {
-  const origen = equipos.find(e => e.nombre === nombre);
-  if (!origen) return [];
+// Equipos que reciben las horas del equipo `id` (directa o indirectamente)
+function equiposQueTomanHorasDe(id) {
   const res = [];
-  const vistos = new Set([origen.id]);
-  let frente = [origen.id];
+  const vistos = new Set([id]);
+  let frente = [id];
   while (frente.length) {
     const hijos = equipos.filter(e => frente.includes(e.horas_de_id) && !vistos.has(e.id));
-    hijos.forEach(h => { vistos.add(h.id); res.push(h.nombre); });
+    hijos.forEach(h => { vistos.add(h.id); res.push(h); });
     frente = hijos.map(h => h.id);
   }
   return res;
 }
 
-// Equipos que no se cargan a mano (toman las horas de otro equipo activo)
+// Ids de los equipos que no se cargan a mano (toman las horas de otro equipo activo)
 function equiposOcultosCarga() {
-  return new Set(equipos.filter(e => e.horas_de_id && equipos.some(o => o.id === e.horas_de_id)).map(e => e.nombre));
+  return new Set(equipos.filter(e => e.horas_de_id && equipos.some(o => o.id === e.horas_de_id)).map(e => e.id));
 }
 
 function renderCarga() {
   const ocultos = equiposOcultosCarga();
-  const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))]
-    .filter(eq => !ocultos.has(eq))
-    .sort();
+  const conHoras = new Set(tareas.filter(usaHoras).map(t => t.equipo_id));
+  const lista = equipos.filter(e => conHoras.has(e.id) && !ocultos.has(e.id))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const div = document.getElementById('carga-equipos');
-  div.innerHTML = equipos.map(eq => {
-    const hrs_actuales = Math.max(...tareas.filter(t => t.equipo === eq).map(t => Number(t.hrs_totales || 0)));
-    const reciben = equiposQueTomanHorasDe(eq);
+  div.innerHTML = lista.map(eq => {
+    const hrs_actuales = horasActualesEquipo(eq) ?? 0;
+    const reciben = equiposQueTomanHorasDe(eq.id).map(e => e.nombre);
     const nota = reciben.length ? `<div style="font-size:11.5px;color:var(--acento);margin-top:2px">↳ incluye ${escape(reciben.join(', '))}</div>` : '';
-    const ultima = ultimaLecturaEquipo(eq);
+    const ultima = ultimaLecturaEquipo(eq.nombre);
     return `
       <div class="equipo-row">
         <div>
-          <label>${escape(eq)}</label>
+          <label>${escape(eq.nombre)}</label>
           <div style="font-size:12px;color:var(--texto-suave)">Anterior: ${hrs_actuales} hrs</div>
           <div class="ultima-carga">${ultima ? `Última carga: ${fmtFechaDMA(ultima.fecha)} · ${fmtHoras(ultima.hrs_total)} h` : 'Sin cargas'}</div>
           ${nota}
         </div>
         <div>
           <label>Horas del mes</label>
-          <input type="number" min="0" data-equipo="${escape(eq)}" data-actual="${hrs_actuales}" data-ultima-fecha="${ultima ? ultima.fecha : ''}"
+          <input type="number" min="0" data-equipo-id="${eq.id}" data-actual="${hrs_actuales}" data-ultima-fecha="${ultima ? ultima.fecha : ''}"
             oninput="actualizarNuevoTotal(this); avisoHorasPosibles(this)" placeholder="0">
           <div class="aviso-horas"></div>
         </div>
         <div>
           <label>Nuevo total</label>
-          <div class="nuevo-total" data-total-de="${escape(eq)}" style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--azul-profundo);padding-top:4px">${hrs_actuales}</div>
+          <div class="nuevo-total" data-total-de="${eq.id}" style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--azul-profundo);padding-top:4px">${hrs_actuales}</div>
         </div>
       </div>`;
   }).join('');
@@ -3937,11 +3989,11 @@ function avisoHorasPosibles(inp) {
 }
 // Al cambiar la fecha de la carga cambian las horas posibles de todos los equipos
 function revisarAvisosHoras() {
-  document.querySelectorAll('#carga-equipos [data-equipo]').forEach(avisoHorasPosibles);
+  document.querySelectorAll('#carga-equipos [data-equipo-id]').forEach(avisoHorasPosibles);
 }
 
 function actualizarNuevoTotal(inp) {
-  const eq = inp.dataset.equipo;
+  const eq = inp.dataset.equipoId;
   const actual = parseFloat(inp.dataset.actual) || 0;
   const mes = parseFloat(inp.value);
   const total = isNaN(mes) ? actual : actual + mes;
@@ -4089,7 +4141,7 @@ async function aplicarChequeos() {
 }
 
 function resetCarga() {
-  document.querySelectorAll('[data-equipo]').forEach(i => i.value = '');
+  document.querySelectorAll('#carga-equipos [data-equipo-id]').forEach(i => i.value = '');
   document.querySelectorAll('.aviso-horas').forEach(a => { a.textContent = ''; });
 }
 
@@ -4098,25 +4150,24 @@ let cargaPendiente = null;
 
 async function guardarCarga() {
   const fecha = (document.getElementById('carga-fecha') && document.getElementById('carga-fecha').value) || new Date().toISOString().split('T')[0];
-  const inputs = document.querySelectorAll('[data-equipo]');
-  const horasNuevas = {};    // {equipo: nuevo_total}
-  const lecturasNuevas = []; // registros para el histórico
+  const inputs = document.querySelectorAll('#carga-equipos [data-equipo-id]');
+  const horasNuevas = new Map(); // equipo_id → nuevo total
+  const lecturasNuevas = [];     // registros para el histórico (por nombre de la ficha)
 
   for (const inp of inputs) {
     const mes = parseFloat(inp.value);
     if (isNaN(mes) || mes <= 0) continue;
-    const eq = inp.dataset.equipo;
+    const eq = equipos.find(e => e.id === parseInt(inp.dataset.equipoId));
+    if (!eq) continue;
     const actual = parseFloat(inp.dataset.actual) || 0;
     const nuevoTotal = actual + mes;
-    horasNuevas[eq] = nuevoTotal;
-    lecturasNuevas.push({ equipo: eq, fecha, horas_mes: mes, hrs_total: nuevoTotal });
-    for (const recibe of equiposQueTomanHorasDe(eq)) {
-      horasNuevas[recibe] = nuevoTotal;
-      lecturasNuevas.push({ equipo: recibe, fecha, horas_mes: mes, hrs_total: nuevoTotal });
+    for (const e of [eq, ...equiposQueTomanHorasDe(eq.id)]) {
+      horasNuevas.set(e.id, nuevoTotal);
+      lecturasNuevas.push({ equipo: e.nombre, fecha, horas_mes: mes, hrs_total: nuevoTotal });
     }
   }
 
-  if (Object.keys(horasNuevas).length === 0) {
+  if (horasNuevas.size === 0) {
     toast('Poné las horas del mes de al menos un equipo');
     return;
   }
@@ -4125,9 +4176,9 @@ async function guardarCarga() {
   for (const t of tareas) {
     if (!usaHoras(t)) continue;
     if (t.proxima_hrs == null) continue;
-    if (!(t.equipo in horasNuevas)) continue;
+    if (!horasNuevas.has(t.equipo_id)) continue;
 
-    const hrsNuevas = horasNuevas[t.equipo];
+    const hrsNuevas = horasNuevas.get(t.equipo_id);
     const dif = Number(t.proxima_hrs) - hrsNuevas;
     if (dif <= umbralProximoHrs(t)) {
       tareasAfectadas.push({
@@ -4145,6 +4196,14 @@ async function guardarCarga() {
     await aplicarSoloHoras();
   } else {
     abrirConfirm();
+  }
+}
+
+// hrs_totales de todas las tareas de cada equipo (también las dadas de baja, así al reactivarlas tienen las horas al día)
+async function actualizarHorasTareas(horasNuevas) {
+  for (const [equipoId, hrs] of horasNuevas) {
+    const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo_id', equipoId);
+    if (error) throw error;
   }
 }
 
@@ -4200,12 +4259,9 @@ async function aplicarSoloHoras() {
   if (!cargaPendiente) return;
   const { horasNuevas, lecturasNuevas } = cargaPendiente;
   try {
-    for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
-      if (error) throw error;
-    }
+    await actualizarHorasTareas(horasNuevas);
     await guardarLecturas(lecturasNuevas);
-    const n = Object.keys(horasNuevas).length;
+    const n = horasNuevas.size;
     toast(`✓ Actualizadas horas de ${n} equipo${n>1?'s':''}`);
     cargaPendiente = null;
     await cargarTodo();
@@ -4230,10 +4286,7 @@ async function aplicarConfirm() {
 
   try {
     // 2) Actualizar horas totales de todos los equipos
-    for (const [equipo, hrs] of Object.entries(horasNuevas)) {
-      const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo', equipo);
-      if (error) throw error;
-    }
+    await actualizarHorasTareas(horasNuevas);
     await guardarLecturas(lecturasNuevas);
 
     // 3) Para cada tarea marcada como realizada, actualizarla y crear historial
@@ -4266,7 +4319,7 @@ async function aplicarConfirm() {
       if (e2) throw e2;
     }
 
-    const nEq = Object.keys(horasNuevas).length;
+    const nEq = horasNuevas.size;
     const nT = tareasRealizadas.length;
     if (nT > 0) {
       toast(`✓ ${nEq} equipo${nEq>1?'s':''} actualizado${nEq>1?'s':''}, ${nT} tarea${nT>1?'s':''} registrada${nT>1?'s':''}`);
@@ -9227,6 +9280,11 @@ function abrirNuevoBarco() {
 function actualizarCopiarBarco() {
   const hayOrigen = !!document.getElementById('bq-origen').value;
   document.getElementById('bq-copiar-que').style.display = hayOrigen ? '' : 'none';
+  // Las tareas necesitan sus equipos (mant_tareas.equipo_id es obligatorio)
+  const conEquipos = document.querySelector('input[name="bq-copiar"][value="equipos"]').checked;
+  const tareasCopia = document.querySelector('input[name="bq-copiar"][value="tareas"]');
+  tareasCopia.disabled = !conEquipos;
+  if (!conEquipos) tareasCopia.checked = false;
 }
 
 async function crearBarco(ficha) {

@@ -145,8 +145,8 @@ CREATE TABLE public.mant_equipos (
 CREATE TABLE public.mant_tareas (
   id BIGSERIAL PRIMARY KEY,
   barco_id INTEGER NOT NULL REFERENCES public.mant_buque(id),
-  equipo TEXT NOT NULL,                     -- nombre del equipo (texto libre; filtros y carga de horas usan esto)
-  equipo_id INTEGER,                        -- equipo del mismo barco (FK compuesta abajo)
+  equipo TEXT NOT NULL,                     -- nombre del equipo (la app guarda el de la ficha; filtros y exportes usan esto)
+  equipo_id INTEGER NOT NULL,               -- equipo del mismo barco (FK compuesta abajo); la ficha y la carga de horas usan esto
   tarea TEXT NOT NULL,
   periodicidad TEXT,                        -- solo para mostrar ("250 hrs", "Mensual", "250 hrs o 6 meses")
   -- Control: 'hrs' (cada_hrs), 'fecha' (cada_meses), 'ambos' (lo que ocurra primero), 'ninguna'
@@ -181,9 +181,9 @@ CREATE TABLE public.mant_tareas (
     (unidad NOT IN ('hrs', 'ambos') OR cada_hrs IS NOT NULL) AND
     (unidad NOT IN ('fecha', 'ambos') OR cada_meses IS NOT NULL)),
   CONSTRAINT mant_tareas_barco_id_id_key UNIQUE (barco_id, id),
-  -- Al borrar el equipo, solo equipo_id queda en NULL (barco_id se mantiene)
+  -- Un equipo con tareas no se puede borrar (se da de baja con activo = false)
   CONSTRAINT mant_tareas_equipo_id_fkey FOREIGN KEY (barco_id, equipo_id)
-    REFERENCES public.mant_equipos(barco_id, id) ON DELETE SET NULL (equipo_id)
+    REFERENCES public.mant_equipos(barco_id, id)
 );
 
 -- =============== HISTORIAL ===============
@@ -916,7 +916,8 @@ GRANT EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEG
 
 -- Crear un barco, opcionalmente copiando de otro de la misma empresa (todo o nada). Devuelve el id nuevo.
 -- p_copiar: 'equipos' (activos; sin n° de serie, años, estado ni notas; "Toma las horas de" apunta a los nuevos),
--- 'tareas' (activas, sin últimas fechas ni horas: "sin registrar"), 'repuestos' (stock 0), 'herramientas' (cantidad 0),
+-- 'tareas' (activas de equipos copiados, con el nombre de la ficha, sin últimas fechas ni horas: "sin registrar";
+-- exige 'equipos'), 'repuestos' (stock 0), 'herramientas' (cantidad 0),
 -- 'certificados' (del barco, no de tripulantes, sin vencimiento).
 -- Nunca copia historial, horas, lecturas, deficiencias, movimientos, tripulantes ni stock.
 CREATE FUNCTION public.mant_barco_crear(p_empresa INTEGER, p_ficha JSONB, p_origen INTEGER DEFAULT NULL, p_copiar TEXT[] DEFAULT '{}')
@@ -939,6 +940,9 @@ BEGIN
   END IF;
   IF p_origen IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.mant_buque WHERE id = p_origen AND empresa_id = p_empresa) THEN
     RAISE EXCEPTION 'El barco desde el que se copia no es de tu empresa' USING ERRCODE = '42501';
+  END IF;
+  IF 'tareas' = ANY (p_copiar) AND NOT ('equipos' = ANY (p_copiar)) THEN
+    RAISE EXCEPTION 'Para copiar el plan de tareas hay que copiar también los equipos' USING ERRCODE = '22023';
   END IF;
 
   INSERT INTO public.mant_buque (empresa_id, nombre, tipo, astillero, pais_origen, anio_construccion, fecha_botadura,
@@ -975,9 +979,12 @@ BEGIN
 
   IF 'tareas' = ANY (p_copiar) THEN
     INSERT INTO public.mant_tareas (barco_id, equipo, equipo_id, tarea, periodicidad, unidad, cada_hrs, cada_meses, prioridad, tipo_trabajo)
-    SELECT v_id, t.equipo, (v_mapa ->> t.equipo_id::TEXT)::INTEGER, t.tarea, t.periodicidad, t.unidad, t.cada_hrs, t.cada_meses,
+    SELECT v_id, eq.nombre, (v_mapa ->> t.equipo_id::TEXT)::INTEGER, t.tarea, t.periodicidad, t.unidad, t.cada_hrs, t.cada_meses,
            t.prioridad, t.tipo_trabajo
-      FROM public.mant_tareas t WHERE t.barco_id = p_origen AND t.activa ORDER BY t.id;
+      FROM public.mant_tareas t
+      JOIN public.mant_equipos eq ON eq.barco_id = t.barco_id AND eq.id = t.equipo_id
+     WHERE t.barco_id = p_origen AND t.activa AND v_mapa ? t.equipo_id::TEXT
+     ORDER BY t.id;
   END IF;
 
   IF 'repuestos' = ANY (p_copiar) THEN
