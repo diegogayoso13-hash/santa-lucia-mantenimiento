@@ -368,6 +368,9 @@ CREATE INDEX idx_mant_cert_hist_certificado ON public.mant_certificados_historia
 CREATE INDEX idx_mant_certificados_tripulante ON public.mant_certificados (tripulante_id);
 CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
 CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
+-- Nombre único por barco, sin mayúsculas ni espacios de más y contando los dados de baja
+-- (las lecturas de horas van por nombre y se mezclarían)
+CREATE UNIQUE INDEX mant_equipos_nombre_unico ON public.mant_equipos (barco_id, lower(btrim(nombre)));
 CREATE INDEX idx_mant_equipos_barco_horas_de ON public.mant_equipos (barco_id, horas_de_id);
 CREATE INDEX idx_mant_tareas_activa ON public.mant_tareas (activa);
 CREATE INDEX idx_mant_tareas_equipo ON public.mant_tareas (equipo);
@@ -740,6 +743,24 @@ END;
 $$;
 CREATE TRIGGER mant_equipos_horas_sin_circulo BEFORE INSERT OR UPDATE OF horas_de_id ON public.mant_equipos
   FOR EACH ROW EXECUTE FUNCTION mant_priv.equipos_horas_sin_circulo();
+
+-- Al renombrar una ficha, el nombre nuevo pasa a sus tareas (por equipo_id) y a sus lecturas de horas
+-- (por el nombre viejo, en ese barco), en la misma transacción. Corre con los permisos de quien edita
+-- (jefe/admin, que también pueden modificar tareas y lecturas). El nombre es único por barco (índice
+-- mant_equipos_nombre_unico), así que las lecturas de otra ficha nunca se tocan.
+CREATE FUNCTION mant_priv.equipo_renombrar() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  UPDATE public.mant_tareas SET equipo = NEW.nombre
+   WHERE barco_id = NEW.barco_id AND equipo_id = NEW.id AND equipo IS DISTINCT FROM NEW.nombre;
+  UPDATE public.mant_lecturas_horas SET equipo = NEW.nombre
+   WHERE barco_id = NEW.barco_id AND equipo = OLD.nombre;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER mant_equipos_renombrar AFTER UPDATE OF nombre ON public.mant_equipos
+  FOR EACH ROW WHEN (NEW.nombre IS DISTINCT FROM OLD.nombre)
+  EXECUTE FUNCTION mant_priv.equipo_renombrar();
 
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv FROM public;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv TO authenticated, service_role;

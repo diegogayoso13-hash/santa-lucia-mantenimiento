@@ -4006,10 +4006,9 @@ function actualizarNuevoTotal(inp) {
 function renderHoras() {
   const sel = document.getElementById('horas-equipo');
   if (!sel) return;
+  // Se rehace en cada render (renombres y equipos nuevos), conservando el elegido
   const equipos = [...new Set(tareas.filter(usaHoras).map(t => t.equipo))].sort();
-  if (!sel.options.length) {
-    sel.innerHTML = equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join('');
-  }
+  llenarSelectConservando(sel, equipos.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join(''));
   const eq = sel.value || equipos[0] || '';
   const div = document.getElementById('horas-lista');
   if (!div) return;
@@ -9151,9 +9150,25 @@ async function guardarEquipo() {
     critico: document.getElementById('eq-critico').checked,
   };
   const editId = document.getElementById('modal-equipo').dataset.editId;
+  const idEdit = editId ? parseInt(editId) : null;
+  // Nombre único por barco, sin mayúsculas ni espacios de más y contando los dados de baja (la base también lo exige):
+  // las lecturas de horas van por nombre y se mezclarían
+  const repetido = equiposTodos.find(e => e.id !== idEdit && e.nombre.trim().toLowerCase() === nombre.toLowerCase());
+  if (repetido) {
+    toast(`Ya hay un equipo con ese nombre: ${repetido.nombre}${repetido.activo ? '' : ' (dado de baja)'}`, true);
+    return;
+  }
+  // Renombrar: el trigger mant_priv.equipo_renombrar copia el nombre nuevo a sus tareas y lecturas de horas
+  const anterior = idEdit ? equiposTodos.find(e => e.id === idEdit) : null;
+  if (anterior && anterior.nombre !== nombre) {
+    const nT = tareasTodas.filter(t => t.equipo_id === idEdit).length;
+    const nL = lecturas.filter(l => l.equipo === anterior.nombre).length;
+    if (!confirm(`¿Cambiar el nombre de "${anterior.nombre}" a "${nombre}"?\n\n` +
+      `Se va a actualizar el nombre en ${nT} tarea${nT === 1 ? '' : 's'} y ${nL} lectura${nL === 1 ? '' : 's'} de horas.`)) return;
+  }
   try {
     if (editId) {
-      const { error } = await sb.from('mant_equipos').update(data).eq('id', parseInt(editId));
+      const { error } = await sb.from('mant_equipos').update(data).eq('id', idEdit);
       if (error) throw error;
       toast('✓ Equipo actualizado');
     } else {
@@ -9169,7 +9184,7 @@ async function guardarEquipo() {
       if (equipoActualFicha) renderFichaEquipo();
     }
   } catch (err) {
-    toast(textoError(err), true);
+    toast(err && err.code === '23505' ? 'Ya hay un equipo con ese nombre en este barco' : textoError(err), true);
   }
 }
 
