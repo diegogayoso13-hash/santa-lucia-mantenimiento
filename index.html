@@ -725,7 +725,18 @@
   .def-fotos-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
   .def-foto { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--gris-2); }
   .def-foto img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
-  .def-foto.error::after { content: '⚠️'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  img.def-mini.error, .def-foto img.error { opacity: 0.25; }
+  /* Miniaturas en las tarjetas y en el historial de la ficha (tocar una abre la foto; el resto, el detalle) */
+  .def-minis { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .def-mini { flex: 0 0 auto; width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--gris-2); cursor: zoom-in; }
+  .def-mini-mas { display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; color: var(--azul-profundo); cursor: pointer; }
+  /* Detalle de deficiencia: ✕ arriba a la derecha y "Marcar como resuelta" / "Reabrir" separado del resto */
+  .modal-con-x { position: relative; }
+  .modal-con-x h2 { padding-right: 44px; }
+  .modal-x { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--gris-1); color: var(--texto-suave); font-size: 18px; cursor: pointer; }
+  .modal-x:hover { background: var(--gris-2); }
+  .def-detalle-acciones .def-resolver { margin-right: auto; }
+  .def-acciones-sep { display: none; }
   .def-foto-borrar { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.6); color: white; font-size: 14px; cursor: pointer; }
   .def-fotos-vacio { font-size: 13px; color: var(--texto-suave); padding: 4px 0; }
   .def-fotos-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -852,6 +863,8 @@
     .modal .field { margin-bottom: 12px; }
     .modal-actions { flex-wrap: wrap; }
     .modal-actions .btn { flex: 1 1 auto; }
+    .def-detalle-acciones .def-resolver { flex-basis: 100%; margin-right: 0; }
+    .def-acciones-sep { display: block; flex-basis: 100%; height: 1px; background: var(--gris-2); margin: 4px 0; }
 
     /* Confirm items */
     .confirm-item { grid-template-columns: auto 1fr; padding: 10px; gap: 8px; }
@@ -2294,23 +2307,27 @@
 
 <!-- MODAL: detalle de una deficiencia (solo lectura; si está abierta, Cerrar / Editar) -->
 <div class="modal-bg" id="modal-def-detalle">
-  <div class="modal">
+  <div class="modal modal-con-x">
+    <button class="modal-x" onclick="cerrarDetalleDef()" title="Volver" aria-label="Volver">✕</button>
     <h2 id="def-detalle-titulo">Deficiencia</h2>
     <div class="modal-sub" id="def-detalle-sub"></div>
     <div id="def-detalle-cuerpo"></div>
     <div class="def-fotos" id="def-detalle-fotos"></div>
-    <div class="modal-actions">
-      <button class="btn solo-operador" id="def-detalle-cerrar-def">✓ Cerrar deficiencia</button>
+    <!-- "Marcar como resuelta" / "Reabrir" van separados (a la izquierda; en el celular, en su propia fila) -->
+    <div class="modal-actions def-detalle-acciones">
+      <button class="btn solo-operador def-resolver" id="def-detalle-cerrar-def">✓ Marcar como resuelta</button>
+      <button class="btn btn-sec solo-jefe def-resolver" id="def-detalle-reabrir">↺ Reabrir</button>
+      <div class="def-acciones-sep"></div>
       <button class="btn btn-sec solo-operador" id="def-detalle-editar">✏️ Editar</button>
-      <button class="btn btn-sec" onclick="cerrarDetalleDef()">Cerrar ventana</button>
+      <button class="btn btn-sec" onclick="cerrarDetalleDef()">Volver</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL: cerrar deficiencia -->
+<!-- MODAL: marcar una deficiencia como resuelta (la cierra) -->
 <div class="modal-bg" id="modal-def-cerrar">
   <div class="modal">
-    <h2>Cerrar deficiencia</h2>
+    <h2>Marcar como resuelta</h2>
     <div class="modal-sub" id="modal-def-cerrar-info"></div>
     <div class="field">
       <label>Fecha de cierre *</label>
@@ -2322,7 +2339,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-sec" onclick="cerrarModalDefCerrar()">Cancelar</button>
-      <button class="btn" onclick="guardarCierreDef()">✓ Cerrar deficiencia</button>
+      <button class="btn" onclick="guardarCierreDef()">✓ Marcar como resuelta</button>
     </div>
   </div>
 </div>
@@ -2658,6 +2675,7 @@ let equipos = [];          // fichas de equipos activos (todas las listas y sele
 let equiposTodos = [];     // también los dados de baja (para verlos con "Mostrar dados de baja" y reactivarlos)
 let deficiencias = [];     // registro de deficiencias (averías fuera del plan)
 let fotosDef = [];         // fotos de deficiencias (mant_deficiencias_fotos)
+let reaperturasDef = [];   // deficiencias resueltas que se reabrieron (mant_deficiencias_reaperturas)
 let defActual = null;      // deficiencia en edición o cierre
 let certificados = [];     // certificados del barco (solo activos)
 let certHistorial = [];    // renovaciones de certificados
@@ -2964,7 +2982,8 @@ async function cargarTodo() {
       {data: ac, error: e20},
       {data: rl, error: e21},
       {data: ca, error: e22},
-      {data: fd, error: e23}
+      {data: fd, error: e23},
+      {data: ra, error: e24}
     ] = await Promise.all([
       // Todo filtrado por el barco elegido. Todas las tareas (también las dadas de baja); abajo se separan las activas
       traerTodo(() => sb.from('mant_tareas').select('*').eq('barco_id', B).order('id')),
@@ -2997,7 +3016,8 @@ async function cargarTodo() {
         .order('fecha', { ascending: false }).order('id', { ascending: false })),
       traerTodo(() => sb.from('mant_cargas_aceite').select('*').eq('barco_id', B)
         .order('fecha', { ascending: false }).order('id', { ascending: false })),
-      traerTodo(() => sb.from('mant_deficiencias_fotos').select('*').eq('barco_id', B).order('creado_en').order('id'))
+      traerTodo(() => sb.from('mant_deficiencias_fotos').select('*').eq('barco_id', B).order('creado_en').order('id')),
+      traerTodo(() => sb.from('mant_deficiencias_reaperturas').select('*').eq('barco_id', B).order('reabierta_en').order('id'))
     ]);
     // Si mientras tanto se eligió otro barco, esta respuesta ya no sirve
     if (!barcoActual || barcoActual.id !== B) return;
@@ -3024,6 +3044,7 @@ async function cargarTodo() {
     if (e21) throw e21;
     if (e22) throw e22;
     if (e23) throw e23;
+    if (e24) throw e24;
     equiposTodos = eq || [];
     equipos = equiposTodos.filter(e => e.activo);
     tareasTodas = tt || [];
@@ -3058,6 +3079,7 @@ async function cargarTodo() {
     rellenos = rl || [];
     cargasAceite = ca || [];
     fotosDef = fd || [];
+    reaperturasDef = ra || [];
     renderTodo();
     limpiarFotosPorBorrar();   // en segundo plano
     await cargarUsuariosEmpresa();
@@ -5257,6 +5279,7 @@ function renderDeficiencias() {
     return;
   }
   div.innerHTML = filtradas.map(renderDefCard).join('');
+  cargarMiniaturas(div);
 }
 
 function renderDefCard(d) {
@@ -5281,12 +5304,10 @@ function renderDefCard(d) {
     ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
   const acciones = abierta
     ? `<div class="def-acciones">
-         <button class="btn solo-operador" onclick="event.stopPropagation();abrirModalDefCerrar(${d.id})">✓ Cerrar</button>
+         <button class="btn solo-operador" onclick="event.stopPropagation();abrirModalDefCerrar(${d.id})">✓ Marcar como resuelta</button>
          <button class="btn btn-sec btn-pequeno solo-operador" onclick="event.stopPropagation();abrirModalDef(${d.id})">✏️ Editar</button>
        </div>`
     : '<div></div>';
-
-  const nFotos = fotosDeDef(d.id).length;
 
   return `
     <div class="task-card ${cls}" onclick="abrirDetalleDef(${d.id})" style="cursor:pointer" title="Ver el detalle y las fotos">
@@ -5294,8 +5315,9 @@ function renderDefCard(d) {
       <div class="task-info">
         <div class="equipo"><span class="badge-tipo">${numeroDef(d)}</span>${equipoHtml}${criticaHtml}</div>
         <div class="tarea">${escape(d.descripcion)}</div>
-        <div class="meta">Detectada: ${fmtFecha(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''} · Límite: ${fmtFecha(d.fecha_limite)}${nFotos ? ` · 📷 ${nFotos}` : ''}</div>
+        <div class="meta">Detectada: ${fmtFecha(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''} · Límite: ${fmtFecha(d.fecha_limite)}</div>
         ${cierreHtml}
+        ${htmlMiniaturasDef(d.id)}
       </div>
       <div class="proxima-box">
         <div class="valor">${valor}</div>
@@ -5422,12 +5444,13 @@ async function guardarCierreDef() {
   if (!fecha) { toast('Falta la fecha de cierre', true); return; }
   if (!accion) { toast('Falta la acción realizada', true); return; }
   if (fecha < defActual.fecha_detectada) { toast('La fecha de cierre no puede ser anterior a la detectada', true); return; }
+  if (!confirm(`¿Marcar la deficiencia ${numeroDef(defActual)} como resuelta?\n\nDeja de figurar como abierta y ya no se puede editar. Si fue un error, jefe o admin puede reabrirla desde el detalle.`)) return;
   try {
     const { error } = await sb.from('mant_deficiencias')
       .update({ estado: 'cerrada', fecha_cierre: fecha, accion_realizada: accion })
       .eq('id', defActual.id);
     if (error) throw error;
-    toast(`✓ Deficiencia ${numeroDef(defActual)} cerrada`);
+    toast(`✓ Deficiencia ${numeroDef(defActual)} marcada como resuelta`);
     cerrarModalDefCerrar();
     await cargarTodo();
   } catch (err) {
@@ -8423,8 +8446,8 @@ function renderFotosDef(defId) {
     <div class="def-fotos-cab"><strong>📷 Fotos</strong><span class="def-fotos-cuenta">${fotos.length} de ${FOTOS_POR_DEF_MAX}</span></div>
     ${fotos.length
       ? `<div class="def-fotos-grilla">${fotos.map(f => `
-          <div class="def-foto" data-ruta="${escape(f.ruta)}">
-            <img alt="Foto de la deficiencia" title="Ver en grande" onclick="abrirVisorFoto(this.parentElement.dataset.ruta)">
+          <div class="def-foto">
+            <img data-ruta-mini="${escape(f.ruta)}" alt="Foto de la deficiencia" title="Ver en grande" onclick="abrirVisorFoto(this.dataset.rutaMini)">
             ${puedeBorrarFotoDef(f) ? `<button class="def-foto-borrar" title="Borrar foto" onclick="borrarFotoDef(${f.id})">✕</button>` : ''}
           </div>`).join('')}</div>`
       : '<div class="def-fotos-vacio">Sin fotos</div>'}
@@ -8434,10 +8457,45 @@ function renderFotosDef(defId) {
         : `<button class="btn btn-sec btn-pequeno" onclick="agregarFotosDef(${defId}, true)">📷 Sacar foto</button>
            <button class="btn btn-sec btn-pequeno" onclick="agregarFotosDef(${defId}, false)">🖼 Galería</button>`}
     </div>`;
-  div.querySelectorAll('.def-foto').forEach(async el => {
-    try { el.querySelector('img').src = await urlFoto(el.dataset.ruta, true); }
-    catch (err) { console.error(err); el.classList.add('error'); }
-  });
+  cargarMiniaturas(div);
+}
+
+// Miniaturas en las tarjetas de deficiencias y en el historial de la ficha: hasta MINIS_EN_TARJETA + 1 fotos se
+// ven todas; con más, MINIS_EN_TARJETA y "+N". Tocar una abre la foto (sin abrir el detalle); "+N", el detalle.
+const MINIS_EN_TARJETA = 3;
+function htmlMiniaturasDef(defId) {
+  const fotos = fotosDeDef(defId);
+  if (!fotos.length) return '';
+  const ver = fotos.length <= MINIS_EN_TARJETA + 1 ? fotos : fotos.slice(0, MINIS_EN_TARJETA);
+  const resto = fotos.length - ver.length;
+  return `<div class="def-minis">${ver.map(f =>
+      `<img class="def-mini" data-ruta-mini="${escape(f.ruta)}" alt="Foto" title="Ver en grande" onclick="event.stopPropagation();abrirVisorFoto(this.dataset.rutaMini)">`).join('')}${
+    resto ? `<span class="def-mini def-mini-mas" title="Ver todas en el detalle">+${resto}</span>` : ''}</div>`;
+}
+// Pone el src de las <img data-ruta-mini="<ruta de la grande>"> de un contenedor, con los enlaces que falten
+// pedidos de una sola vez
+async function cargarMiniaturas(contenedor) {
+  const imgs = [...contenedor.querySelectorAll('img[data-ruta-mini]')];
+  if (!imgs.length) return;
+  try {
+    await urlsFotosLote(imgs.map(i => rutaMiniatura(i.dataset.rutaMini)));
+  } catch (err) {
+    console.error(err);
+  }
+  for (const img of imgs) {
+    const g = urlsFotos.get(rutaMiniatura(img.dataset.rutaMini));
+    if (g) img.src = g.url; else img.classList.add('error');
+  }
+}
+// Enlaces firmados de varias rutas en un pedido (de a 100), guardados en urlsFotos como los de urlFoto()
+async function urlsFotosLote(rutas) {
+  const faltan = [...new Set(rutas)].filter(r => { const g = urlsFotos.get(r); return !(g && g.vence > Date.now() + 60000); });
+  for (let i = 0; i < faltan.length; i += 100) {
+    const { data, error } = await sb.storage.from(FOTOS_BUCKET).createSignedUrls(faltan.slice(i, i + 100), FOTO_URL_SEGUNDOS);
+    if (error) throw error;
+    const vence = Date.now() + FOTO_URL_SEGUNDOS * 1000;
+    for (const x of data || []) if (x.signedUrl && !x.error) urlsFotos.set(x.path, { url: x.signedUrl, vence });
+  }
 }
 
 async function agregarFotosDef(defId, camara) {
@@ -9116,8 +9174,9 @@ function htmlItemHist(i) {
         <div class="hist-info">
           <div class="tipo-hist">⚠️ Deficiencia ${numeroDef(d)} · ${abierta ? (vencida ? 'abierta, vencida' : 'abierta') : 'cerrada'}${d.critica ? ' <span class="badge-critico">⚠️ CRÍTICA</span>' : ''}</div>
           <div class="tarea">${escape(d.descripcion)}</div>
-          <div class="por">Detectada el ${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}${abierta ? ` · Límite: ${fmtFechaDMA(d.fecha_limite)}` : ''}${fotosDeDef(d.id).length ? ` · 📷 ${fotosDeDef(d.id).length}` : ''}</div>
+          <div class="por">Detectada el ${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}${abierta ? ` · Límite: ${fmtFechaDMA(d.fecha_limite)}` : ''}</div>
           ${abierta ? '' : `<div class="notas">✔ Cerrada el ${fmtFechaDMA(d.fecha_cierre)} por ${escape(quienCerroDef(d))}: ${escape(d.accion_realizada || '')}</div>`}
+          ${htmlMiniaturasDef(d.id)}
         </div>
       </div>`;
   }
@@ -9154,6 +9213,7 @@ function renderHistorialFicha() {
     (verAbiertas.length ? `<div class="hist-abiertas-titulo">Deficiencias abiertas (${verAbiertas.length})</div>${verAbiertas.map(htmlItemHist).join('')}` : '') +
     (verAbiertas.length && items.length ? '<div class="hist-abiertas-titulo" style="color:var(--texto-suave);margin-top:14px">Historial</div>' : '') +
     items.map(htmlItemHist).join('');
+  cargarMiniaturas(lista);
 }
 function cambiarFiltroHistFicha(f) {
   filtroHistFicha = f;
@@ -9175,12 +9235,21 @@ function abrirDetalleDef(id) {
     fila('Detectada', `${fmtFechaDMA(d.fecha_detectada)}${d.detectada_por ? ' por ' + escape(d.detectada_por) : ''}`),
     fila('Fecha límite', fmtFechaDMA(d.fecha_limite)),
     abierta ? '' : fila('Cerrada', `${fmtFechaDMA(d.fecha_cierre)} por ${escape(quienCerroDef(d))}`),
-    abierta ? '' : fila('Acción realizada', escape(d.accion_realizada || ''))
+    abierta ? '' : fila('Acción realizada', escape(d.accion_realizada || '')),
+    ...reaperturasDef.filter(r => r.deficiencia_id === id).map(r => fila('Reabierta',
+      `${fmtFechaHora(r.reabierta_en)} por ${escape(nombreUsuarioComb(r.reabierta_por) || '—')}` +
+      `<br><small style="color:var(--texto-suave)">Estaba resuelta el ${fmtFechaDMA(r.fecha_cierre_anterior)}: ${escape(r.accion_anterior || '')}</small>`))
   ].join('');
   const cerrar = document.getElementById('def-detalle-cerrar-def'), editar = document.getElementById('def-detalle-editar');
+  const reabrir = document.getElementById('def-detalle-reabrir');
   cerrar.style.display = editar.style.display = abierta ? '' : 'none';
+  reabrir.style.display = abierta ? 'none' : '';
+  // La línea que separa "Marcar como resuelta" / "Reabrir" (celular) solo si se ve uno de los dos
+  document.querySelector('#modal-def-detalle .def-acciones-sep').style.display =
+    (abierta ? puedeRegistrar() : puedeEditar()) ? '' : 'none';
   cerrar.onclick = () => { cerrarDetalleDef(); abrirModalDefCerrar(id); };
   editar.onclick = () => { cerrarDetalleDef(); abrirModalDef(id); };
+  reabrir.onclick = () => reabrirDef(id);
   defDetalleId = id;
   renderFotosDef(id);
   document.getElementById('modal-def-detalle').classList.add('show');
@@ -9188,6 +9257,23 @@ function abrirDetalleDef(id) {
 function cerrarDetalleDef() {
   defDetalleId = null;
   document.getElementById('modal-def-detalle').classList.remove('show');
+}
+// Reabrir una deficiencia resuelta (jefe/admin): la RPC guarda quién, cuándo y el cierre anterior
+async function reabrirDef(id) {
+  const d = deficiencias.find(x => x.id === id);
+  if (!d || d.estado !== 'cerrada' || !puedeEditar()) return;
+  const vencida = d.fecha_limite < hoyLocalISO() ? ' Su fecha límite ya pasó, así que va a figurar como vencida.' : '';
+  if (!confirm(`¿Reabrir la deficiencia ${numeroDef(d)}?\n\nVuelve a figurar como abierta.${vencida} El cierre anterior (fecha y acción) queda registrado en su detalle.`)) return;
+  try {
+    const { error } = await sb.rpc('mant_deficiencias_reabrir', { p_id: id });
+    if (error) throw error;
+    toast(`✓ Deficiencia ${numeroDef(d)} reabierta`);
+    await cargarTodo();
+    if (defDetalleId === id) abrirDetalleDef(id);
+  } catch (err) {
+    console.error(err);
+    toast(textoError(err), true);
+  }
 }
 
 // Historial_BM_Santa_Lucia_<equipo>[_<filtro>]_2026-11-04.xlsx: lo que muestra el filtro, en el mismo orden
