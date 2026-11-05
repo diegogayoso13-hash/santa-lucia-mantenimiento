@@ -127,6 +127,8 @@ Each save also inserts one `mant_lecturas_horas` row per equipment (including th
 
 `mant_buque` (one row per ship; the app shows the selected ship's) holds vessel particulars (dimensions, tonnage, registry, engines) rendered by `renderBarco()`. `mant_equipos` holds one row per piece of equipment (engine, generator, compressor, etc.) with free-text technical data, rendered as a grid (`renderEquipos()`) and a detail view (`renderFichaEquipo()`) with Chart.js graphs of hours-over-time and maintenance history (`renderGraficosEquipo()`). Every task links to an equipment row via `tarea.equipo_id` (`not null` in the database), which makes the equipment name clickable to jump to its ficha. Tasks also carry the ficha's name in `tarea.equipo`: the hours form and hour cascading go by `equipo_id`, but the Tareas and Historial filters, the plan export and `mant_lecturas_horas` still match on the name. Renaming a ficha doesn't update `tarea.equipo` or the readings.
 
+**New equipment:** "➕ Nuevo equipo" in the Equipos tab (`.solo-jefe`) opens `#modal-equipo` empty (`abrirModalEquipo()` without an id); `guardarEquipo()` inserts it.
+
 ### Retired equipment
 
 - **Retiring:** "⏹ Dar de baja" in the equipment modal (`darDeBajaEquipo()`, jefe/admin) sets `mant_equipos.activo = false`. Nothing is deleted.
