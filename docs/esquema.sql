@@ -2,7 +2,7 @@
 -- Proyecto: "Mantenimiento Naval" (ncughlkgdgigwkggnxri), usado por la app (index.html).
 -- Desde la mudanza del 2026-11-01 es la base real. El proyecto viejo (zfoetyauhauztkkltjaz) quedó como respaldo y no se toca.
 -- Todas las tablas usan prefijo mant_ y tienen RLS activado
--- Refleja la base al 2026-11-03. Si hay dudas, la fuente de verdad es el proyecto en Supabase.
+-- Refleja la base al 2026-11-06. Si hay dudas, la fuente de verdad es el proyecto en Supabase.
 --
 -- VARIOS BARCOS:
 -- - mant_buque es la tabla de barcos: una fila por barco (id 1 = B/M Santa Lucía).
@@ -21,6 +21,13 @@
 --   mant_accesos_guardar cambia rol y barcos de un usuario. Las altas de usuarios, las contraseñas temporales y
 --   "cambiar mi contraseña" las hace la Edge Function mant-usuarios (supabase/functions/mant-usuarios/index.ts),
 --   que usa la service role y escribe mant_perfiles.
+--
+-- DEPARTAMENTOS (Máquinas / Cubierta), desde el 2026-11-06:
+-- - Cada equipo tiene departamento; tareas, historial, lecturas de horas y deficiencias son del de su equipo.
+--   Certificados y tripulantes tienen el suyo. Un certificado puede tener un equipo (opcional, de cualquier departamento).
+-- - Un acceso puede tener departamento (mant_accesos.departamento; NULL = todo el barco). Con departamento,
+--   el usuario ve todo el barco y edita solo lo de su departamento (p. ej. capitán = jefe de Cubierta).
+-- - Pañol y Consumos son de Máquinas. Mi Barco, Herramientas y la foto del barco: solo accesos de todo el barco.
 
 -- =============== EMPRESAS ===============
 -- Se crean desde la base (al sumar un cliente); el admin de la empresa solo puede renombrarla.
@@ -82,8 +89,11 @@ CREATE TABLE public.mant_accesos (
   barco_id INTEGER,
   rol TEXT NOT NULL CONSTRAINT mant_accesos_rol_check
     CHECK (rol IN ('admin_empresa', 'jefe', 'operador', 'lectura')),
+  -- NULL = todo el barco; con departamento, ve todo y edita solo ese departamento (el admin siempre es de todo)
+  departamento TEXT CONSTRAINT mant_accesos_departamento_check CHECK (departamento IN ('Máquinas', 'Cubierta')),
   creado_en TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT mant_accesos_barco_rol_check CHECK ((rol = 'admin_empresa') = (barco_id IS NULL)),
+  CONSTRAINT mant_accesos_departamento_admin_check CHECK (rol <> 'admin_empresa' OR departamento IS NULL),
   -- el barco tiene que ser de esa empresa
   CONSTRAINT mant_accesos_barco_id_fkey FOREIGN KEY (empresa_id, barco_id)
     REFERENCES public.mant_buque(empresa_id, id) ON DELETE CASCADE,
@@ -130,6 +140,10 @@ CREATE TABLE public.mant_equipos (
   notas TEXT,
   activo BOOLEAN DEFAULT true,
   critico BOOLEAN NOT NULL DEFAULT false,   -- su falla genera riesgo de seguridad
+  departamento TEXT NOT NULL DEFAULT 'Máquinas'
+    CONSTRAINT mant_equipos_departamento_check CHECK (departamento IN ('Máquinas', 'Cubierta')),
+  mmsi TEXT,                                -- electrónica de Cubierta (opcional)
+  id_hex TEXT,                              -- ID HEX de la EPIRB (opcional)
   -- "Toma las horas de": equipo sin horómetro propio (p. ej. una caja reductora) que recibe las mismas horas
   -- que otro del mismo barco cuando se cargan las horas de ese. Sin círculos (trigger mant_equipos_horas_sin_circulo).
   horas_de_id INTEGER,
@@ -331,7 +345,10 @@ CREATE TABLE public.mant_certificados (
     CHECK (categoria IN ('Seguridad contra incendios', 'Navegabilidad', 'Comunicaciones', 'Salvavidas', 'Pirotecnia', 'Otros', 'Tripulación')),
   tripulante_id BIGINT,                     -- tripulante del mismo barco (FK compuesta abajo)
   departamento TEXT NOT NULL CHECK (departamento IN ('Cubierta', 'Máquinas')),  -- en documentos personales, el del tripulante (trigger)
-  fecha_vencimiento DATE,                   -- NULL = falta cargarlo (certificados copiados al crear un barco)
+  -- Equipo opcional del mismo barco (se ve en su ficha). Puede ser de otro departamento que el certificado
+  -- (p. ej. la inspección de la grúa, de Máquinas, la lleva Cubierta). Los documentos personales no tienen.
+  equipo_id INTEGER,
+  fecha_vencimiento DATE,                  -- NULL = falta cargarlo (certificados copiados al crear un barco)
   dias_aviso INTEGER NOT NULL DEFAULT 30 CHECK (dias_aviso >= 0),
   observaciones TEXT,
   activo BOOLEAN NOT NULL DEFAULT true,
@@ -346,7 +363,10 @@ CREATE TABLE public.mant_certificados (
     CHECK ((postergada_hasta IS NULL) = (motivo_postergacion IS NULL)),
   CONSTRAINT mant_certificados_barco_id_id_key UNIQUE (barco_id, id),
   CONSTRAINT mant_certificados_tripulante_id_fkey FOREIGN KEY (barco_id, tripulante_id)
-    REFERENCES public.mant_tripulantes(barco_id, id)
+    REFERENCES public.mant_tripulantes(barco_id, id),
+  CONSTRAINT mant_certificados_equipo_id_fkey FOREIGN KEY (barco_id, equipo_id)
+    REFERENCES public.mant_equipos(barco_id, id) ON DELETE SET NULL (equipo_id),
+  CONSTRAINT mant_certificados_equipo_check CHECK (equipo_id IS NULL OR tripulante_id IS NULL)
 );
 
 -- Una fila por renovación; la escribe la función mant_certificados_renovar
@@ -366,6 +386,7 @@ CREATE TABLE public.mant_certificados_historial (
 -- =============== ÍNDICES ===============
 CREATE INDEX idx_mant_cert_hist_certificado ON public.mant_certificados_historial (certificado_id);
 CREATE INDEX idx_mant_certificados_tripulante ON public.mant_certificados (tripulante_id);
+CREATE INDEX idx_mant_certificados_equipo ON public.mant_certificados (barco_id, equipo_id);
 CREATE INDEX idx_mant_equipos_categoria ON public.mant_equipos (categoria);
 CREATE INDEX idx_mant_equipos_nombre ON public.mant_equipos (nombre);
 -- Nombre único por barco, sin mayúsculas ni espacios de más y contando los dados de baja
@@ -573,8 +594,44 @@ LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
   SELECT CASE p_rol WHEN 'admin_empresa' THEN 4 WHEN 'jefe' THEN 3 WHEN 'operador' THEN 2 WHEN 'lectura' THEN 1 ELSE 0 END;
 $$;
 
--- Barcos donde el usuario actual tiene al menos ese nivel
+-- Barcos donde el usuario actual tiene al menos ese nivel en TODO el barco.
+-- Ver (nivel 1): cualquier acceso. Más: solo accesos sin departamento (o admin).
 CREATE FUNCTION mant_priv.barcos(p_nivel INTEGER) RETURNS INTEGER[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT x.id), '{}') FROM (
+    SELECT a.barco_id AS id
+      FROM public.mant_accesos a
+     WHERE a.user_id = auth.uid() AND a.barco_id IS NOT NULL
+       AND mant_priv.nivel_rol(a.rol) >= p_nivel
+       AND (a.departamento IS NULL OR p_nivel <= 1)
+    UNION
+    SELECT b.id
+      FROM public.mant_accesos a
+      JOIN public.mant_buque b ON b.empresa_id = a.empresa_id
+     WHERE a.user_id = auth.uid() AND a.rol = 'admin_empresa'
+  ) x;
+$$;
+
+-- Barcos donde el usuario tiene ese nivel en un departamento (accesos de todo el barco o de ese departamento).
+-- Pañol y Consumos usan barcos_depto(n, 'Máquinas').
+CREATE FUNCTION mant_priv.barcos_depto(p_nivel INTEGER, p_depto TEXT) RETURNS INTEGER[]
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(array_agg(DISTINCT x.id), '{}') FROM (
+    SELECT a.barco_id AS id
+      FROM public.mant_accesos a
+     WHERE a.user_id = auth.uid() AND a.barco_id IS NOT NULL
+       AND mant_priv.nivel_rol(a.rol) >= p_nivel
+       AND (a.departamento IS NULL OR a.departamento = p_depto)
+    UNION
+    SELECT b.id
+      FROM public.mant_accesos a
+      JOIN public.mant_buque b ON b.empresa_id = a.empresa_id
+     WHERE a.user_id = auth.uid() AND a.rol = 'admin_empresa'
+  ) x;
+$$;
+
+-- Barcos donde el usuario tiene ese nivel en algún departamento (para lo que no se sabe de qué departamento es)
+CREATE FUNCTION mant_priv.barcos_alguno(p_nivel INTEGER) RETURNS INTEGER[]
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT coalesce(array_agg(DISTINCT x.id), '{}') FROM (
     SELECT a.barco_id AS id
@@ -607,15 +664,55 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
    WHERE a.empresa_id = ANY (mant_priv.empresas_admin());
 $$;
 
--- Nivel del usuario actual en un barco (lo usan los triggers de control)
-CREATE FUNCTION mant_priv.nivel(p_barco INTEGER) RETURNS INTEGER
+-- Nivel del usuario actual en un barco para un departamento: cuentan los accesos de todo el barco y los de
+-- ese departamento. Con p_depto NULL (fila sin departamento conocido), solo los de todo el barco.
+CREATE FUNCTION mant_priv.nivel_depto(p_barco INTEGER, p_depto TEXT) RETURNS INTEGER
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT coalesce(max(mant_priv.nivel_rol(a.rol)), 0)
     FROM public.mant_accesos a
    WHERE a.user_id = auth.uid()
+     AND (a.departamento IS NULL OR a.departamento = p_depto)
      AND (a.barco_id = p_barco
           OR (a.rol = 'admin_empresa'
               AND a.empresa_id = (SELECT b.empresa_id FROM public.mant_buque b WHERE b.id = p_barco)));
+$$;
+CREATE FUNCTION mant_priv.puede(p_barco INTEGER, p_depto TEXT, p_nivel INTEGER) RETURNS BOOLEAN
+LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT mant_priv.nivel_depto(p_barco, p_depto) >= p_nivel;
+$$;
+-- Nivel en todo el barco
+CREATE FUNCTION mant_priv.nivel(p_barco INTEGER) RETURNS INTEGER
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT mant_priv.nivel_depto(p_barco, NULL);
+$$;
+
+-- Departamento de una fila según su equipo (NULL si no se encuentra: entonces hace falta acceso de todo el barco).
+-- Las políticas de escritura las llaman por fila: mant_priv.puede(barco_id, mant_priv.depto_x(barco_id, x_id), nivel).
+CREATE FUNCTION mant_priv.depto_equipo(p_barco INTEGER, p_equipo BIGINT) RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT e.departamento FROM public.mant_equipos e WHERE e.barco_id = p_barco AND e.id = p_equipo;
+$$;
+-- Las lecturas de horas van por nombre (único por barco, sin mayúsculas ni espacios de más)
+CREATE FUNCTION mant_priv.depto_equipo_nombre(p_barco INTEGER, p_nombre TEXT) RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT e.departamento FROM public.mant_equipos e
+   WHERE e.barco_id = p_barco AND lower(btrim(e.nombre)) = lower(btrim(p_nombre));
+$$;
+CREATE FUNCTION mant_priv.depto_tarea(p_barco INTEGER, p_tarea BIGINT) RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT e.departamento FROM public.mant_tareas t
+    JOIN public.mant_equipos e ON e.barco_id = t.barco_id AND e.id = t.equipo_id
+   WHERE t.barco_id = p_barco AND t.id = p_tarea;
+$$;
+CREATE FUNCTION mant_priv.depto_deficiencia(p_barco INTEGER, p_deficiencia BIGINT) RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT e.departamento FROM public.mant_deficiencias d
+    JOIN public.mant_equipos e ON e.barco_id = d.barco_id AND e.id = d.equipo_id
+   WHERE d.barco_id = p_barco AND d.id = p_deficiencia;
+$$;
+CREATE FUNCTION mant_priv.depto_certificado(p_barco INTEGER, p_certificado BIGINT) RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT c.departamento FROM public.mant_certificados c WHERE c.barco_id = p_barco AND c.id = p_certificado;
 $$;
 
 -- =============== PERMISOS: TRIGGERS DE AUTOR Y DE CONTROL ===============
@@ -669,14 +766,19 @@ CREATE TRIGGER mant_deficiencias_autor BEFORE INSERT OR UPDATE ON public.mant_de
   FOR EACH ROW EXECUTE FUNCTION mant_priv.deficiencias_autor();
 
 -- El operador (nivel < jefe) solo cambia el "estado" de una tarea al registrar o cargar horas, no el plan,
--- y puede quitar una postergación al registrar pero no postergar
+-- y puede quitar una postergación al registrar pero no postergar. El plan lo cambia el jefe del departamento
+-- del equipo (si la tarea pasa a otro equipo, también del departamento nuevo).
 CREATE FUNCTION mant_priv.tareas_control_operador() RETURNS trigger
 LANGUAGE plpgsql SET search_path = '' AS $$
 DECLARE
   v_libres TEXT[] := ARRAY['fecha_ult', 'ult_hrs', 'hrs_totales', 'proxima_hrs', 'proxima_fecha', 'realizado_por',
                            'observaciones', 'postergada_hasta', 'motivo_postergacion', 'actualizada_en'];
 BEGIN
-  IF auth.uid() IS NULL OR mant_priv.nivel(OLD.barco_id) >= 3 THEN RETURN NEW; END IF;
+  IF auth.uid() IS NULL
+     OR least(mant_priv.nivel_depto(OLD.barco_id, mant_priv.depto_equipo(OLD.barco_id, OLD.equipo_id)),
+              mant_priv.nivel_depto(NEW.barco_id, mant_priv.depto_equipo(NEW.barco_id, NEW.equipo_id))) >= 3 THEN
+    RETURN NEW;
+  END IF;
   IF (to_jsonb(NEW) - v_libres) IS DISTINCT FROM (to_jsonb(OLD) - v_libres) THEN
     RAISE EXCEPTION 'Sin permiso para cambiar el plan de la tarea' USING ERRCODE = '42501';
   END IF;
@@ -690,13 +792,13 @@ $$;
 CREATE TRIGGER mant_tareas_control_operador BEFORE UPDATE ON public.mant_tareas
   FOR EACH ROW EXECUTE FUNCTION mant_priv.tareas_control_operador();
 
--- El operador solo cambia la cantidad de un repuesto (movimientos de stock)
+-- El operador solo cambia la cantidad de un repuesto (movimientos de stock). Pañol es de Máquinas.
 CREATE FUNCTION mant_priv.repuestos_control_operador() RETURNS trigger
 LANGUAGE plpgsql SET search_path = '' AS $$
 DECLARE
   v_libres TEXT[] := ARRAY['cantidad', 'actualizado_en'];
 BEGIN
-  IF auth.uid() IS NULL OR mant_priv.nivel(OLD.barco_id) >= 3 THEN RETURN NEW; END IF;
+  IF auth.uid() IS NULL OR mant_priv.nivel_depto(OLD.barco_id, 'Máquinas') >= 3 THEN RETURN NEW; END IF;
   IF (to_jsonb(NEW) - v_libres) IS DISTINCT FROM (to_jsonb(OLD) - v_libres) THEN
     RAISE EXCEPTION 'Sin permiso para cambiar el repuesto (solo la cantidad)' USING ERRCODE = '42501';
   END IF;
@@ -745,11 +847,12 @@ CREATE TRIGGER mant_equipos_horas_sin_circulo BEFORE INSERT OR UPDATE OF horas_d
   FOR EACH ROW EXECUTE FUNCTION mant_priv.equipos_horas_sin_circulo();
 
 -- Al renombrar una ficha, el nombre nuevo pasa a sus tareas (por equipo_id) y a sus lecturas de horas
--- (por el nombre viejo, en ese barco), en la misma transacción. Corre con los permisos de quien edita
--- (jefe/admin, que también pueden modificar tareas y lecturas). El nombre es único por barco (índice
--- mant_equipos_nombre_unico), así que las lecturas de otra ficha nunca se tocan.
+-- (por el nombre viejo, en ese barco), en la misma transacción. Corre como dueño (SECURITY DEFINER): solo llega
+-- acá quien pudo editar la ficha, y las lecturas con el nombre viejo ya no se pueden asociar a su equipo para
+-- controlar el departamento. El nombre es único por barco (índice mant_equipos_nombre_unico), así que las
+-- lecturas de otra ficha nunca se tocan.
 CREATE FUNCTION mant_priv.equipo_renombrar() RETURNS trigger
-LANGUAGE plpgsql SET search_path = '' AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   UPDATE public.mant_tareas SET equipo = NEW.nombre
    WHERE barco_id = NEW.barco_id AND equipo_id = NEW.id AND equipo IS DISTINCT FROM NEW.nombre;
@@ -768,31 +871,25 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mant_priv TO authenticated, service_rol
 -- =============== ROW LEVEL SECURITY ===============
 -- Todo es "TO authenticated": sin sesión (anon) no hay ninguna política ni permisos sobre las tablas.
 -- mant_priv.barcos(n) va en un subselect con cast, así Postgres lo calcula una sola vez por consulta.
--- Por tabla: ver / agregar / modificar / borrar, con el nivel mínimo (1 lectura, 2 operador, 3 jefe):
+-- Ver es siempre barcos(1) (cualquier acceso al barco, también los de un departamento).
+-- Por tabla: agregar / modificar / borrar, con el nivel mínimo (1 lectura, 2 operador, 3 jefe) y de qué
+-- departamento (todo = solo accesos de todo el barco; Máquinas = Pañol y Consumos):
 --
---   tabla                          ver agregar modificar borrar
---   mant_equipos                    1     3        3       3
---   mant_herramientas               1     3        3       3
---   mant_tripulantes                1     3        3       3
---   mant_certificados               1     3        3       3
---   mant_certificados_historial     1     3        3       3   (lo escribe mant_certificados_renovar)
---   mant_tarea_repuestos            1     3        3       3
---   mant_tareas                     1     3        2       3   (el operador solo el estado: trigger)
---   mant_repuestos                  1     3        2       3   (el operador solo la cantidad: trigger)
---   mant_historial                  1     2        3       3
---   mant_lecturas_horas             1     2        3       3
---   mant_movimientos                1     2        3       3
+--   tabla                          ver agregar modificar borrar  departamento
+--   mant_herramientas               1     3        3       3     todo el barco
+--   mant_repuestos                  1     3        2       3     Máquinas (el operador solo la cantidad: trigger)
+--   mant_movimientos                1     2        3       3     Máquinas
+--   mant_equipos                    1     3        3       3     su columna departamento
+--   mant_tripulantes                1     3        3       3     su columna departamento
+--   mant_certificados               1     3        3       3     su columna departamento
+--   mant_certificados_historial     1     3        3       3     el del certificado (lo escribe mant_certificados_renovar)
+--   mant_tareas                     1     3        2       3     el de su equipo (el operador solo el estado: trigger)
+--   mant_tarea_repuestos            1     3        3       3     el de la tarea
+--   mant_historial                  1     2        3       3     el de la tarea
+--   mant_lecturas_horas             1     2        3       3     el del equipo con ese nombre
 --
--- Las once se crean así (<tabla>, <v>, <a>, <m>, <b> según la tabla de arriba):
---   CREATE POLICY <tabla>_ver ON public.<tabla> FOR SELECT TO authenticated
---     USING (barco_id = ANY ((SELECT mant_priv.barcos(<v>))::INTEGER[]));
---   CREATE POLICY <tabla>_agregar ON public.<tabla> FOR INSERT TO authenticated
---     WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(<a>))::INTEGER[]));
---   CREATE POLICY <tabla>_modificar ON public.<tabla> FOR UPDATE TO authenticated
---     USING (barco_id = ANY ((SELECT mant_priv.barcos(<m>))::INTEGER[]))
---     WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(<m>))::INTEGER[]));
---   CREATE POLICY <tabla>_borrar ON public.<tabla> FOR DELETE TO authenticated
---     USING (barco_id = ANY ((SELECT mant_priv.barcos(<b>))::INTEGER[]));
+-- Las tres primeras: barco_id = ANY ((SELECT mant_priv.barcos(<n>))::INTEGER[]) (o barcos_depto(<n>, 'Máquinas')),
+-- que Postgres calcula una vez por consulta. Las de departamento: mant_priv.puede(barco_id, <departamento>, <n>), por fila.
 
 ALTER TABLE public.mant_empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_buque ENABLE ROW LEVEL SECURITY;
@@ -810,47 +907,113 @@ ALTER TABLE public.mant_certificados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_certificados_historial ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mant_tripulantes ENABLE ROW LEVEL SECURITY;
 
+-- Ver: barcos(1) en las once
 DO $$
-DECLARE g RECORD;
+DECLARE t TEXT;
 BEGIN
-  FOR g IN SELECT * FROM (VALUES
-    ('mant_equipos',                1, 3, 3, 3),
-    ('mant_herramientas',           1, 3, 3, 3),
-    ('mant_tripulantes',            1, 3, 3, 3),
-    ('mant_certificados',           1, 3, 3, 3),
-    ('mant_certificados_historial', 1, 3, 3, 3),
-    ('mant_tarea_repuestos',        1, 3, 3, 3),
-    ('mant_tareas',                 1, 3, 2, 3),
-    ('mant_repuestos',              1, 3, 2, 3),
-    ('mant_historial',              1, 2, 3, 3),
-    ('mant_lecturas_horas',         1, 2, 3, 3),
-    ('mant_movimientos',            1, 2, 3, 3)
-  ) v(tabla, ver, agregar, modificar, borrar) LOOP
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
-                   g.tabla || '_ver', g.tabla, g.ver);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
-                   g.tabla || '_agregar', g.tabla, g.agregar);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[])) WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
-                   g.tabla || '_modificar', g.tabla, g.modificar, g.modificar);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(%s))::INTEGER[]))',
-                   g.tabla || '_borrar', g.tabla, g.borrar);
+  FOREACH t IN ARRAY ARRAY['mant_equipos', 'mant_herramientas', 'mant_tripulantes', 'mant_certificados',
+                           'mant_certificados_historial', 'mant_tarea_repuestos', 'mant_tareas', 'mant_repuestos',
+                           'mant_historial', 'mant_lecturas_horas', 'mant_movimientos'] LOOP
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]))',
+                   t || '_ver', t);
   END LOOP;
 END $$;
 
--- Deficiencias: el operador crea, edita y cierra las abiertas; las cerradas solo las cambia jefe/admin
+-- Herramientas: todo el barco
+CREATE POLICY mant_herramientas_agregar ON public.mant_herramientas FOR INSERT TO authenticated
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+CREATE POLICY mant_herramientas_modificar ON public.mant_herramientas FOR UPDATE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+CREATE POLICY mant_herramientas_borrar ON public.mant_herramientas FOR DELETE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+
+-- Pañol: Máquinas
+CREATE POLICY mant_repuestos_agregar ON public.mant_repuestos FOR INSERT TO authenticated
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
+CREATE POLICY mant_repuestos_modificar ON public.mant_repuestos FOR UPDATE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]));
+CREATE POLICY mant_repuestos_borrar ON public.mant_repuestos FOR DELETE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
+CREATE POLICY mant_movimientos_agregar ON public.mant_movimientos FOR INSERT TO authenticated
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]));
+CREATE POLICY mant_movimientos_modificar ON public.mant_movimientos FOR UPDATE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
+CREATE POLICY mant_movimientos_borrar ON public.mant_movimientos FOR DELETE TO authenticated
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
+
+-- Equipos, certificados y tripulantes: por su columna departamento (cambiar de departamento pide los dos:
+-- en la práctica, acceso de todo el barco)
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['mant_equipos', 'mant_certificados', 'mant_tripulantes'] LOOP
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (mant_priv.puede(barco_id, departamento, 3))', t || '_agregar', t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (mant_priv.puede(barco_id, departamento, 3)) WITH CHECK (mant_priv.puede(barco_id, departamento, 3))', t || '_modificar', t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (mant_priv.puede(barco_id, departamento, 3))', t || '_borrar', t);
+  END LOOP;
+END $$;
+
+-- Tareas: por el departamento de su equipo (el operador modifica solo el estado: trigger)
+CREATE POLICY mant_tareas_agregar ON public.mant_tareas FOR INSERT TO authenticated
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 3));
+CREATE POLICY mant_tareas_modificar ON public.mant_tareas FOR UPDATE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 2))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 2));
+CREATE POLICY mant_tareas_borrar ON public.mant_tareas FOR DELETE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 3));
+
+-- Historial y repuestos de cada tarea: por el departamento de la tarea
+CREATE POLICY mant_historial_agregar ON public.mant_historial FOR INSERT TO authenticated
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 2));
+CREATE POLICY mant_historial_modificar ON public.mant_historial FOR UPDATE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3));
+CREATE POLICY mant_historial_borrar ON public.mant_historial FOR DELETE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3));
+CREATE POLICY mant_tarea_repuestos_agregar ON public.mant_tarea_repuestos FOR INSERT TO authenticated
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3));
+CREATE POLICY mant_tarea_repuestos_modificar ON public.mant_tarea_repuestos FOR UPDATE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3));
+CREATE POLICY mant_tarea_repuestos_borrar ON public.mant_tarea_repuestos FOR DELETE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_tarea(barco_id, tarea_id), 3));
+
+-- Lecturas de horas: por el departamento del equipo con ese nombre
+CREATE POLICY mant_lecturas_horas_agregar ON public.mant_lecturas_horas FOR INSERT TO authenticated
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo_nombre(barco_id, equipo), 2));
+CREATE POLICY mant_lecturas_horas_modificar ON public.mant_lecturas_horas FOR UPDATE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo_nombre(barco_id, equipo), 3))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo_nombre(barco_id, equipo), 3));
+CREATE POLICY mant_lecturas_horas_borrar ON public.mant_lecturas_horas FOR DELETE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo_nombre(barco_id, equipo), 3));
+
+-- Renovaciones de certificados: por el departamento del certificado
+CREATE POLICY mant_certificados_historial_agregar ON public.mant_certificados_historial FOR INSERT TO authenticated
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_certificado(barco_id, certificado_id), 3));
+CREATE POLICY mant_certificados_historial_modificar ON public.mant_certificados_historial FOR UPDATE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_certificado(barco_id, certificado_id), 3))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_certificado(barco_id, certificado_id), 3));
+CREATE POLICY mant_certificados_historial_borrar ON public.mant_certificados_historial FOR DELETE TO authenticated
+  USING (mant_priv.puede(barco_id, mant_priv.depto_certificado(barco_id, certificado_id), 3));
+
+-- Deficiencias: por el departamento de su equipo. El operador crea, edita y cierra las abiertas;
+-- las cerradas solo las cambia el jefe del departamento o el admin
 CREATE POLICY mant_deficiencias_ver ON public.mant_deficiencias FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_deficiencias_agregar ON public.mant_deficiencias FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 2));
 CREATE POLICY mant_deficiencias_modificar ON public.mant_deficiencias FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (estado = 'abierta' AND barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 3)
+         OR (estado = 'abierta' AND mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 2)))
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 2));
 CREATE POLICY mant_deficiencias_borrar ON public.mant_deficiencias FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (mant_priv.puede(barco_id, mant_priv.depto_equipo(barco_id, equipo_id), 3));
 
 -- Barcos: ver los propios (el admin, todos los de su empresa, también el que acaba de crear);
--- editar la ficha el jefe; crear barcos el admin en su empresa; borrar, nadie desde la app
+-- editar la ficha el jefe de todo el barco (sin departamento) o el admin; crear barcos el admin en su empresa; borrar, nadie desde la app
 CREATE POLICY mant_buque_ver ON public.mant_buque FOR SELECT TO authenticated
   USING (id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[])
          OR empresa_id = ANY ((SELECT mant_priv.empresas_admin())::INTEGER[]));
@@ -898,8 +1061,10 @@ GRANT SELECT, INSERT, UPDATE ON public.mant_perfiles TO service_role;
 -- =============== ADMINISTRACIÓN: FUNCIONES QUE LLAMA LA APP ===============
 -- Las dos son SECURITY INVOKER: además de sus controles, las reglas RLS de quien llama vuelven a aplicar.
 
--- Guardar los accesos de un usuario en una empresa de una sola vez (rol + barcos). Nunca el propio.
-CREATE FUNCTION public.mant_accesos_guardar(p_user UUID, p_empresa INTEGER, p_rol TEXT, p_barcos INTEGER[] DEFAULT '{}')
+-- Guardar los accesos de un usuario en una empresa de una sola vez (rol + barcos + departamento). Nunca el propio.
+-- p_departamento NULL = todo el barco.
+CREATE FUNCTION public.mant_accesos_guardar(p_user UUID, p_empresa INTEGER, p_rol TEXT, p_barcos INTEGER[] DEFAULT '{}',
+                                            p_departamento TEXT DEFAULT NULL)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -915,6 +1080,12 @@ BEGIN
   IF p_rol IS NULL OR p_rol NOT IN ('admin_empresa', 'jefe', 'operador', 'lectura') THEN
     RAISE EXCEPTION 'Rol no válido' USING ERRCODE = '22023';
   END IF;
+  IF p_departamento IS NOT NULL AND p_departamento NOT IN ('Máquinas', 'Cubierta') THEN
+    RAISE EXCEPTION 'Departamento no válido' USING ERRCODE = '22023';
+  END IF;
+  IF p_rol = 'admin_empresa' AND p_departamento IS NOT NULL THEN
+    RAISE EXCEPTION 'El administrador de la empresa es de todos los departamentos' USING ERRCODE = '22023';
+  END IF;
   IF p_rol <> 'admin_empresa' AND coalesce(cardinality(p_barcos), 0) = 0 THEN
     RAISE EXCEPTION 'Elegí al menos un barco' USING ERRCODE = '22023';
   END IF;
@@ -927,19 +1098,20 @@ BEGIN
   IF p_rol = 'admin_empresa' THEN
     INSERT INTO public.mant_accesos (user_id, empresa_id, rol) VALUES (p_user, p_empresa, p_rol);
   ELSE
-    INSERT INTO public.mant_accesos (user_id, empresa_id, barco_id, rol)
-    SELECT DISTINCT p_user, p_empresa, b, p_rol FROM unnest(p_barcos) b;
+    INSERT INTO public.mant_accesos (user_id, empresa_id, barco_id, rol, departamento)
+    SELECT DISTINCT p_user, p_empresa, b, p_rol, p_departamento FROM unnest(p_barcos) b;
   END IF;
 END;
 $$;
-REVOKE EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[]) FROM public, anon;
-GRANT EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[]) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[], TEXT) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.mant_accesos_guardar(UUID, INTEGER, TEXT, INTEGER[], TEXT) TO authenticated;
 
 -- Crear un barco, opcionalmente copiando de otro de la misma empresa (todo o nada). Devuelve el id nuevo.
--- p_copiar: 'equipos' (activos; sin n° de serie, años, estado ni notas; "Toma las horas de" apunta a los nuevos),
+-- p_copiar: 'equipos' (activos, con su departamento; sin n° de serie, años, estado, notas, MMSI ni ID HEX;
+-- "Toma las horas de" apunta a los nuevos),
 -- 'tareas' (activas de equipos copiados, con el nombre de la ficha, sin últimas fechas ni horas: "sin registrar";
 -- exige 'equipos'), 'repuestos' (stock 0), 'herramientas' (cantidad 0),
--- 'certificados' (del barco, no de tripulantes, sin vencimiento).
+-- 'certificados' (del barco, no de tripulantes, sin vencimiento; si su equipo se copió, apuntan al nuevo).
 -- Nunca copia historial, horas, lecturas, deficiencias, movimientos, tripulantes ni stock.
 CREATE FUNCTION public.mant_barco_crear(p_empresa INTEGER, p_ficha JSONB, p_origen INTEGER DEFAULT NULL, p_copiar TEXT[] DEFAULT '{}')
 RETURNS INTEGER
@@ -983,10 +1155,10 @@ BEGIN
     FOR e IN SELECT * FROM public.mant_equipos WHERE barco_id = p_origen AND activo ORDER BY id LOOP
       INSERT INTO public.mant_equipos (barco_id, nombre, categoria, cantidad, ubicacion_abordo, fabricante, modelo,
           datos_tecnicos, potencia_kw, potencia_hp, consumo_lh, rpm_nominal, voltaje, amperaje, combustible,
-          tipo_refrigeracion, aceite_tipo, capacidad_aceite_l, proveedor_local, critico)
+          tipo_refrigeracion, aceite_tipo, capacidad_aceite_l, proveedor_local, critico, departamento)
       VALUES (v_id, e.nombre, e.categoria, e.cantidad, e.ubicacion_abordo, e.fabricante, e.modelo,
           e.datos_tecnicos, e.potencia_kw, e.potencia_hp, e.consumo_lh, e.rpm_nominal, e.voltaje, e.amperaje, e.combustible,
-          e.tipo_refrigeracion, e.aceite_tipo, e.capacidad_aceite_l, e.proveedor_local, e.critico)
+          e.tipo_refrigeracion, e.aceite_tipo, e.capacidad_aceite_l, e.proveedor_local, e.critico, e.departamento)
       RETURNING id INTO v_nuevo;
       v_mapa := v_mapa || jsonb_build_object(e.id::TEXT, v_nuevo);
     END LOOP;
@@ -1021,8 +1193,8 @@ BEGIN
   END IF;
 
   IF 'certificados' = ANY (p_copiar) THEN
-    INSERT INTO public.mant_certificados (barco_id, nombre, categoria, departamento, fecha_vencimiento, dias_aviso)
-    SELECT v_id, c.nombre, c.categoria, c.departamento, NULL, c.dias_aviso
+    INSERT INTO public.mant_certificados (barco_id, nombre, categoria, departamento, fecha_vencimiento, dias_aviso, equipo_id)
+    SELECT v_id, c.nombre, c.categoria, c.departamento, NULL, c.dias_aviso, (v_mapa ->> c.equipo_id::TEXT)::INTEGER
       FROM public.mant_certificados c
      WHERE c.barco_id = p_origen AND c.activo AND c.tripulante_id IS NULL ORDER BY c.id;
   END IF;
@@ -1129,39 +1301,39 @@ ALTER TABLE public.mant_combustible_cargas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mant_combustible_periodos_ver ON public.mant_combustible_periodos FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_combustible_periodos_agregar ON public.mant_combustible_periodos FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-              OR (fin_litros IS NULL AND barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])));
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+              OR (fin_litros IS NULL AND barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])));
 CREATE POLICY mant_combustible_periodos_modificar ON public.mant_combustible_periodos FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (fin_litros IS NULL AND barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+         OR (fin_litros IS NULL AND barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_combustible_periodos_borrar ON public.mant_combustible_periodos FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 -- Cargas: <en curso> = EXISTS (período del mismo barco con fin_litros IS NULL)
 --   agregar / modificar (USING y WITH CHECK) / borrar:  barcos(3)  OR  (barcos(2) AND <en curso>)
 CREATE POLICY mant_combustible_cargas_ver ON public.mant_combustible_cargas FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_combustible_cargas_agregar ON public.mant_combustible_cargas FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-              OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+              OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])
                   AND EXISTS (SELECT 1 FROM public.mant_combustible_periodos p
                                WHERE p.barco_id = mant_combustible_cargas.barco_id
                                  AND p.id = mant_combustible_cargas.periodo_id AND p.fin_litros IS NULL)));
 CREATE POLICY mant_combustible_cargas_modificar ON public.mant_combustible_cargas FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+         OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])
              AND EXISTS (SELECT 1 FROM public.mant_combustible_periodos p
                           WHERE p.barco_id = mant_combustible_cargas.barco_id
                             AND p.id = mant_combustible_cargas.periodo_id AND p.fin_litros IS NULL)))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-              OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+              OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])
                   AND EXISTS (SELECT 1 FROM public.mant_combustible_periodos p
                                WHERE p.barco_id = mant_combustible_cargas.barco_id
                                  AND p.id = mant_combustible_cargas.periodo_id AND p.fin_litros IS NULL)));
 CREATE POLICY mant_combustible_cargas_borrar ON public.mant_combustible_cargas FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[])
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+         OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[])
              AND EXISTS (SELECT 1 FROM public.mant_combustible_periodos p
                           WHERE p.barco_id = mant_combustible_cargas.barco_id
                             AND p.id = mant_combustible_cargas.periodo_id AND p.fin_litros IS NULL)));
@@ -1211,10 +1383,10 @@ $$;
 -- Así nadie cambia un período cerrado de un barco donde no es jefe.
 CREATE FUNCTION mant_priv.trasvase_permitido(p_origen INTEGER, p_destino INTEGER, p_fecha DATE)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT (mant_priv.nivel(p_origen) >= 2 OR mant_priv.nivel(p_destino) >= 2)
+  SELECT (mant_priv.nivel_depto(p_origen, 'Máquinas') >= 2 OR mant_priv.nivel_depto(p_destino, 'Máquinas') >= 2)
      AND (SELECT bool_and(
             b IS NULL
-            OR mant_priv.nivel(b) >= 3
+            OR mant_priv.nivel_depto(b, 'Máquinas') >= 3
             OR NOT EXISTS (SELECT 1 FROM public.mant_combustible_periodos p
                             WHERE p.id = mant_priv.periodo_combustible(b, p_fecha) AND p.fin_litros IS NOT NULL))
             FROM unnest(ARRAY[p_origen, p_destino]) AS l(b));
@@ -1338,8 +1510,8 @@ CREATE INDEX idx_mant_sondas_lect_tanque ON public.mant_sondas_lecturas (barco_i
 -- (ninguna otra sonda del barco con fecha igual o posterior): el operador solo agrega sondas nuevas y edita la última
 CREATE FUNCTION mant_priv.sonda_permitida(p_barco INTEGER, p_id BIGINT, p_fecha DATE)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT mant_priv.nivel(p_barco) >= 3
-      OR (mant_priv.nivel(p_barco) >= 2
+  SELECT mant_priv.nivel_depto(p_barco, 'Máquinas') >= 3
+      OR (mant_priv.nivel_depto(p_barco, 'Máquinas') >= 2
           AND NOT EXISTS (SELECT 1 FROM public.mant_sondas s
                            WHERE s.barco_id = p_barco AND s.id IS DISTINCT FROM p_id AND s.fecha >= p_fecha));
 $$;
@@ -1364,12 +1536,12 @@ ALTER TABLE public.mant_sondas_lecturas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mant_tanques_ver ON public.mant_tanques FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_tanques_agregar ON public.mant_tanques FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_tanques_modificar ON public.mant_tanques FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_tanques_borrar ON public.mant_tanques FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 -- Sondas: ver todos; cargar y editar según mant_priv.sonda_permitida; borrar jefe/admin
 CREATE POLICY mant_sondas_ver ON public.mant_sondas FOR SELECT TO authenticated
@@ -1380,7 +1552,7 @@ CREATE POLICY mant_sondas_modificar ON public.mant_sondas FOR UPDATE TO authenti
   USING (mant_priv.sonda_permitida(barco_id, id, fecha))
   WITH CHECK (mant_priv.sonda_permitida(barco_id, id, fecha));
 CREATE POLICY mant_sondas_borrar ON public.mant_sondas FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 -- Lecturas: ver todos; agregar, cambiar y quitar ("sin medir") con el permiso de su sonda:
 --   <su sonda> = EXISTS (sonda del mismo barco y id, con mant_priv.sonda_permitida(barco, id, fecha))
@@ -1489,26 +1661,26 @@ ALTER TABLE public.mant_rellenos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mant_aceites_ver ON public.mant_aceites FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_aceites_agregar ON public.mant_aceites FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_aceites_modificar ON public.mant_aceites FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_aceites_borrar ON public.mant_aceites FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 -- Rellenos: ver todos; cargar operador+; editar jefe/admin cualquiera, operador solo lo suyo del mismo día;
 -- borrar jefe/admin
 CREATE POLICY mant_rellenos_ver ON public.mant_rellenos FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_rellenos_agregar ON public.mant_rellenos FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_rellenos_modificar ON public.mant_rellenos FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-              OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+         OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+              OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
 CREATE POLICY mant_rellenos_borrar ON public.mant_rellenos FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 REVOKE ALL ON public.mant_aceites, public.mant_rellenos FROM anon, service_role, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mant_aceites, public.mant_rellenos TO authenticated;
@@ -1572,14 +1744,14 @@ ALTER TABLE public.mant_cargas_aceite ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mant_cargas_aceite_ver ON public.mant_cargas_aceite FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_cargas_aceite_agregar ON public.mant_cargas_aceite FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]));
 CREATE POLICY mant_cargas_aceite_modificar ON public.mant_cargas_aceite FOR UPDATE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)))
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-              OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+         OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)))
+  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[])
+              OR (barco_id = ANY ((SELECT mant_priv.barcos_depto(2, 'Máquinas'))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
 CREATE POLICY mant_cargas_aceite_borrar ON public.mant_cargas_aceite FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_depto(3, 'Máquinas'))::INTEGER[]));
 
 REVOKE ALL ON public.mant_cargas_aceite FROM anon, service_role, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mant_cargas_aceite TO authenticated;
@@ -1711,30 +1883,54 @@ ALTER TABLE public.mant_fotos_por_borrar ENABLE ROW LEVEL SECURITY;
 -- Fotos: ver todos; agregar operador+ (abiertas y cerradas); borrar jefe/admin cualquiera, operador solo las suyas del día
 CREATE POLICY mant_def_fotos_ver ON public.mant_deficiencias_fotos FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
+-- Agregar y borrar: por el departamento del equipo de la deficiencia
 CREATE POLICY mant_def_fotos_agregar ON public.mant_deficiencias_fotos FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_deficiencia(barco_id, deficiencia_id), 2));
 CREATE POLICY mant_def_fotos_borrar ON public.mant_deficiencias_fotos FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[])
-         OR (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
+  USING (mant_priv.puede(barco_id, mant_priv.depto_deficiencia(barco_id, deficiencia_id), 3)
+         OR (mant_priv.puede(barco_id, mant_priv.depto_deficiencia(barco_id, deficiencia_id), 2)
+             AND mant_priv.relleno_propio_del_dia(creado_por, creado_en)));
 
--- Por borrar: operador+ las ve y quita la anotación solo cuando el archivo ya no está en el depósito
+-- Por borrar: operador+ de cualquier departamento las ve y quita la anotación solo cuando el archivo ya no
+-- está en el depósito
 CREATE POLICY mant_fotos_por_borrar_ver ON public.mant_fotos_por_borrar FOR SELECT TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_alguno(2))::INTEGER[]));
 CREATE POLICY mant_fotos_por_borrar_quitar ON public.mant_fotos_por_borrar FOR DELETE TO authenticated
-  USING (barco_id = ANY ((SELECT mant_priv.barcos(2))::INTEGER[]) AND NOT mant_priv.foto_existe(ruta));
+  USING (barco_id = ANY ((SELECT mant_priv.barcos_alguno(2))::INTEGER[]) AND NOT mant_priv.foto_existe(ruta));
 
 REVOKE ALL ON public.mant_deficiencias_fotos, public.mant_fotos_por_borrar FROM anon, service_role, authenticated;
 GRANT SELECT, INSERT, DELETE ON public.mant_deficiencias_fotos TO authenticated;
 GRANT SELECT, DELETE ON public.mant_fotos_por_borrar TO authenticated;
 
--- Depósito, carpeta deficiencias: operador sube, y borra solo archivos que ya no usa ninguna foto
--- (jefe/admin ya puede todo con las reglas generales de arriba)
+-- La ruta de un archivo no dice de qué deficiencia es: para la carpeta deficiencias alcanza con el nivel
+-- en algún departamento (la fila de mant_deficiencias_fotos sí controla el departamento)
+CREATE FUNCTION mant_priv.foto_permitida_def(p_nombre TEXT, p_nivel INTEGER) RETURNS BOOLEAN
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_partes TEXT[] := string_to_array(p_nombre, '/');
+  v_empresa INTEGER; v_barco INTEGER;
+BEGIN
+  IF array_length(v_partes, 1) IS NULL OR array_length(v_partes, 1) < 4
+     OR v_partes[1] !~ '^[0-9]{1,9}$' OR v_partes[2] !~ '^[0-9]{1,9}$' THEN
+    RETURN false;
+  END IF;
+  v_empresa := v_partes[1]::INTEGER;
+  v_barco := v_partes[2]::INTEGER;
+  RETURN EXISTS (SELECT 1 FROM public.mant_buque b WHERE b.id = v_barco AND b.empresa_id = v_empresa)
+     AND v_barco = ANY (mant_priv.barcos_alguno(p_nivel));
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION mant_priv.foto_permitida_def(TEXT, INTEGER) FROM public;
+GRANT EXECUTE ON FUNCTION mant_priv.foto_permitida_def(TEXT, INTEGER) TO authenticated, service_role;
+
+-- Depósito, carpeta deficiencias: operador (de cualquier departamento) sube, y borra solo archivos que ya no
+-- usa ninguna foto (jefe/admin de todo el barco ya puede todo con las reglas generales de arriba)
 CREATE POLICY mant_fotos_def_subir ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'mant-fotos' AND (storage.foldername(name))[3] = 'deficiencias'
-              AND mant_priv.foto_permitida(name, 2));
+              AND mant_priv.foto_permitida_def(name, 2));
 CREATE POLICY mant_fotos_def_quitar ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'mant-fotos' AND (storage.foldername(name))[3] = 'deficiencias'
-         AND mant_priv.foto_permitida(name, 2) AND NOT mant_priv.foto_deficiencia_en_uso(name));
+         AND mant_priv.foto_permitida_def(name, 2) AND NOT mant_priv.foto_deficiencia_en_uso(name));
 
 -- =============== REABRIR DEFICIENCIAS ===============
 -- Jefe/admin puede reabrir una deficiencia resuelta por error. Cada reapertura guarda quién, cuándo y el cierre
@@ -1773,7 +1969,7 @@ ALTER TABLE public.mant_deficiencias_reaperturas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mant_def_reaperturas_ver ON public.mant_deficiencias_reaperturas FOR SELECT TO authenticated
   USING (barco_id = ANY ((SELECT mant_priv.barcos(1))::INTEGER[]));
 CREATE POLICY mant_def_reaperturas_agregar ON public.mant_deficiencias_reaperturas FOR INSERT TO authenticated
-  WITH CHECK (barco_id = ANY ((SELECT mant_priv.barcos(3))::INTEGER[]));
+  WITH CHECK (mant_priv.puede(barco_id, mant_priv.depto_deficiencia(barco_id, deficiencia_id), 3));
 REVOKE ALL ON public.mant_deficiencias_reaperturas FROM anon, service_role, authenticated;
 GRANT SELECT, INSERT ON public.mant_deficiencias_reaperturas TO authenticated;
 
@@ -1785,8 +1981,8 @@ DECLARE d public.mant_deficiencias%ROWTYPE;
 BEGIN
   SELECT * INTO d FROM public.mant_deficiencias WHERE id = p_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Deficiencia no encontrada'; END IF;
-  IF NOT (d.barco_id = ANY (mant_priv.barcos(3))) THEN
-    RAISE EXCEPTION 'Solo jefe o admin puede reabrir una deficiencia' USING errcode = '42501';
+  IF NOT mant_priv.puede(d.barco_id, mant_priv.depto_equipo(d.barco_id, d.equipo_id), 3) THEN
+    RAISE EXCEPTION 'Solo el jefe del departamento o el admin puede reabrir una deficiencia' USING errcode = '42501';
   END IF;
   IF d.estado <> 'cerrada' THEN RAISE EXCEPTION 'La deficiencia ya está abierta' USING errcode = '22023'; END IF;
   INSERT INTO public.mant_deficiencias_reaperturas

@@ -73,9 +73,17 @@
   .header-rol:empty { display: none; }
   .sin-barcos { max-width: 560px; margin: 40px auto; padding: 24px; text-align: center; background: white;
     border: 1px solid var(--gris-2); border-radius: 12px; color: var(--texto-suave); }
-  /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan) */
-  body:not(.puede-registrar) .solo-operador,
-  body:not(.puede-editar) .solo-jefe,
+  /* Botones según el rol en el barco elegido: .solo-operador (registrar) y .solo-jefe (cambiar el plan).
+     Sin data-dep cuentan los permisos de todo el barco; con data-dep="maquinas|cubierta", los de ese
+     departamento; con data-dep="alguno", los de cualquiera (p. ej. "➕ Nuevo equipo") */
+  body:not(.puede-registrar) .solo-operador:not([data-dep]),
+  body:not(.puede-editar) .solo-jefe:not([data-dep]),
+  body:not(.registra-maquinas) .solo-operador[data-dep="maquinas"],
+  body:not(.registra-cubierta) .solo-operador[data-dep="cubierta"],
+  body:not(.registra-alguno) .solo-operador[data-dep="alguno"],
+  body:not(.edita-maquinas) .solo-jefe[data-dep="maquinas"],
+  body:not(.edita-cubierta) .solo-jefe[data-dep="cubierta"],
+  body:not(.edita-alguno) .solo-jefe[data-dep="alguno"],
   body:not(.puede-administrar) .solo-admin,
   body:not(.puede-combustible) .solo-combustible { display: none !important; }
   .btn-header {
@@ -248,6 +256,10 @@
     font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
   }
   .toolbar .toolbar-check input { flex: none; min-width: 0; padding: 0; width: 16px; height: 16px; }
+  /* Filtro de departamento del Inicio (el mismo que en Equipos y Tareas) */
+  .dash-depto { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+  .dash-depto select { padding: 8px 12px; border: 1px solid var(--gris-2); border-radius: 7px; font: inherit; font-size: 14px; background: white; }
+  .pill.depto { background: #e3ecf7; color: var(--azul-profundo); }
 
   /* EQUIPOS CRÍTICOS */
   .badge-critico {
@@ -1179,6 +1191,7 @@
 <main>
   <!-- DASHBOARD -->
   <section class="section active" id="sec-dashboard">
+    <div class="dash-depto"><select class="sel-depto" aria-label="Departamento" onchange="cambiarFiltroDepto(this.value)"><option value="">Todos los departamentos</option><option value="Máquinas">⚙️ Máquinas</option><option value="Cubierta">🧭 Cubierta</option></select></div>
     <div id="banner-alerta"></div>
 
     <div class="stats">
@@ -1224,6 +1237,7 @@
       <h2 class="panel-titulo">Equipos del barco</h2>
       <div class="toolbar">
         <input type="text" id="eq-buscador" placeholder="🔎 Buscar equipo o fabricante...">
+        <select class="sel-depto" aria-label="Departamento" onchange="cambiarFiltroDepto(this.value)"><option value="">Todos los departamentos</option><option value="Máquinas">⚙️ Máquinas</option><option value="Cubierta">🧭 Cubierta</option></select>
         <select id="eq-filtro-cat"><option value="">Todas las categorías</option></select>
         <select id="eq-filtro-estado">
           <option value="TODOS">Todos los estados</option>
@@ -1232,7 +1246,7 @@
           <option value="OK">🟢 Al día</option>
         </select>
         <label class="toolbar-check"><input type="checkbox" id="eq-mostrar-bajas" onchange="guardarMostrarBajasEq(); renderEquipos()"> Mostrar dados de baja</label>
-        <button class="btn solo-jefe" onclick="abrirModalEquipo()">➕ Nuevo equipo</button>
+        <button class="btn solo-jefe" data-dep="alguno" onclick="abrirModalEquipo()">➕ Nuevo equipo</button>
       </div>
       <div id="equipos-grilla"></div>
     </div>
@@ -1247,12 +1261,13 @@
   <section class="section" id="sec-tareas">
     <h2 class="panel-titulo">Todas las tareas</h2>
     <div class="acciones-globales">
-      <button class="btn solo-jefe" onclick="abrirModalTarea()">➕ Agregar tarea</button>
-      <button class="btn btn-sec solo-operador" onclick="abrirModalChequeos()">✓ Registrar varias</button>
+      <button class="btn solo-jefe" data-dep="alguno" onclick="abrirModalTarea()">➕ Agregar tarea</button>
+      <button class="btn btn-sec solo-operador" data-dep="alguno" onclick="abrirModalChequeos()">✓ Registrar varias</button>
       <button class="btn btn-acento" onclick="abrirExportarPlan()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
       <input type="text" id="buscador" placeholder="🔎 Buscar equipo o tarea...">
+      <select class="sel-depto" aria-label="Departamento" onchange="cambiarFiltroDepto(this.value)"><option value="">Todos los departamentos</option><option value="Máquinas">⚙️ Máquinas</option><option value="Cubierta">🧭 Cubierta</option></select>
       <select id="filtro-equipo"><option value="">Todos los equipos</option></select>
       <select id="filtro-prioridad">
         <option value="">Toda prioridad</option>
@@ -1280,9 +1295,9 @@
     <div id="banner-stock"></div>
     <h2 class="panel-titulo">Stock de repuestos</h2>
     <div class="acciones-globales">
-      <button class="btn solo-jefe" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
+      <button class="btn solo-jefe" data-dep="maquinas" onclick="abrirModalRepuesto()">➕ Agregar repuesto</button>
       <button class="btn btn-acento" onclick="exportarStockExcel()">📥 Exportar Excel</button>
-      <button class="btn btn-sec solo-jefe" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
+      <button class="btn btn-sec solo-jefe" data-dep="maquinas" id="btn-editar-minimos" onclick="activarEdicionMinimos()">✏️ Editar mínimos</button>
     </div>
 
     <div class="carga-form" id="minimos-bar" style="display:none">
@@ -1318,7 +1333,7 @@
   <section class="section" id="sec-deficiencias">
     <h2 class="panel-titulo">Registro de deficiencias</h2>
     <div class="acciones-globales">
-      <button class="btn solo-operador" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
+      <button class="btn solo-operador" data-dep="alguno" onclick="abrirModalDef()">➕ Nueva deficiencia</button>
       <button class="btn btn-acento" onclick="exportarDefExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1340,8 +1355,8 @@
       <button class="cert-solapa" data-solapa="tripulacion" onclick="cambiarSolapaCert('tripulacion')">👥 Tripulación <span id="badge-cert-trip" class="badge" style="display:none">0</span></button>
     </div>
     <div class="acciones-globales">
-      <button class="btn solo-jefe" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
-      <button class="btn solo-jefe" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
+      <button class="btn solo-jefe" data-dep="alguno" id="cert-btn-agregar" onclick="abrirModalCert()">➕ Agregar certificado</button>
+      <button class="btn solo-jefe" data-dep="alguno" id="cert-btn-agregar-trip" onclick="abrirModalTrip()">➕ Agregar tripulante</button>
       <button class="btn btn-acento" onclick="exportarCertExcel()">📥 Exportar Excel</button>
     </div>
     <div class="toolbar">
@@ -1375,8 +1390,8 @@
 
   <!-- HORAS: carga mensual arriba, histórico abajo -->
   <section class="section" id="sec-horas">
-    <h2 class="panel-titulo solo-operador">Cargar horas del mes</h2>
-    <div class="carga-form solo-operador">
+    <h2 class="panel-titulo solo-operador" data-dep="alguno">Cargar horas del mes</h2>
+    <div class="carga-form solo-operador" data-dep="alguno">
       <h3>Actualización mensual de horas por equipo</h3>
       <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
         Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Los equipos que toman las horas de otro (por ejemplo, las cajas reductoras) se actualizan solos junto con él.
@@ -1415,12 +1430,12 @@
     </div>
     <div id="historial-lista"></div>
   </section>
-  <!-- COMBUSTIBLE: períodos del barco elegido (por ahora solo admin_empresa, ver puedeVerCombustible) -->
+  <!-- COMBUSTIBLE: períodos del barco elegido (lo ve todo el barco, lo edita Máquinas: ver puedeVerCombustible) -->
   <section class="section" id="sec-combustible">
     <h2 class="panel-titulo">Combustible</h2>
     <div class="acciones-globales">
-      <button class="btn solo-operador" onclick="abrirModalComb()">➕ Agregar período</button>
-      <button class="btn solo-operador" onclick="abrirModalTrasv()">➕ Trasvase</button>
+      <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalComb()">➕ Agregar período</button>
+      <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalTrasv()">➕ Trasvase</button>
       <button class="btn btn-acento" onclick="exportarCombExcel()">📥 Exportar Excel</button>
     </div>
     <div id="comb-lista"></div>
@@ -1432,7 +1447,7 @@
   <section class="section" id="sec-sondas">
     <h2 class="panel-titulo">Sondas</h2>
     <div class="acciones-globales">
-      <button class="btn solo-operador" onclick="abrirModalSonda()">➕ Nueva sonda</button>
+      <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalSonda()">➕ Nueva sonda</button>
       <button class="btn btn-sec" onclick="abrirModalTanques()">🛢 Tanques</button>
       <button class="btn btn-acento" onclick="exportarSondasExcel()">📥 Exportar Excel</button>
     </div>
@@ -1443,8 +1458,8 @@
   <section class="section" id="sec-rellenos">
     <h2 class="panel-titulo">Rellenos de aceite</h2>
     <div class="acciones-globales">
-      <button class="btn solo-operador" onclick="abrirModalRelleno()">➕ Relleno</button>
-      <button class="btn solo-operador" onclick="abrirModalCargaAceite()">➕ Carga a tanque</button>
+      <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalRelleno()">➕ Relleno</button>
+      <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalCargaAceite()">➕ Carga a tanque</button>
       <button class="btn btn-sec" onclick="abrirModalAceites()">🛢️ Aceites</button>
       <button class="btn btn-acento" onclick="exportarRellenosExcel()">📥 Exportar Excel</button>
     </div>
@@ -1804,6 +1819,15 @@
         <option value="admin_empresa">Admin de la empresa — todo, en todos los barcos, y administra barcos y usuarios</option>
       </select>
     </div>
+    <div class="field" id="u-depto-campo">
+      <label>Departamento</label>
+      <select id="u-departamento">
+        <option value="">Todo el barco</option>
+        <option value="Cubierta">Cubierta</option>
+        <option value="Máquinas">Máquinas</option>
+      </select>
+      <div style="font-size:12px;color:var(--texto-suave);margin-top:4px">Con un departamento, ve todo el barco pero su rol vale solo ahí (por ejemplo, el capitán es Jefe de Cubierta y el maquinista, Jefe de Máquinas). Pañol y Consumos son de Máquinas; Mi Barco y Herramientas, de todo el barco.</div>
+    </div>
     <div class="field" id="u-barcos-campo">
       <label>Barcos *</label>
       <div id="u-barcos" style="display:grid;gap:6px"></div>
@@ -1863,12 +1887,17 @@
 
     <div class="field"><label>Nombre *</label><input type="text" id="eq-nombre"></div>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Categoría</label><input type="text" id="eq-categoria" list="lista-cat-eq" placeholder="Motor, Bomba, etc."></div>
+      <div>
+        <label>Departamento</label>
+        <select id="eq-departamento" onchange="eqDeptoCambiado()"></select>
+      </div>
       <div><label>Cantidad</label><input type="number" id="eq-cantidad" min="1" value="1"></div>
     </div>
+    <div id="eq-depto-nota" style="font-size:12px;color:var(--texto-suave);margin:-6px 0 10px"></div>
+    <div class="field"><label>Categoría</label><input type="text" id="eq-categoria" list="lista-cat-eq" placeholder="Motor, Bomba, Navegación, etc."></div>
     <datalist id="lista-cat-eq"></datalist>
-    <div class="field"><label>Ubicación a bordo</label><input type="text" id="eq-ubicacion" placeholder="Sala de máquinas, Pañol..."></div>
-    <div class="field">
+    <div class="field"><label>Ubicación a bordo</label><input type="text" id="eq-ubicacion" placeholder="Sala de máquinas, Puente, Pañol..."></div>
+    <div class="field" id="eq-bloque-horas">
       <label>Toma las horas de</label>
       <select id="eq-horas-de"></select>
       <div style="font-size:12px;color:var(--texto-suave);margin-top:4px">Para un equipo sin horómetro propio (por ejemplo, una caja reductora): recibe las mismas horas que el equipo elegido y no se carga aparte en Horas.</div>
@@ -1876,7 +1905,7 @@
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Fabricante</h3>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Fabricante</label><input type="text" id="eq-fabricante"></div>
+      <div><label>Marca / fabricante</label><input type="text" id="eq-fabricante"></div>
       <div><label>Modelo</label><input type="text" id="eq-modelo"></div>
     </div>
     <div class="field" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px">
@@ -1884,7 +1913,14 @@
       <div><label>Año fabr.</label><input type="number" id="eq-anio-fab"></div>
       <div><label>Año instal.</label><input type="number" id="eq-anio-ins"></div>
     </div>
+    <!-- Electrónica de Cubierta (opcionales) -->
+    <div class="field" id="eq-bloque-electronica" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>MMSI</label><input type="text" id="eq-mmsi" inputmode="numeric"></div>
+      <div><label>ID HEX (EPIRB)</label><input type="text" id="eq-id-hex"></div>
+    </div>
 
+    <!-- Datos de motor y aceite: no se muestran en los equipos de Cubierta (se conservan si tienen) -->
+    <div id="eq-bloque-maquinas">
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Operación</h3>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <div><label>Potencia (kW)</label><input type="number" step="0.01" id="eq-pot-kw"></div>
@@ -1907,6 +1943,7 @@
     <div class="field">
       <label>Aceite (de la lista del barco, para los rellenos)</label>
       <select id="eq-aceite-id"></select>
+    </div>
     </div>
 
     <h3 style="font-family:'Fraunces',serif;color:var(--azul-profundo);margin:14px 0 8px;font-size:15px">Detalles técnicos adicionales</h3>
@@ -2143,7 +2180,7 @@
     <div class="modal-sub">Los tanques del barco, en el orden de las columnas de sondas.</div>
     <div id="tq-lista"></div>
     <div class="modal-actions">
-      <button class="btn solo-jefe" onclick="abrirModalTanque()">➕ Agregar tanque</button>
+      <button class="btn solo-jefe" data-dep="maquinas" onclick="abrirModalTanque()">➕ Agregar tanque</button>
       <button class="btn btn-sec" onclick="cerrarModalTanques()">Cerrar</button>
     </div>
   </div>
@@ -2280,7 +2317,7 @@
     <div class="modal-sub">Los aceites que se usan en el barco y dónde se guardan.</div>
     <div id="ac-lista"></div>
     <div class="modal-actions">
-      <button class="btn solo-jefe" onclick="abrirModalAceite()">➕ Agregar aceite</button>
+      <button class="btn solo-jefe" data-dep="maquinas" onclick="abrirModalAceite()">➕ Agregar aceite</button>
       <button class="btn btn-sec" onclick="cerrarModalAceites()">Cerrar</button>
     </div>
   </div>
@@ -2361,11 +2398,13 @@
       </div>
       <div>
         <label>Departamento *</label>
-        <select id="c-departamento">
-          <option value="Cubierta">Cubierta</option>
-          <option value="Máquinas">Máquinas</option>
-        </select>
+        <select id="c-departamento"></select>
       </div>
+    </div>
+    <div class="field" id="c-campo-equipo">
+      <label>Equipo (opcional)</label>
+      <select id="c-equipo"></select>
+      <div style="font-size:12px;color:var(--texto-suave);margin-top:4px">Se ve en la ficha del equipo. Sin equipo, es un certificado del barco.</div>
     </div>
     <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
@@ -2410,10 +2449,7 @@
       </div>
       <div>
         <label>Departamento *</label>
-        <select id="t-departamento">
-          <option value="Cubierta">Cubierta</option>
-          <option value="Máquinas">Máquinas</option>
-        </select>
+        <select id="t-departamento"></select>
       </div>
     </div>
     <div class="modal-actions">
@@ -2856,32 +2892,79 @@ async function traerTodo(armarConsulta) {
 const NIVEL_ROL = { lectura: 1, operador: 2, jefe: 3, admin_empresa: 4 };
 const NOMBRE_ROL = { lectura: 'Lectura', operador: 'Operador', jefe: 'Jefe', admin_empresa: 'Admin' };
 
-function nivelActual() { return barcoActual ? NIVEL_ROL[barcoActual.rol] : 0; }
-function puedeRegistrar() { return nivelActual() >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
-function puedeEditar() { return nivelActual() >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
+// Departamentos: un acceso es de todo el barco (departamento null) o de uno solo. Con departamento, el usuario
+// ve todo y tiene su rol solo en ese departamento; en lo demás es lectura. Sin depto, cuentan los permisos de
+// todo el barco (Mi Barco, Herramientas). Pañol y Consumos son de Máquinas. La base controla todo igual (RLS).
+const DEPARTAMENTOS = ['Máquinas', 'Cubierta'];
+const CLAVE_DEPTO = { 'Máquinas': 'maquinas', 'Cubierta': 'cubierta' };
+const DEPTO_PANOL = 'Máquinas';
+const ICONO_DEPTO = { 'Máquinas': '⚙️', 'Cubierta': '🧭' };
+
+function nivelActual(depto) {
+  if (!barcoActual) return 0;
+  const n = NIVEL_ROL[barcoActual.rol];
+  return !barcoActual.departamento || barcoActual.departamento === depto ? n : Math.min(n, NIVEL_ROL.lectura);
+}
+function puedeRegistrar(depto) { return nivelActual(depto) >= NIVEL_ROL.operador; }  // historial, horas, deficiencias, stock
+function puedeEditar(depto) { return nivelActual(depto) >= NIVEL_ROL.jefe; }         // el plan: tareas, equipos, repuestos, certificados...
 function puedeAdministrar() { return nivelActual() >= NIVEL_ROL.admin_empresa; }  // barcos y usuarios de la empresa
-// La pestaña ⛽ Combustible, por ahora solo para el admin (la base ya tiene los permisos por rol para todos)
-function puedeVerCombustible() { return puedeAdministrar(); }
+// Departamentos que el usuario puede editar / registrar (para los selectores de los formularios)
+function deptosEditables() { return DEPARTAMENTOS.filter(d => puedeEditar(d)); }
+function deptosRegistrables() { return DEPARTAMENTOS.filter(d => puedeRegistrar(d)); }
+
+// Departamento de cada cosa: el equipo tiene el suyo; tareas y deficiencias, el de su equipo
+function deptoEquipo(id) { return equiposTodos.find(e => e.id === id)?.departamento || 'Máquinas'; }
+function deptoTarea(t) { return deptoEquipo(t.equipo_id); }
+function deptoDefId(id) { return deptoEquipo(deficiencias.find(d => d.id === id)?.equipo_id); }
+// Atributo para los botones .solo-jefe / .solo-operador de un ítem (ver el CSS de roles)
+function attrDepto(depto) { return ` data-dep="${depto === 'alguno' ? 'alguno' : CLAVE_DEPTO[depto] || 'maquinas'}"`; }
+// Lo mismo para los botones fijos de un modal, según el ítem abierto
+function marcarDepto(contenedor, depto) {
+  contenedor.querySelectorAll('.solo-jefe, .solo-operador').forEach(b => { b.dataset.dep = CLAVE_DEPTO[depto] || 'maquinas'; });
+}
+
+// Filtro de departamento compartido por Inicio, Equipos y Tareas ('' = todos). Se recuerda por usuario
+// (localStorage depto-<usuario>); la primera vez arranca en el departamento de su acceso.
+let filtroDepto = '';
+function claveFiltroDepto() { return 'depto-' + usuarioId; }
+function iniciarFiltroDepto() {
+  let g = null;
+  try { g = localStorage.getItem(claveFiltroDepto()); } catch (e) {}
+  filtroDepto = g === '' || DEPARTAMENTOS.includes(g) ? g : (barcoActual?.departamento || '');
+  document.querySelectorAll('.sel-depto').forEach(s => { s.value = filtroDepto; });
+}
+function cambiarFiltroDepto(valor) {
+  filtroDepto = valor;
+  try { localStorage.setItem(claveFiltroDepto(), valor); } catch (e) {}
+  document.querySelectorAll('.sel-depto').forEach(s => { s.value = valor; });
+  renderDashboard();
+  renderLista();
+  renderEquipos();
+}
+function pasaFiltroDepto(depto) { return !filtroDepto || depto === filtroDepto; }
+// La sección ⛽ Consumos la ve todo el que tiene el barco; la editan los de Máquinas (Pañol y Consumos son de
+// Máquinas: DEPTO_PANOL), igual que en la base
+function puedeVerCombustible() { return !!barcoActual; }
 
 // Lee los accesos del usuario y los barcos que puede ver; elige el último usado. false si no tiene ninguno.
 async function cargarBarcos() {
   const [{ data: acc, error: e1 }, { data: bqs, error: e2 }] = await Promise.all([
-    sb.from('mant_accesos').select('empresa_id, barco_id, rol').eq('user_id', usuarioId),
+    sb.from('mant_accesos').select('empresa_id, barco_id, rol, departamento').eq('user_id', usuarioId),
     sb.from('mant_buque').select('id, nombre, empresa_id').order('nombre').order('id')
   ]);
   if (e1) throw e1;
   if (e2) throw e2;
   barcosDisponibles = (bqs || []).map(b => {
-    const roles = (acc || [])
+    const mejor = (acc || [])
       .filter(a => a.barco_id === b.id || (a.rol === 'admin_empresa' && a.empresa_id === b.empresa_id))
-      .map(a => a.rol);
-    const rol = roles.sort((x, y) => NIVEL_ROL[y] - NIVEL_ROL[x])[0];
-    return rol ? { ...b, rol } : null;
+      .sort((x, y) => NIVEL_ROL[y.rol] - NIVEL_ROL[x.rol])[0];
+    return mejor ? { ...b, rol: mejor.rol, departamento: mejor.departamento || null } : null;
   }).filter(Boolean);
 
   let guardado = null;
   try { guardado = Number(localStorage.getItem('barco')); } catch (e) {}
   barcoActual = barcosDisponibles.find(b => b.id === guardado) || barcosDisponibles[0] || null;
+  iniciarFiltroDepto();
 
   const hay = !!barcoActual;
   document.getElementById('sin-barcos').style.display = hay ? 'none' : '';
@@ -2895,6 +2978,12 @@ function renderEncabezado() {
   const cont = document.getElementById('header-barco');
   document.body.classList.toggle('puede-registrar', puedeRegistrar());
   document.body.classList.toggle('puede-editar', puedeEditar());
+  DEPARTAMENTOS.forEach(d => {
+    document.body.classList.toggle('registra-' + CLAVE_DEPTO[d], puedeRegistrar(d));
+    document.body.classList.toggle('edita-' + CLAVE_DEPTO[d], puedeEditar(d));
+  });
+  document.body.classList.toggle('registra-alguno', deptosRegistrables().length > 0);
+  document.body.classList.toggle('edita-alguno', deptosEditables().length > 0);
   document.body.classList.toggle('puede-administrar', puedeAdministrar());
   document.body.classList.toggle('puede-combustible', puedeVerCombustible());
   // Si estaba en una sección que en este barco no le corresponde, vuelve al inicio
@@ -2913,7 +3002,8 @@ function renderEncabezado() {
   } else {
     cont.textContent = barcoActual.nombre;
   }
-  document.getElementById('header-rol').textContent = NOMBRE_ROL[barcoActual.rol];
+  document.getElementById('header-rol').textContent =
+    NOMBRE_ROL[barcoActual.rol] + (barcoActual.departamento ? ' · ' + barcoActual.departamento : '');
   document.title = `${barcoActual.nombre} · Mantenimientos`;
 }
 
@@ -3109,6 +3199,7 @@ function renderTodo() {
   renderTanquesInicio();
   renderRellenos();
   renderHistorialFicha();   // si hay una ficha de equipo abierta (por ejemplo, después de cerrar una deficiencia)
+  renderCertificadosFicha(); // ídem, después de renovar o editar un certificado
   if (defDetalleId) renderFotosDef(defDetalleId);   // si está abierto el detalle de una deficiencia
 }
 
@@ -3124,20 +3215,24 @@ function llenarFiltros() {
 
 // ============ DASHBOARD ============
 function renderDashboard() {
-  // Las postergadas no cuentan en contadores, banners ni "Más urgentes" (tienen su propia línea)
-  const tareasAlerta = tareas.filter(t => !estaPostergada(t));
-  const certsAlerta = certificados.filter(c => !estaPostergada(c));
+  // Las postergadas no cuentan en contadores, banners ni "Más urgentes" (tienen su propia línea).
+  // Todo el Inicio sigue el filtro de departamento: tareas y deficiencias por su equipo, certificados por el suyo.
+  const tareasDep = tareas.filter(t => pasaFiltroDepto(deptoTarea(t)));
+  const tareasAlerta = tareasDep.filter(t => !estaPostergada(t));
+  const certsAlerta = certificados.filter(c => !estaPostergada(c) && pasaFiltroDepto(c.departamento));
   const stats = { VENCIDO: 0, PROXIMO: 0, OK: 0, SIN_DATO: 0 };
   tareasAlerta.forEach(t => stats[calcularEstado(t).estado]++);
 
   document.getElementById('n-vencido').textContent = stats.VENCIDO;
   document.getElementById('n-proximo').textContent = stats.PROXIMO;
   document.getElementById('n-ok').textContent = stats.OK;
-  document.getElementById('n-todos').textContent = tareas.length;
+  document.getElementById('n-todos').textContent = tareasDep.length;
 
+  // El globito de la pestaña Tareas cuenta todas, como los demás globitos
+  const nVencidasTodas = tareas.filter(t => !estaPostergada(t) && calcularEstado(t).estado === 'VENCIDO').length;
   const badge = document.getElementById('badge-vencidos');
-  if (stats.VENCIDO > 0) {
-    badge.textContent = stats.VENCIDO;
+  if (nVencidasTodas > 0) {
+    badge.textContent = nVencidasTodas;
     badge.style.display = 'inline-block';
   } else { badge.style.display = 'none'; }
 
@@ -3186,7 +3281,7 @@ function renderDashboard() {
   }
 
   // Deficiencias abiertas: contador + aviso si hay vencidas o críticas
-  const defAbiertas = deficiencias.filter(d => d.estado === 'abierta');
+  const defAbiertas = deficiencias.filter(d => d.estado === 'abierta' && pasaFiltroDepto(deptoEquipo(d.equipo_id)));
   document.getElementById('n-deficiencias').textContent = defAbiertas.length;
   const nDefVencidas = defAbiertas.filter(defVencida).length;
   const nDefCriticas = defAbiertas.filter(d => d.critica).length;
@@ -3259,8 +3354,8 @@ let postActual = null;          // { tipo: 'tarea' | 'cert', item } en el modal 
 let postergadasAbiertas = false; // lista desplegada en el Dashboard
 
 function renderPostergadasDashboard() {
-  const pTareas = tareas.filter(estaPostergada);
-  const pCerts = certificados.filter(estaPostergada);
+  const pTareas = tareas.filter(t => estaPostergada(t) && pasaFiltroDepto(deptoTarea(t)));
+  const pCerts = certificados.filter(c => estaPostergada(c) && pasaFiltroDepto(c.departamento));
   const div = document.getElementById('dash-postergadas');
   const total = pTareas.length + pCerts.length;
   if (!total) { div.innerHTML = ''; return; }
@@ -3317,7 +3412,7 @@ function htmlBotonPostergar(tipo, item, enAlerta) {
     ? `<div class="meta" style="margin-top:6px">${activa ? '⏸ Postergada' : 'Postergación vencida'} hasta ${fmtFecha(item.postergada_hasta)} · ${escape(item.motivo_postergacion)}</div>`
     : '';
   return `
-    <button type="button" class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalPost('${tipo}', ${item.id})">
+    <button type="button" class="btn btn-sec btn-pequeno solo-jefe"${attrDepto(tipo === 'tarea' ? deptoTarea(item) : item.departamento)} onclick="abrirModalPost('${tipo}', ${item.id})">
       ⏸ ${item.postergada_hasta ? 'Editar postergación' : 'Postergar'}
     </button>${info}`;
 }
@@ -3442,7 +3537,7 @@ function renderTaskCard(t) {
         <div class="unidad">${est.unidad}</div>
         ${est.otro ? `<div class="otro">${est.otro.mostrar} ${est.otro.unidad}</div>` : ''}
       </div>
-      <button class="btn solo-operador" onclick="abrirModal(${t.id})">✓ Registrar</button>
+      <button class="btn solo-operador"${attrDepto(deptoTarea(t))} onclick="abrirModal(${t.id})">✓ Registrar</button>
     </div>`;
 }
 
@@ -3457,6 +3552,7 @@ function renderLista() {
 
   // Filtros que no dependen del estado (también se aplican a las dadas de baja)
   const pasaFiltros = t => {
+    if (!pasaFiltroDepto(deptoTarea(t))) return false;
     if (tipoTrabajo === 'SIN_TIPO' && t.tipo_trabajo) return false;
     if (tipoTrabajo && tipoTrabajo !== 'SIN_TIPO' && t.tipo_trabajo !== tipoTrabajo) return false;
     if (soloCriticos && !esTareaCritica(t)) return false;
@@ -3503,7 +3599,7 @@ function renderTaskCardBaja(t) {
         <div class="meta">Última: ${fmtFecha(t.fecha_ult)} · ${nHist} registro${nHist === 1 ? '' : 's'} en el historial</div>
       </div>
       <div class="proxima-box"></div>
-      <button class="btn btn-sec solo-jefe" onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
+      <button class="btn btn-sec solo-jefe"${attrDepto(deptoTarea(t))} onclick="reactivarTarea(${t.id})">↺ Reactivar</button>
     </div>`;
 }
 
@@ -3518,7 +3614,7 @@ function abrirModal(id) {
   // horas (ej. muestras de aceite de motores) queda visible para verlas y corregirlas.
   const sinHoras = !Number(tareaActual.hrs_totales);
   document.getElementById('m-hrs-campo').style.display = tareaActual.unidad === 'fecha' && sinHoras ? 'none' : '';
-  document.getElementById('m-quien').value = tareaActual.realizado_por || 'Maquinista';
+  document.getElementById('m-quien').value = tareaActual.realizado_por || (deptoTarea(tareaActual) === 'Cubierta' ? 'Capitán' : 'Maquinista');
   document.getElementById('m-notas').value = '';
   document.getElementById('m-tipo-trabajo').value = tareaActual.tipo_trabajo || '';
   const estado = calcularEstado(tareaActual).estado;
@@ -3527,6 +3623,8 @@ function abrirModal(id) {
   // Con historial se da de baja (se conserva); sin historial se puede borrar
   document.getElementById('m-btn-baja').textContent =
     historial.some(h => h.tarea_id === tareaActual.id) ? '⏹ Dar de baja' : '🗑 Borrar tarea';
+  // Registrar, editar y dar de baja según el departamento del equipo de la tarea
+  marcarDepto(document.getElementById('modal'), deptoTarea(tareaActual));
   document.getElementById('modal').classList.add('show');
 }
 
@@ -3661,10 +3759,11 @@ async function guardarSoloTipo() {
 // solo si cambia el control o el intervalo, contando desde la última realización.
 let tareaEditando = null;  // tarea en edición (null = alta)
 
-// Selector de equipo: las fichas activas, agrupadas por categoría. La tarea guarda equipo_id y el nombre de la ficha.
+// Selector de equipo: las fichas activas de los departamentos que el usuario edita, agrupadas por categoría.
+// La tarea guarda equipo_id y el nombre de la ficha.
 function llenarSelectorEquipoTarea(elegido) {
   const grupos = {};
-  equipos.forEach(e => {
+  equipos.filter(e => puedeEditar(e.departamento) || e.id === elegido).forEach(e => {
     const cat = e.categoria || 'Sin categoría';
     (grupos[cat] = grupos[cat] || []).push(e);
   });
@@ -3973,7 +4072,8 @@ function equiposOcultosCarga() {
 function renderCarga() {
   const ocultos = equiposOcultosCarga();
   const conHoras = new Set(tareas.filter(usaHoras).map(t => t.equipo_id));
-  const lista = equipos.filter(e => conHoras.has(e.id) && !ocultos.has(e.id))
+  // Solo los equipos de los departamentos donde el usuario registra
+  const lista = equipos.filter(e => conHoras.has(e.id) && !ocultos.has(e.id) && puedeRegistrar(e.departamento))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const div = document.getElementById('carga-equipos');
   div.innerHTML = lista.map(eq => {
@@ -4000,7 +4100,7 @@ function renderCarga() {
           <div class="nuevo-total" data-total-de="${eq.id}" style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--azul-profundo);padding-top:4px">${hrs_actuales}</div>
         </div>
       </div>`;
-  }).join('');
+  }).join('') || '<div class="empty">No hay equipos con tareas por horas para cargar.</div>';
 
   const inputF = document.getElementById('fch-fecha');
   if (inputF && !inputF.value) inputF.value = new Date().toISOString().split('T')[0];
@@ -4093,7 +4193,8 @@ function renderChequeosFecha() {
   // Solo tareas por fecha. Las de "lo que ocurra primero" quedan afuera a propósito:
   // se registran desde el modal Registrar, donde se ven y corrigen las horas.
   // Mismo semáforo que el resto de la app (estadoPorFecha)
-  let lista = tareas.filter(t => t.unidad === 'fecha').map(t => {
+  // Solo las de los departamentos donde el usuario registra
+  let lista = tareas.filter(t => t.unidad === 'fecha' && puedeRegistrar(deptoTarea(t))).map(t => {
     const e = estadoPorFecha(t);
     return { ...t, _dias: e ? e.valor : null, _estado: e ? e.estado : 'SIN_DATO' };
   });
@@ -4429,7 +4530,7 @@ function renderHistorial() {
           ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
         </div>
         <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe"${attrDepto(deptoTarea(t))} onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }).join('');
 }
@@ -4897,8 +4998,8 @@ function renderRepuestoCard(r) {
         <div class="num">${r.cantidad}</div>
         <div class="min">de ${r.minimo} mín · ${r.unidad}</div>
       </div>
-      <button class="btn btn-pequeno solo-operador" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
-      <button class="btn btn-pequeno btn-sec solo-jefe" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
+      <button class="btn btn-pequeno solo-operador" data-dep="maquinas" onclick="abrirModalMov(${r.id})" title="Ajustar stock">📥📤</button>
+      <button class="btn btn-pequeno btn-sec solo-jefe" data-dep="maquinas" onclick="abrirModalRepuesto(${r.id})" title="Editar">✎</button>
     </div>`;
 }
 
@@ -5304,8 +5405,8 @@ function renderDefCard(d) {
     ? `<div class="obs" style="color:var(--verde)">✔ ${escape(d.accion_realizada)}</div>` : '';
   const acciones = abierta
     ? `<div class="def-acciones">
-         <button class="btn solo-operador" onclick="event.stopPropagation();abrirModalDefCerrar(${d.id})">✓ Marcar como resuelta</button>
-         <button class="btn btn-sec btn-pequeno solo-operador" onclick="event.stopPropagation();abrirModalDef(${d.id})">✏️ Editar</button>
+         <button class="btn solo-operador"${attrDepto(deptoEquipo(d.equipo_id))} onclick="event.stopPropagation();abrirModalDefCerrar(${d.id})">✓ Marcar como resuelta</button>
+         <button class="btn btn-sec btn-pequeno solo-operador"${attrDepto(deptoEquipo(d.equipo_id))} onclick="event.stopPropagation();abrirModalDef(${d.id})">✏️ Editar</button>
        </div>`
     : '<div></div>';
 
@@ -5330,7 +5431,17 @@ function renderDefCard(d) {
 function abrirModalDef(id) {
   defActual = id ? deficiencias.find(d => d.id === id) : null;
   const sel = document.getElementById('d-equipo');
-  let opciones = equipos.map(e => `<option value="${e.id}">${escape(e.nombre)}${e.critico ? ' ⚠️' : ''}</option>`).join('');
+  // Los equipos de los departamentos donde el usuario registra (y el de la deficiencia, al editar)
+  const deptos = deptosRegistrables();
+  const opcion = e => `<option value="${e.id}">${escape(e.nombre)}${e.critico ? ' ⚠️' : ''}</option>`;
+  const lista = equipos.filter(e => deptos.includes(e.departamento) || e.id === defActual?.equipo_id)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  let opciones = deptos.length > 1
+    ? DEPARTAMENTOS.map(d => {
+        const deD = lista.filter(e => e.departamento === d);
+        return deD.length ? `<optgroup label="${d}">${deD.map(opcion).join('')}</optgroup>` : '';
+      }).join('')
+    : lista.map(opcion).join('');
   // Si el equipo de la deficiencia ya no está activo, igual lo mostramos para no perderlo al editar
   if (defActual && !equipos.some(e => e.id === defActual.equipo_id)) {
     opciones = `<option value="${defActual.equipo_id}">${escape(nombreEquipoDef(defActual))}</option>` + opciones;
@@ -5355,7 +5466,7 @@ function abrirModalDef(id) {
     document.getElementById('d-descripcion').value = '';
     fecha.value = hoyLocalISO();
     fecha.disabled = false;
-    document.getElementById('d-quien').value = 'Maquinista';
+    document.getElementById('d-quien').value = barcoActual?.departamento === 'Cubierta' ? 'Capitán' : 'Maquinista';
     document.getElementById('d-critica').checked = false;
     defRecalcularLimite();
   }
@@ -5645,7 +5756,7 @@ function renderCertificados() {
       : '<div class="empty"><div class="big">📋</div>No hay certificados cargados</div>';
     return;
   }
-  div.innerHTML = filtrados.map(renderCertCard).join('');
+  div.innerHTML = filtrados.map(c => renderCertCard(c)).join('');
 }
 
 function renderGrupoTrip({ t, docs }) {
@@ -5659,7 +5770,7 @@ function renderGrupoTrip({ t, docs }) {
           <span class="badge-tipo">${escape(t.departamento)}</span>
           <span class="badge-baja">DADO DE BAJA</span>
           <div class="acciones">
-            <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+            <button class="btn btn-sec btn-pequeno solo-jefe"${attrDepto(t.departamento)} onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
           </div>
         </div>
         <div class="trip-vacio">${n ? `${n} documento${n>1?'s':''} guardado${n>1?'s':''}: vuelve${n>1?'n':''} a aparecer al reactivarlo` : 'Sin documentos cargados'}</div>
@@ -5667,7 +5778,7 @@ function renderGrupoTrip({ t, docs }) {
   }
   const total = certificados.filter(c => c.tripulante_id === t.id).length;
   const cuerpo = docs.length
-    ? `<div class="task-list">${docs.map(renderCertCard).join('')}</div>`
+    ? `<div class="task-list">${docs.map(c => renderCertCard(c)).join('')}</div>`
     : `<div class="trip-vacio">${total ? 'Ningún documento coincide con la búsqueda' : 'Sin documentos cargados'}</div>`;
   return `
     <div class="trip-grupo">
@@ -5676,15 +5787,16 @@ function renderGrupoTrip({ t, docs }) {
         ${t.cargo ? `<span class="cargo">${escape(t.cargo)}</span>` : ''}
         <span class="badge-tipo">${escape(t.departamento)}</span>
         <div class="acciones">
-          <button class="btn btn-pequeno solo-jefe" onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
-          <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
+          <button class="btn btn-pequeno solo-jefe"${attrDepto(t.departamento)} onclick="abrirModalCert(null, ${t.id})">➕ Documento</button>
+          <button class="btn btn-sec btn-pequeno solo-jefe"${attrDepto(t.departamento)} onclick="abrirModalTrip(${t.id})">✏️ Editar</button>
         </div>
       </div>
       ${cuerpo}
     </div>`;
 }
 
-function renderCertCard(c) {
+// enFicha: dentro de la ficha del equipo (no repite el equipo)
+function renderCertCard(c, enFicha) {
   const est = estadoCert(c);
   const cls = { SIN_FECHA: 'proximo', VENCIDO: 'vencido', PROXIMO: 'proximo', OK: 'ok' }[est];
   const icono = { SIN_FECHA: '📅', VENCIDO: '🔴', PROXIMO: '🟡', OK: '🟢' }[est];
@@ -5700,9 +5812,13 @@ function renderCertCard(c) {
   const ultimaHtml = ultima ? ` · Última renovación: ${fmtFecha(ultima.fecha_renovacion)}` : '';
   const obsHtml = c.observaciones ? `<div class="obs">${escape(c.observaciones)}</div>` : '';
   // En la solapa Tripulación el tripulante y su departamento ya están en la cabecera del grupo
+  const eqCert = c.equipo_id && !enFicha ? equiposTodos.find(e => e.id === c.equipo_id) : null;
+  const equipoHtml = eqCert
+    ? ` · <span class="equipo-clickable" onclick="event.stopPropagation();abrirFichaEquipo(${eqCert.id})" title="Ver ficha del equipo">🔧 ${escape(eqCert.nombre)}</span>`
+    : '';
   const segundaLinea = c.tripulante_id
     ? ''
-    : `<div class="tarea"><span class="badge-tipo">${escape(c.departamento)}</span>${escape(c.categoria)}</div>`;
+    : `<div class="tarea"><span class="badge-tipo">${escape(c.departamento)}</span>${escape(c.categoria)}${equipoHtml}</div>`;
 
   return `
     <div class="task-card ${cls}">
@@ -5719,21 +5835,45 @@ function renderCertCard(c) {
         <div class="unidad">${unidad}</div>
       </div>
       <div class="def-acciones">
-        ${est === 'SIN_FECHA' ? '' : `<button class="btn solo-jefe" onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>`}
-        <button class="btn btn-sec btn-pequeno solo-jefe" onclick="abrirModalCert(${c.id})">✏️ Editar</button>
+        ${est === 'SIN_FECHA' ? '' : `<button class="btn solo-jefe"${attrDepto(c.departamento)} onclick="abrirModalCertRenovar(${c.id})">🔄 Renovar</button>`}
+        <button class="btn btn-sec btn-pequeno solo-jefe"${attrDepto(c.departamento)} onclick="abrirModalCert(${c.id})">✏️ Editar</button>
       </div>
     </div>`;
 }
 
-// id = certificado a editar; tripulanteId = agregar un documento nuevo a ese tripulante
-function abrirModalCert(id, tripulanteId) {
+// Departamentos que se pueden elegir en un formulario: los que el usuario edita (y el actual, si no está).
+// Uno nuevo arranca en el del filtro, si se puede.
+function llenarSelectDepto(sel, actual) {
+  const opciones = deptosEditables();
+  if (actual && !opciones.includes(actual)) opciones.unshift(actual);
+  sel.innerHTML = opciones.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.value = actual || (opciones.includes(filtroDepto) ? filtroDepto : opciones[0] || '');
+}
+// Equipo de un certificado: los activos, agrupados por departamento (y el actual aunque esté de baja)
+function llenarSelectorEquipoCert(elegido) {
+  const lista = equiposTodos.filter(e => e.activo || e.id === elegido);
+  document.getElementById('c-equipo').innerHTML = '<option value="">— Sin equipo (del barco) —</option>' +
+    DEPARTAMENTOS.map(d => {
+      const deD = lista.filter(e => e.departamento === d).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      return deD.length ? `<optgroup label="${d}">` +
+        deD.map(e => `<option value="${e.id}">${escape(e.nombre)}${e.activo ? '' : ' (de baja)'}</option>`).join('') + '</optgroup>' : '';
+    }).join('');
+  document.getElementById('c-equipo').value = elegido != null ? String(elegido) : '';
+}
+
+// id = certificado a editar; tripulanteId = agregar un documento nuevo a ese tripulante;
+// equipoId = agregar un certificado de ese equipo (desde su ficha)
+function abrirModalCert(id, tripulanteId, equipoId) {
   certActual = id ? certificados.find(c => c.id === id) : null;
   certTripNuevo = !certActual && tripulanteId ? tripulantes.find(t => t.id === tripulanteId) : null;
   const trip = certActual ? tripulanteDe(certActual) : certTripNuevo;
   const nombreInput = document.getElementById('c-nombre');
 
-  // Los documentos personales no eligen categoría ni departamento (vienen del tripulante)
+  // Los documentos personales no eligen categoría, departamento ni equipo (vienen del tripulante)
   document.getElementById('c-campos-barco').style.display = trip ? 'none' : 'grid';
+  document.getElementById('c-campo-equipo').style.display = trip ? 'none' : '';
+  llenarSelectDepto(document.getElementById('c-departamento'), certActual?.departamento);
+  llenarSelectorEquipoCert(certActual ? certActual.equipo_id : equipoId);
   if (trip) {
     nombreInput.setAttribute('list', 'c-sugerencias-trip');
     nombreInput.placeholder = 'ej: Carné de salud (o escribí otro)';
@@ -5773,7 +5913,6 @@ function abrirModalCert(id, tripulanteId) {
     document.getElementById('modal-cert-sub').textContent = trip ? quien : 'Datos del certificado y su vencimiento';
     nombreInput.value = '';
     document.getElementById('c-categoria').value = CATEGORIAS_CERT[0];
-    document.getElementById('c-departamento').value = 'Cubierta';
     document.getElementById('c-vencimiento').value = '';
     document.getElementById('c-dias-aviso').value = DIAS_AVISO_CERT;
     document.getElementById('c-observaciones').value = '';
@@ -5815,6 +5954,7 @@ async function guardarCert() {
   } else {
     data.categoria = document.getElementById('c-categoria').value;
     data.departamento = document.getElementById('c-departamento').value;
+    data.equipo_id = parseInt(document.getElementById('c-equipo').value) || null;
   }
 
   try {
@@ -5857,7 +5997,7 @@ function abrirModalTrip(id) {
   document.getElementById('modal-trip-titulo').textContent = tripActual ? 'Editar tripulante' : 'Agregar tripulante';
   document.getElementById('t-nombre').value = tripActual?.nombre || '';
   document.getElementById('t-cargo').value = tripActual?.cargo || '';
-  document.getElementById('t-departamento').value = tripActual?.departamento || 'Cubierta';
+  llenarSelectDepto(document.getElementById('t-departamento'), tripActual?.departamento);
   document.getElementById('t-btn-baja').style.display = tripActual?.activo ? '' : 'none';
   document.getElementById('t-btn-reactivar').style.display = tripActual && !tripActual.activo ? '' : 'none';
   document.getElementById('modal-trip').classList.add('show');
@@ -5999,7 +6139,8 @@ function exportarCertExcel() {
     Observaciones: c.observaciones
   });
   const hoja = filtrados.map(c => {
-    if (!trip) return { Certificado: c.nombre, Categoría: c.categoria, Departamento: c.departamento, ...comunes(c) };
+    if (!trip) return { Certificado: c.nombre, Categoría: c.categoria, Departamento: c.departamento,
+      Equipo: c.equipo_id ? equiposTodos.find(e => e.id === c.equipo_id)?.nombre || '' : '', ...comunes(c) };
     const t = tripulanteDe(c);
     return { Tripulante: t?.nombre, Cargo: t?.cargo, Departamento: c.departamento, Documento: c.nombre, ...comunes(c) };
   });
@@ -6340,7 +6481,7 @@ function avisoInicioComb(inicio, anterior) {
   if (redondearLitros(inicio) === redondearLitros(Number(anterior.fin_litros))) return null;
   return `El inicio no coincide con el fin del período anterior (${textoPeriodoComb(anterior)}: ${fmtLitros(anterior.fin_litros)} L)`;
 }
-function puedeEditarPeriodo(p) { return puedeEditar() || (puedeRegistrar() && p.fin_litros == null); }
+function puedeEditarPeriodo(p) { return puedeEditar(DEPTO_PANOL) || (puedeRegistrar(DEPTO_PANOL) && p.fin_litros == null); }
 
 // Quién hizo algo: el email si se conoce (el admin ve los de su empresa), si no "otro usuario"
 function nombreUsuarioComb(uid) {
@@ -6385,7 +6526,7 @@ function renderCombustible() {
     ].filter(Boolean).join('');
     const acciones = [
       puedeEditarPeriodo(p) ? `<button class="btn-ico" onclick="abrirModalComb(${p.id})" title="Editar período" aria-label="Editar período">✏️</button>` : '',
-      `<button class="btn-ico peligro solo-jefe" onclick="borrarComb(${p.id})" title="Borrar período" aria-label="Borrar período">🗑️</button>`
+      `<button class="btn-ico peligro solo-jefe" data-dep="maquinas" onclick="borrarComb(${p.id})" title="Borrar período" aria-label="Borrar período">🗑️</button>`
     ].join('');
     const negativo = consumo != null && consumo < 0;
     const enCurso = p.fin_litros == null ? '<span class="badge-tipo">en curso</span>' : '';
@@ -6462,7 +6603,7 @@ function fechasNuevoPeriodoComb() {
 
 function abrirModalComb(id) {
   combActual = id ? combPeriodos.find(p => p.id === id) : null;
-  if (combActual ? !puedeEditarPeriodo(combActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (combActual ? !puedeEditarPeriodo(combActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   const val = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
   document.getElementById('cb-cargas').innerHTML = '';
   if (combActual) {
@@ -6494,11 +6635,11 @@ function abrirModalComb(id) {
     document.getElementById('cb-autor').textContent = '';
   }
   // Un período nuevo del operador se guarda en curso: el fin lo carga después, editándolo
-  const finBloqueado = !combActual && !puedeEditar();
+  const finBloqueado = !combActual && !puedeEditar(DEPTO_PANOL);
   document.getElementById('cb-fin').disabled = finBloqueado;
   document.getElementById('cb-fin-nota').textContent = finBloqueado
     ? 'Guardá el período y cargá el fin después, editándolo.'
-    : (!puedeEditar() ? 'Cuando cargues el fin, el período queda cerrado y ya no lo vas a poder editar.' : '');
+    : (!puedeEditar(DEPTO_PANOL) ? 'Cuando cargues el fin, el período queda cerrado y ya no lo vas a poder editar.' : '');
   combActualizarAvisos();
   document.getElementById('modal-comb').classList.add('show');
 }
@@ -6669,7 +6810,7 @@ async function guardarCargasComb(periodoId, cargas) {
 
 async function borrarComb(id) {
   const p = combPeriodos.find(x => x.id === id);
-  if (!p || !puedeEditar()) return;
+  if (!p || !puedeEditar(DEPTO_PANOL)) return;
   const n = cargasDePeriodo(id).length;
   const nt = trasvasesDeRangoComb(p.desde, p.hasta, p.id).length;
   if (!confirm(`¿Borrar el período ${textoPeriodoComb(p)}?` +
@@ -6745,7 +6886,7 @@ function renderCombustibleInicio() {
 // En la app solo se sabe el período de este barco; el del otro barco lo controla la base
 function puedeEditarTrasvUI(t) {
   const p = periodoDeFechaComb(t.fecha);
-  return puedeEditar() || (puedeRegistrar() && (!p || p.fin_litros == null));
+  return puedeEditar(DEPTO_PANOL) || (puedeRegistrar(DEPTO_PANOL) && (!p || p.fin_litros == null));
 }
 function textoOtroBuqueTrasv(t) {
   const o = otroBuqueTrasv(t);
@@ -6781,7 +6922,7 @@ function renderTrasvasesComb() {
 
 function abrirModalTrasv(id) {
   trasvActual = id ? combTrasvases.find(t => t.id === id) : null;
-  if (trasvActual ? !puedeEditarTrasvUI(trasvActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (trasvActual ? !puedeEditarTrasvUI(trasvActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   const otros = combBarcos.filter(b => b.id !== barcoActual.id);
   document.getElementById('tv-barco').innerHTML =
     otros.map(b => `<option value="${b.id}">${escape(b.nombre)}</option>`).join('') +
@@ -6966,7 +7107,7 @@ function colorServicio(s) { return COLOR_SERVICIO[s] || COLOR_SERVICIO.Otro; }
 function lecturaDe(sondaId, tanqueId) { return sondasLecturas.find(l => l.sonda_id === sondaId && l.tanque_id === tanqueId) || null; }
 function ultimaSonda() { return sondas[0] || null; }
 function esUltimaSonda(s) { return !sondas.some(o => o.id !== s.id && o.fecha >= s.fecha); }
-function puedeEditarSonda(s) { return puedeEditar() || (puedeRegistrar() && esUltimaSonda(s)); }
+function puedeEditarSonda(s) { return puedeEditar(DEPTO_PANOL) || (puedeRegistrar(DEPTO_PANOL) && esUltimaSonda(s)); }
 // Columnas: los tanques activos y los dados de baja que tienen alguna lectura, por orden
 function tanquesColumnas() {
   const conLectura = new Set(sondasLecturas.map(l => l.tanque_id));
@@ -7041,7 +7182,7 @@ function renderSondas() {
 
   const acciones = s => [
     puedeEditarSonda(s) ? `<button class="btn-ico" onclick="abrirModalSonda(${s.id})" title="Editar sonda" aria-label="Editar sonda">✏️</button>` : '',
-    `<button class="btn-ico peligro solo-jefe" onclick="borrarSonda(${s.id})" title="Borrar sonda" aria-label="Borrar sonda">🗑️</button>`
+    `<button class="btn-ico peligro solo-jefe" data-dep="maquinas" onclick="borrarSonda(${s.id})" title="Borrar sonda" aria-label="Borrar sonda">🗑️</button>`
   ].join('');
 
   const filas = sondas.map(s => {
@@ -7094,7 +7235,7 @@ function renderSondas() {
 // ---- Formulario de sonda ----
 function abrirModalSonda(id) {
   sondaActual = id ? sondas.find(s => s.id === id) : null;
-  if (sondaActual ? !puedeEditarSonda(sondaActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (sondaActual ? !puedeEditarSonda(sondaActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   if (!tanques.some(t => t.activo)) { toast('Primero cargá los tanques del barco ("🛢 Tanques")', true); return; }
   // Filas: los tanques activos y, al editar, los dados de baja que tienen lectura en esta sonda
   const filas = tanques.filter(t => t.activo || (sondaActual && lecturaDe(sondaActual.id, t.id)));
@@ -7148,7 +7289,7 @@ async function guardarSonda() {
   if (!fecha) { toast('Falta la fecha', true); return; }
   const otra = sondas.find(s => s.fecha === fecha && s.id !== sondaActual?.id);
   if (otra) { toast(`Ya hay una sonda del ${fmtFechaDMA(fecha)}: editá esa`, true); return; }
-  if (!puedeEditar() && sondas.some(s => s.id !== sondaActual?.id && s.fecha >= fecha)) {
+  if (!puedeEditar(DEPTO_PANOL) && sondas.some(s => s.id !== sondaActual?.id && s.fecha >= fecha)) {
     toast('Solo podés cargar o editar la sonda más reciente: la fecha tiene que ser posterior a las demás', true); return;
   }
   const valores = [...document.querySelectorAll('#sd-tanques .sd-fila')].map(f => ({
@@ -7206,7 +7347,7 @@ async function guardarLecturasSonda(sondaId, valores) {
 
 async function borrarSonda(id) {
   const s = sondas.find(x => x.id === id);
-  if (!s || !puedeEditar()) return;
+  if (!s || !puedeEditar(DEPTO_PANOL)) return;
   if (!confirm(`¿Borrar la sonda del ${fmtFechaDMA(s.fecha)} con todos sus tanques?\n\nEsta acción no se puede deshacer.`)) return;
   try {
     const { data, error } = await sb.from('mant_sondas').delete().eq('id', id).select();
@@ -7234,14 +7375,14 @@ function renderListaTanques() {
       <div class="chip" style="background:${colorServicio(t.servicio)[1]}"></div>
       <div class="info"><strong>${escape(t.codigo)}</strong> · ${escape(t.servicio)}${t.activo ? '' : ' · dado de baja'}
         <small>${t.contenido ? escape(t.contenido) + ' · ' : ''}${fmtLitros(t.capacidad_litros)} L · orden ${t.orden}${t.uso_aceite ? ' · ' + escape(t.uso_aceite) : ''}</small></div>
-      <button class="btn-ico solo-jefe" onclick="abrirModalTanque(${t.id})" title="Editar tanque" aria-label="Editar tanque">✏️</button>
+      <button class="btn-ico solo-jefe" data-dep="maquinas" onclick="abrirModalTanque(${t.id})" title="Editar tanque" aria-label="Editar tanque">✏️</button>
       ${t.activo
-        ? `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoTanque(${t.id}, false)">Dar de baja</button>`
-        : `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoTanque(${t.id}, true)">↺ Reactivar</button>`}
+        ? `<button class="btn btn-sec btn-pequeno solo-jefe" data-dep="maquinas" onclick="cambiarActivoTanque(${t.id}, false)">Dar de baja</button>`
+        : `<button class="btn btn-sec btn-pequeno solo-jefe" data-dep="maquinas" onclick="cambiarActivoTanque(${t.id}, true)">↺ Reactivar</button>`}
     </div>`).join('');
 }
 function abrirModalTanque(id) {
-  if (!puedeEditar()) return;
+  if (!puedeEditar(DEPTO_PANOL)) return;
   tanqueActual = id ? tanques.find(t => t.id === id) : null;
   document.getElementById('tq-servicio').innerHTML = SERVICIOS_TANQUE.map(s => `<option value="${escape(s)}">${escape(s)}</option>`).join('');
   document.getElementById('modal-tanque-titulo').textContent = tanqueActual ? 'Editar tanque ' + tanqueActual.codigo : 'Agregar tanque';
@@ -7297,7 +7438,7 @@ async function guardarTanque() {
 }
 async function cambiarActivoTanque(id, activo) {
   const t = tanques.find(x => x.id === id);
-  if (!t || !puedeEditar()) return;
+  if (!t || !puedeEditar(DEPTO_PANOL)) return;
   if (!activo && !confirm(`¿Dar de baja el tanque ${t.codigo}?\n\nDeja de aparecer en las sondas nuevas. Sus lecturas viejas se conservan.`)) return;
   try {
     const { data, error } = await sb.from('mant_tanques').update({ activo }).eq('id', id).select();
@@ -7421,7 +7562,7 @@ function fechaLocalDe(ts) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function puedeEditarRelleno(r) {
-  return puedeEditar() || (puedeRegistrar() && r.creado_por === usuarioId && fechaLocalDe(r.creado_en) === hoyLocalISO());
+  return puedeEditar(DEPTO_PANOL) || (puedeRegistrar(DEPTO_PANOL) && r.creado_por === usuarioId && fechaLocalDe(r.creado_en) === hoyLocalISO());
 }
 
 function filtrosRellenos() {
@@ -7470,7 +7611,7 @@ function renderRellenos() {
 
   const acciones = r => [
     puedeEditarRelleno(r) ? `<button class="btn-ico" onclick="abrirModalRelleno(${r.id})" title="Editar relleno" aria-label="Editar relleno">✏️</button>` : '',
-    `<button class="btn-ico peligro solo-jefe" onclick="borrarRelleno(${r.id})" title="Borrar relleno" aria-label="Borrar relleno">🗑️</button>`
+    `<button class="btn-ico peligro solo-jefe" data-dep="maquinas" onclick="borrarRelleno(${r.id})" title="Borrar relleno" aria-label="Borrar relleno">🗑️</button>`
   ].join('');
   const tipo = r => r.tipo === 'Cambio' ? '<span class="badge-tipo badge-cambio">Cambio</span>' : '<span class="badge-tipo">Relleno</span>';
   const quien = r => r.creado_por ? escape(nombreUsuarioComb(r.creado_por)) : '';
@@ -7515,7 +7656,7 @@ function renderRellenosFicha() {
   const ultimos = dias => sumaLitros(delEquipo.filter(r => r.fecha >= sumarDias(hoy, -(dias - 1)) && r.fecha <= hoy));
   div.innerHTML = `
     <h3 class="panel-titulo" style="margin-top:6px">🛢️ Rellenos de aceite</h3>
-    <div class="acciones-globales"><button class="btn solo-operador" onclick="abrirModalRelleno(null, ${id})">🛢️ Relleno</button></div>
+    <div class="acciones-globales"><button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalRelleno(null, ${id})">🛢️ Relleno</button></div>
     <div class="ficha-rellenos-tot">
       <div><strong>${fmtLitros(ultimos(30))} L</strong>últimos 30 días</div>
       <div><strong>${fmtLitros(ultimos(90))} L</strong>últimos 90 días</div>
@@ -7533,7 +7674,7 @@ function renderRellenosFicha() {
 // equipoId: al abrirlo desde la ficha del equipo, ya viene elegido
 function abrirModalRelleno(id, equipoId) {
   rellenoActual = id ? rellenos.find(r => r.id === id) : null;
-  if (rellenoActual ? !puedeEditarRelleno(rellenoActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (rellenoActual ? !puedeEditarRelleno(rellenoActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   if (!aceites.some(a => a.activo)) { toast('Primero cargá los aceites del barco ("🛢️ Aceites")', true); return; }
   const eqElegido = rellenoActual ? rellenoActual.equipo_id : (equipoId || null);
   // Equipos activos y, si hace falta, el del relleno aunque esté dado de baja
@@ -7611,7 +7752,7 @@ async function guardarRelleno() {
 
 async function borrarRelleno(id) {
   const r = rellenos.find(x => x.id === id);
-  if (!r || !puedeEditar()) return;
+  if (!r || !puedeEditar(DEPTO_PANOL)) return;
   if (!confirm(`¿Borrar el relleno del ${fmtFechaDMA(r.fecha)} (${nombreEquipoRelleno(r)}, ${fmtLitros(r.litros)} L)?\n\nEsta acción no se puede deshacer.`)) return;
   try {
     const { data, error } = await sb.from('mant_rellenos').delete().eq('id', id).select();
@@ -7640,15 +7781,15 @@ function renderListaAceites() {
       <div class="tq-item${a.activo ? '' : ' baja'}">
         <div class="info"><strong>${escape(a.nombre)}</strong> · ${escape(a.tipo)}${a.activo ? '' : ' · dado de baja'}
           <small>${escape(lugarAceite(a))} · ${nEq} equipo${nEq !== 1 ? 's' : ''}</small></div>
-        <button class="btn-ico solo-jefe" onclick="abrirModalAceite(${a.id})" title="Editar aceite" aria-label="Editar aceite">✏️</button>
+        <button class="btn-ico solo-jefe" data-dep="maquinas" onclick="abrirModalAceite(${a.id})" title="Editar aceite" aria-label="Editar aceite">✏️</button>
         ${a.activo
-          ? `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoAceite(${a.id}, false)">Dar de baja</button>`
-          : `<button class="btn btn-sec btn-pequeno solo-jefe" onclick="cambiarActivoAceite(${a.id}, true)">↺ Reactivar</button>`}
+          ? `<button class="btn btn-sec btn-pequeno solo-jefe" data-dep="maquinas" onclick="cambiarActivoAceite(${a.id}, false)">Dar de baja</button>`
+          : `<button class="btn btn-sec btn-pequeno solo-jefe" data-dep="maquinas" onclick="cambiarActivoAceite(${a.id}, true)">↺ Reactivar</button>`}
       </div>`;
   }).join('');
 }
 function abrirModalAceite(id) {
-  if (!puedeEditar()) return;
+  if (!puedeEditar(DEPTO_PANOL)) return;
   aceiteActual = id ? aceites.find(a => a.id === id) : null;
   document.getElementById('ac-tipo').innerHTML = TIPOS_ACEITE.map(t => `<option value="${t}">${t}</option>`).join('');
   document.getElementById('ac-tanque').innerHTML = '<option value="">Tambor/bidón</option>' +
@@ -7688,7 +7829,7 @@ async function guardarAceite() {
 }
 async function cambiarActivoAceite(id, activo) {
   const a = aceites.find(x => x.id === id);
-  if (!a || !puedeEditar()) return;
+  if (!a || !puedeEditar(DEPTO_PANOL)) return;
   if (!activo && !confirm(`¿Dar de baja el aceite ${a.nombre}?\n\nDeja de ofrecerse en los rellenos nuevos. Los rellenos viejos se conservan.`)) return;
   try {
     const { data, error } = await sb.from('mant_aceites').update({ activo }).eq('id', id).select();
@@ -7853,7 +7994,7 @@ function renderConsumoAceite() {
   // Cargas a tanque
   const acciones = c => [
     puedeEditarRelleno(c) ? `<button class="btn-ico" onclick="abrirModalCargaAceite(${c.id})" title="Editar carga" aria-label="Editar carga">✏️</button>` : '',
-    `<button class="btn-ico peligro solo-jefe" onclick="borrarCargaAceite(${c.id})" title="Borrar carga" aria-label="Borrar carga">🗑️</button>`
+    `<button class="btn-ico peligro solo-jefe" data-dep="maquinas" onclick="borrarCargaAceite(${c.id})" title="Borrar carga" aria-label="Borrar carga">🗑️</button>`
   ].join('');
   const tqCod = id => tanques.find(t => t.id === id)?.codigo || '(tanque)';
   bloques.push('<h3 class="ac-titulo">⬆️ Cargas a tanque</h3>' + (cargasAceite.length ? tablaConTarjetas(
@@ -7868,7 +8009,7 @@ function renderConsumoAceite() {
 // ---- Formulario de carga a tanque (mismos permisos que un relleno) ----
 function abrirModalCargaAceite(id) {
   cargaAceiteActual = id ? cargasAceite.find(c => c.id === id) : null;
-  if (cargaAceiteActual ? !puedeEditarRelleno(cargaAceiteActual) : !puedeRegistrar()) { toast('No tenés permiso para esto', true); return; }
+  if (cargaAceiteActual ? !puedeEditarRelleno(cargaAceiteActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   const tqs = tanquesDeAceite();
   if (cargaAceiteActual && !tqs.some(t => t.id === cargaAceiteActual.tanque_id)) {
     const t = tanques.find(x => x.id === cargaAceiteActual.tanque_id);
@@ -7925,7 +8066,7 @@ async function guardarCargaAceite() {
 }
 async function borrarCargaAceite(id) {
   const c = cargasAceite.find(x => x.id === id);
-  if (!c || !puedeEditar()) return;
+  if (!c || !puedeEditar(DEPTO_PANOL)) return;
   const tq = tanques.find(t => t.id === c.tanque_id);
   if (!confirm(`¿Borrar la carga del ${fmtFechaDMA(c.fecha)} (${tq ? tq.codigo : 'tanque'}, ${fmtLitros(c.litros)} L)?\n\nEsta acción no se puede deshacer.`)) return;
   try {
@@ -8434,7 +8575,8 @@ let subiendoFotosDef = false;
 
 function fotosDeDef(id) { return fotosDef.filter(f => f.deficiencia_id === id); }
 function puedeBorrarFotoDef(f) {
-  return puedeEditar() || (puedeRegistrar() && f.creado_por === usuarioId && fechaLocalDe(f.creado_en) === hoyLocalISO());
+  const dep = deptoDefId(f.deficiencia_id);
+  return puedeEditar(dep) || (puedeRegistrar(dep) && f.creado_por === usuarioId && fechaLocalDe(f.creado_en) === hoyLocalISO());
 }
 
 function renderFotosDef(defId) {
@@ -8451,7 +8593,7 @@ function renderFotosDef(defId) {
             ${puedeBorrarFotoDef(f) ? `<button class="def-foto-borrar" title="Borrar foto" onclick="borrarFotoDef(${f.id})">✕</button>` : ''}
           </div>`).join('')}</div>`
       : '<div class="def-fotos-vacio">Sin fotos</div>'}
-    <div class="def-fotos-acciones solo-operador">
+    <div class="def-fotos-acciones solo-operador"${attrDepto(deptoDefId(defId))}>
       ${lleno
         ? `<div class="def-fotos-aviso">Llegó al máximo de ${FOTOS_POR_DEF_MAX} fotos. Para agregar otra, borrá una.</div>`
         : `<button class="btn btn-sec btn-pequeno" onclick="agregarFotosDef(${defId}, true)">📷 Sacar foto</button>
@@ -8499,7 +8641,7 @@ async function urlsFotosLote(rutas) {
 }
 
 async function agregarFotosDef(defId, camara) {
-  if (!puedeRegistrar() || subiendoFotosDef) return;
+  if (!puedeRegistrar(deptoDefId(defId)) || subiendoFotosDef) return;
   const libres = FOTOS_POR_DEF_MAX - fotosDeDef(defId).length;
   if (libres <= 0) { toast(`Esta deficiencia ya tiene ${FOTOS_POR_DEF_MAX} fotos (el máximo). Borrá una para agregar otra.`, true); return; }
   let archivos = await elegirArchivosFoto(camara);
@@ -8565,7 +8707,7 @@ async function borrarFotoDef(id) {
 // Borra del depósito los archivos anotados en mant_fotos_por_borrar (fotos borradas o de deficiencias borradas).
 // La base solo deja quitar la anotación cuando el archivo ya no está, así que si algo falla queda para la próxima.
 async function limpiarFotosPorBorrar() {
-  if (!barcoActual || !puedeRegistrar()) return;
+  if (!barcoActual || !deptosRegistrables().length) return;
   try {
     const { data, error } = await sb.from('mant_fotos_por_borrar').select('id, ruta').eq('barco_id', barcoActual.id).order('id').limit(100);
     if (error) throw error;
@@ -8801,6 +8943,7 @@ function renderEquipos() {
 
   // Filtrar
   let filtrados = equiposConStats.filter(eq => {
+    if (!pasaFiltroDepto(eq.departamento)) return false;
     if (cat && eq.categoria !== cat) return false;
     if (!eq.activo && est !== 'TODOS' && est) return false;
     if (est === 'VENCIDOS' && eq._estado !== 'VENCIDOS') return false;
@@ -8842,6 +8985,10 @@ function renderEquipos() {
     if (m.includes('hidráulic')) return '🛠';
     if (m.includes('eléctric')) return '⚡';
     if (m.includes('aire')) return '❄️';
+    if (m.includes('salvavidas')) return '🛟';
+    if (m.includes('naveg')) return '🧭';
+    if (m.includes('comunic')) return '📡';
+    if (m.includes('puente')) return '🖥';
     if (m.includes('seguridad')) return '🚨';
     if (m.includes('grúa')) return '🏗';
     if (m.includes('guinche')) return '⚓';
@@ -8853,6 +9000,7 @@ function renderEquipos() {
     const cls = !eq.activo ? 'de-baja' : eq._estado === 'VENCIDOS' ? 'con-vencidos' : eq._estado === 'PROXIMOS' ? 'con-proximos' : '';
     const fabModel = [eq.fabricante, eq.modelo].filter(Boolean).join(' · ') || (eq.categoria || '');
     let badges = '';
+    if (!filtroDepto) badges += `<span class="mini-badge neutral">${ICONO_DEPTO[eq.departamento] || ''} ${escape(eq.departamento)}</span>`;
     if (!eq.activo) badges += '<span class="mini-badge de-baja">De baja</span>';
     else if (eq._stats.VENCIDO > 0) badges += `<span class="mini-badge vencido">🔴 ${eq._stats.VENCIDO} vencida${eq._stats.VENCIDO>1?'s':''}</span>`;
     if (eq.activo) {
@@ -8923,10 +9071,12 @@ function renderFichaEquipo() {
   const hrsActual = Math.max(0, ...tareasEq.filter(usaHoras).map(t => Number(t.hrs_totales || 0)));
 
   // Pills
-  const fabPills = [];
+  const fabPills = [`<span class="pill depto">${ICONO_DEPTO[eq.departamento] || ''} ${escape(eq.departamento)}</span>`];
   if (eq.fabricante) fabPills.push(`<span class="pill">🏭 ${escape(eq.fabricante)}</span>`);
   if (eq.modelo) fabPills.push(`<span class="pill">📋 ${escape(eq.modelo)}</span>`);
   if (eq.numero_serie) fabPills.push(`<span class="pill">🔖 Serie ${escape(eq.numero_serie)}</span>`);
+  if (eq.mmsi) fabPills.push(`<span class="pill">📡 MMSI ${escape(eq.mmsi)}</span>`);
+  if (eq.id_hex) fabPills.push(`<span class="pill">🛰 ID HEX ${escape(eq.id_hex)}</span>`);
   if (eq.anio_fab) fabPills.push(`<span class="pill">📅 ${eq.anio_fab}</span>`);
   if (eq.ubicacion_abordo) fabPills.push(`<span class="pill">📍 ${escape(eq.ubicacion_abordo)}</span>`);
   const origenHoras = eq.horas_de_id ? equipos.find(e => e.id === eq.horas_de_id) : null;
@@ -8962,8 +9112,8 @@ function renderFichaEquipo() {
         <span class="pill ${estPillCls}">${escape(eq.estado || 'Operativo')}</span>
       </div>
       ${eq.activo
-        ? `<button class="btn btn-acento editar solo-jefe" onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>`
-        : `<button class="btn btn-acento editar solo-jefe" onclick="reactivarEquipo(${eq.id})">↺ Reactivar</button>`}
+        ? `<button class="btn btn-acento editar solo-jefe"${attrDepto(eq.departamento)} onclick="abrirModalEquipo(${eq.id})">✎ Editar ficha</button>`
+        : `<button class="btn btn-acento editar solo-jefe"${attrDepto(eq.departamento)} onclick="reactivarEquipo(${eq.id})">↺ Reactivar</button>`}
     </div>
 
     ${eq.activo ? '' : `<div class="datos-tecnicos-box vacio" style="margin-bottom:14px">Equipo dado de baja: no aparece en listas ni selectores${tareasEq.length ? ` y sus ${tareasEq.length} tarea${tareasEq.length > 1 ? 's quedan' : ' queda'} en pausa hasta que lo reactives` : ''}. Su historial queda guardado.</div>`}
@@ -8984,6 +9134,8 @@ function renderFichaEquipo() {
     ${eq.datos_tecnicos
       ? `<h3 class="panel-titulo" style="margin-top:6px">📋 Datos técnicos</h3><div class="datos-tecnicos-box">${escape(eq.datos_tecnicos)}</div>`
       : eq.activo ? `<div class="datos-tecnicos-box vacio">Sin datos técnicos cargados. Tocá <strong>Editar ficha</strong> para agregarlos.</div>` : ''}
+
+    <div id="ficha-certificados"></div>
 
     ${(histEq.length > 0 || tareasEq.some(usaHoras)) ? `
       <h3 class="panel-titulo">📊 Gráficos</h3>
@@ -9013,6 +9165,7 @@ function renderFichaEquipo() {
   `;
 
   renderRellenosFicha();
+  renderCertificadosFicha();
 
   // Render lista de tareas del equipo
   const listaT = document.getElementById('ficha-tareas-list');
@@ -9031,6 +9184,23 @@ function renderFichaEquipo() {
 
   // Renderizar gráficos
   setTimeout(() => renderGraficosEquipo(eq, tareasEq, histEq), 50);
+}
+
+// Certificados vinculados al equipo (mant_certificados.equipo_id) con su vencimiento: primero los que piden atención
+function renderCertificadosFicha() {
+  const div = document.getElementById('ficha-certificados');
+  if (!div || !equipoActualFicha) return;
+  const certs = certificados.filter(c => c.equipo_id === equipoActualFicha.id)
+    .sort((a, b) => ORDEN_ESTADO_CERT[estadoCert(a)] - ORDEN_ESTADO_CERT[estadoCert(b)] ||
+      (a.fecha_vencimiento || '9999').localeCompare(b.fecha_vencimiento || '9999'));
+  div.innerHTML = `
+    <div class="ficha-hist-barra">
+      <h3 class="panel-titulo" style="margin:0">📋 Certificados (${certs.length})</h3>
+      ${equipoActualFicha.activo ? `<button class="btn btn-pequeno solo-jefe"${attrDepto('alguno')} onclick="abrirModalCert(null, null, ${equipoActualFicha.id})">➕ Certificado</button>` : ''}
+    </div>
+    ${certs.length
+      ? `<div class="task-list">${certs.map(c => renderCertCard(c, true)).join('')}</div>`
+      : '<div class="datos-tecnicos-box vacio" style="margin-bottom:14px">Sin certificados vinculados a este equipo.</div>'}`;
 }
 
 function renderGraficosEquipo(eq, tareasEq, histEq) {
@@ -9162,7 +9332,7 @@ function htmlItemHist(i) {
           ${h.notas ? `<div class="notas">📝 ${escape(h.notas)}</div>` : ''}
         </div>
         <div class="hist-hrs">${h.hrs_equipo != null ? h.hrs_equipo + ' hrs' : ''}</div>
-        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe" onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
+        <button class="btn btn-pequeno btn-sec hist-editar solo-jefe"${attrDepto(deptoTarea(i.t))} onclick="abrirModalHist(${h.id})" title="Corregir o borrar este registro">✏️</button>
       </div>`;
   }
   if (i.tipo === 'def') {
@@ -9245,8 +9415,10 @@ function abrirDetalleDef(id) {
   cerrar.style.display = editar.style.display = abierta ? '' : 'none';
   reabrir.style.display = abierta ? 'none' : '';
   // La línea que separa "Marcar como resuelta" / "Reabrir" (celular) solo si se ve uno de los dos
+  const dep = deptoDefId(id);
+  marcarDepto(document.getElementById('modal-def-detalle'), dep);
   document.querySelector('#modal-def-detalle .def-acciones-sep').style.display =
-    (abierta ? puedeRegistrar() : puedeEditar()) ? '' : 'none';
+    (abierta ? puedeRegistrar(dep) : puedeEditar(dep)) ? '' : 'none';
   cerrar.onclick = () => { cerrarDetalleDef(); abrirModalDefCerrar(id); };
   editar.onclick = () => { cerrarDetalleDef(); abrirModalDef(id); };
   reabrir.onclick = () => reabrirDef(id);
@@ -9261,7 +9433,7 @@ function cerrarDetalleDef() {
 // Reabrir una deficiencia resuelta (jefe/admin): la RPC guarda quién, cuándo y el cierre anterior
 async function reabrirDef(id) {
   const d = deficiencias.find(x => x.id === id);
-  if (!d || d.estado !== 'cerrada' || !puedeEditar()) return;
+  if (!d || d.estado !== 'cerrada' || !puedeEditar(deptoDefId(id))) return;
   const vencida = d.fecha_limite < hoyLocalISO() ? ' Su fecha límite ya pasó, así que va a figurar como vencida.' : '';
   if (!confirm(`¿Reabrir la deficiencia ${numeroDef(d)}?\n\nVuelve a figurar como abierta.${vencida} El cierre anterior (fecha y acción) queda registrado en su detalle.`)) return;
   try {
@@ -9316,6 +9488,7 @@ function abrirModalEquipo(id) {
   document.getElementById('modal-equipo-titulo').textContent = target ? 'Editar ficha del equipo' : 'Nuevo equipo';
   const set = (id, val) => document.getElementById(id).value = val ?? '';
   set('eq-nombre', target?.nombre);
+  llenarSelectorDeptoEquipo(target);
   set('eq-categoria', target?.categoria);
   set('eq-cantidad', target?.cantidad ?? 1);
   set('eq-ubicacion', target?.ubicacion_abordo);
@@ -9323,6 +9496,8 @@ function abrirModalEquipo(id) {
   set('eq-fabricante', target?.fabricante);
   set('eq-modelo', target?.modelo);
   set('eq-serie', target?.numero_serie);
+  set('eq-mmsi', target?.mmsi);
+  set('eq-id-hex', target?.id_hex);
   set('eq-anio-fab', target?.anio_fab);
   set('eq-anio-ins', target?.anio_instalacion);
   set('eq-pot-kw', target?.potencia_kw);
@@ -9342,9 +9517,30 @@ function abrirModalEquipo(id) {
   set('eq-notas-tx', target?.notas);
   document.getElementById('eq-critico').checked = !!target?.critico;
   document.getElementById('eq-borrar-btn').style.display = target && target.activo ? 'inline-flex' : 'none';
+  marcarDepto(document.getElementById('modal-equipo'), target ? target.departamento : 'Máquinas');
+  eqDeptoCambiado();
   // Guardamos el id para saber si update o insert
   document.getElementById('modal-equipo').dataset.editId = target ? target.id : '';
   document.getElementById('modal-equipo').classList.add('show');
+}
+
+// Departamento: uno nuevo, en los que el usuario edita (arranca en el del filtro si se puede).
+// Pasar un equipo existente a otro departamento es solo para quien tiene todo el barco (la base también lo exige).
+function llenarSelectorDeptoEquipo(equipo) {
+  const sel = document.getElementById('eq-departamento');
+  const opciones = equipo ? DEPARTAMENTOS : deptosEditables();
+  sel.innerHTML = opciones.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.value = equipo ? equipo.departamento : (opciones.includes(filtroDepto) ? filtroDepto : opciones[0] || '');
+  sel.disabled = !!equipo && !puedeEditar();
+  document.getElementById('eq-depto-nota').textContent = sel.disabled
+    ? 'Para pasar el equipo a otro departamento hace falta acceso a todo el barco.' : '';
+}
+// Cubierta: sin "Toma las horas de" ni datos de motor y aceite; con MMSI e ID HEX
+function eqDeptoCambiado() {
+  const cubierta = document.getElementById('eq-departamento').value === 'Cubierta';
+  document.getElementById('eq-bloque-horas').style.display = cubierta ? 'none' : '';
+  document.getElementById('eq-bloque-maquinas').style.display = cubierta ? 'none' : '';
+  document.getElementById('eq-bloque-electronica').style.display = cubierta ? 'grid' : 'none';
 }
 
 // Opciones de "Toma las horas de": otros equipos del barco, salvo los que ya toman (directa o
@@ -9379,8 +9575,11 @@ async function guardarEquipo() {
     return isNaN(v) ? null : v;
   };
   const txt = id => document.getElementById(id).value.trim() || null;
+  const departamento = document.getElementById('eq-departamento').value;
+  if (!DEPARTAMENTOS.includes(departamento)) { toast('Elegí el departamento', true); return; }
   const data = {
     nombre,
+    departamento,
     categoria: txt('eq-categoria'),
     cantidad: parseInt(document.getElementById('eq-cantidad').value) || 1,
     ubicacion_abordo: txt('eq-ubicacion'),
@@ -9388,6 +9587,8 @@ async function guardarEquipo() {
     fabricante: txt('eq-fabricante'),
     modelo: txt('eq-modelo'),
     numero_serie: txt('eq-serie'),
+    mmsi: txt('eq-mmsi'),
+    id_hex: txt('eq-id-hex'),
     anio_fab: parseInt(document.getElementById('eq-anio-fab').value) || null,
     anio_instalacion: parseInt(document.getElementById('eq-anio-ins').value) || null,
     potencia_kw: num('eq-pot-kw'),
@@ -9424,6 +9625,14 @@ async function guardarEquipo() {
     if (!confirm(`¿Cambiar el nombre de "${anterior.nombre}" a "${nombre}"?\n\n` +
       `Se va a actualizar el nombre en ${nT} tarea${nT === 1 ? '' : 's'} y ${nL} lectura${nL === 1 ? '' : 's'} de horas.`)) return;
   }
+  // Cambiar de departamento: sus tareas y deficiencias pasan con él (los certificados tienen el suyo)
+  if (anterior && anterior.departamento !== departamento) {
+    const nT = tareasTodas.filter(t => t.equipo_id === idEdit).length;
+    const nD = deficiencias.filter(d => d.equipo_id === idEdit).length;
+    if (!confirm(`¿Pasar "${anterior.nombre}" de ${anterior.departamento} a ${departamento}?\n\n` +
+      `Sus ${nT} tarea${nT === 1 ? '' : 's'} y ${nD} deficiencia${nD === 1 ? '' : 's'} pasan con el equipo: ` +
+      `las va a editar quien edita ${departamento}. Los certificados vinculados conservan su departamento.`)) return;
+  }
   try {
     if (editId) {
       const { error } = await sb.from('mant_equipos').update(data).eq('id', idEdit);
@@ -9450,9 +9659,8 @@ async function guardarEquipo() {
 // pausa (tareaEnPausa) hasta que se reactive. Con "Mostrar dados de baja" se lo ve en Equipos y se reactiva desde su ficha.
 async function darDeBajaEquipo() {
   const editId = document.getElementById('modal-equipo').dataset.editId;
-  if (!editId || !puedeEditar()) return;
   const eq = equipos.find(e => e.id === parseInt(editId));
-  if (!eq) return;
+  if (!eq || !puedeEditar(eq.departamento)) return;
   const n = tareas.filter(t => t.equipo_id === eq.id).length;
   if (!confirm(`¿Dar de baja "${eq.nombre}"?\n\nEl equipo deja de aparecer en listas y selectores. No se borra nada: su historial queda guardado.` +
     (n ? `\n\nSus ${n} tarea${n > 1 ? 's quedan' : ' queda'} en pausa hasta que lo reactives.` : ''))) return;
@@ -9471,7 +9679,7 @@ async function darDeBajaEquipo() {
 
 async function reactivarEquipo(id) {
   const eq = equiposTodos.find(e => e.id === id);
-  if (!eq || !puedeEditar()) return;
+  if (!eq || !puedeEditar(eq.departamento)) return;
   const n = tareasTodas.filter(t => t.activa && t.equipo_id === id).length;
   if (!confirm(`¿Reactivar "${eq.nombre}"?\n\nVuelve a aparecer en listas y selectores.` +
     (n ? `\n\nSus ${n} tarea${n > 1 ? 's vuelven' : ' vuelve'} a contar (vencidas, próximas, horas).` : ''))) return;
@@ -9586,14 +9794,15 @@ async function cargarUsuariosEmpresa() {
   if (!puedeAdministrar()) { usuariosEmpresa = []; renderAdminUsuarios(); return; }
   const E = barcoActual.empresa_id;
   const [{ data: acc, error: e1 }, { data: perf, error: e2 }] = await Promise.all([
-    sb.from('mant_accesos').select('user_id, barco_id, rol').eq('empresa_id', E),
+    sb.from('mant_accesos').select('user_id, barco_id, rol, departamento').eq('empresa_id', E),
     sb.from('mant_perfiles').select('user_id, email, debe_cambiar_clave'),
   ]);
   if (e1 || e2) { toast('No se pudo cargar la lista de usuarios', true); return; }
   const porUsuario = {};
   (acc || []).forEach(a => {
-    const u = porUsuario[a.user_id] = porUsuario[a.user_id] || { user_id: a.user_id, rol: a.rol, barcos: [] };
-    if (NIVEL_ROL[a.rol] > NIVEL_ROL[u.rol]) u.rol = a.rol;
+    // mant_accesos_guardar pone el mismo rol y departamento en todos sus barcos
+    const u = porUsuario[a.user_id] = porUsuario[a.user_id] || { user_id: a.user_id, rol: a.rol, departamento: a.departamento, barcos: [] };
+    if (NIVEL_ROL[a.rol] > NIVEL_ROL[u.rol]) { u.rol = a.rol; u.departamento = a.departamento; }
     if (a.barco_id) u.barcos.push(a.barco_id);
   });
   const perfiles = Object.fromEntries((perf || []).map(p => [p.user_id, p]));
@@ -9614,7 +9823,7 @@ function renderAdminUsuarios() {
       <div class="admin-item">
         <div>
           <div class="titulo">${escape(u.email)}${yo ? ' <span style="font-weight:400;color:var(--texto-suave)">(vos)</span>' : ''}${u.debe_cambiar_clave ? '<span class="badge-aviso">Tiene que cambiar la contraseña</span>' : ''}</div>
-          <div class="detalle">${NOMBRE_ROL[u.rol]} · ${barcos}</div>
+          <div class="detalle">${NOMBRE_ROL[u.rol]}${u.departamento ? ' de ' + escape(u.departamento) : ''} · ${barcos}</div>
         </div>
         <div class="acciones">
           ${yo ? '' : `
@@ -9634,19 +9843,23 @@ function abrirModalUsuario(userId) {
   document.getElementById('modal-usuario-titulo').textContent = nuevo ? 'Agregar usuario' : 'Cambiar acceso';
   document.getElementById('modal-usuario-sub').textContent = nuevo
     ? 'Si el email no tiene cuenta, se crea con una contraseña temporal que vas a ver una sola vez'
-    : 'Cambiá el rol o los barcos de este usuario';
+    : 'Cambiá el rol, el departamento o los barcos de este usuario';
   const email = document.getElementById('u-email');
   email.value = nuevo ? '' : usuarioEditando.email;
   email.disabled = !nuevo;
   document.getElementById('u-rol').value = nuevo ? 'operador' : usuarioEditando.rol;
+  document.getElementById('u-departamento').value = nuevo ? '' : usuarioEditando.departamento || '';
   const elegidos = new Set(nuevo ? (barcosDeMiEmpresa().length === 1 ? [barcoActual.id] : []) : usuarioEditando.barcos);
   document.getElementById('u-barcos').innerHTML = barcosDeMiEmpresa().map(b =>
     `<label class="exp-op"><input type="checkbox" name="u-barco" value="${b.id}"${elegidos.has(b.id) ? ' checked' : ''}> ${escape(b.nombre)}</label>`).join('');
   actualizarCampoBarcosUsuario();
   document.getElementById('modal-usuario').classList.add('show');
 }
+// El admin de la empresa es de todos los barcos y todos los departamentos
 function actualizarCampoBarcosUsuario() {
-  document.getElementById('u-barcos-campo').style.display = document.getElementById('u-rol').value === 'admin_empresa' ? 'none' : '';
+  const admin = document.getElementById('u-rol').value === 'admin_empresa';
+  document.getElementById('u-barcos-campo').style.display = admin ? 'none' : '';
+  document.getElementById('u-depto-campo').style.display = admin ? 'none' : '';
 }
 function cerrarModalUsuario() {
   document.getElementById('modal-usuario').classList.remove('show');
@@ -9656,6 +9869,7 @@ function cerrarModalUsuario() {
 async function guardarUsuario() {
   const rol = document.getElementById('u-rol').value;
   const barcos = rol === 'admin_empresa' ? [] : [...document.querySelectorAll('input[name="u-barco"]:checked')].map(c => Number(c.value));
+  const departamento = rol === 'admin_empresa' ? null : document.getElementById('u-departamento').value || null;
   const email = document.getElementById('u-email').value.trim();
   if (!usuarioEditando && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Poné un email válido', true); return; }
   if (rol !== 'admin_empresa' && !barcos.length) { toast('Elegí al menos un barco', true); return; }
@@ -9664,12 +9878,12 @@ async function guardarUsuario() {
   try {
     if (usuarioEditando) {
       const { error } = await sb.rpc('mant_accesos_guardar', {
-        p_user: usuarioEditando.user_id, p_empresa: barcoActual.empresa_id, p_rol: rol, p_barcos: barcos });
+        p_user: usuarioEditando.user_id, p_empresa: barcoActual.empresa_id, p_rol: rol, p_barcos: barcos, p_departamento: departamento });
       if (error) throw error;
       cerrarModalUsuario();
       toast('✓ Acceso actualizado');
     } else {
-      const r = await llamarUsuarios({ accion: 'crear', empresa_id: barcoActual.empresa_id, email, rol, barcos });
+      const r = await llamarUsuarios({ accion: 'crear', empresa_id: barcoActual.empresa_id, email, rol, barcos, departamento });
       cerrarModalUsuario();
       if (r.clave_temporal) mostrarClaveTemp(r.email, r.clave_temporal);
       else toast(`✓ ${r.email} ya tenía cuenta: se le dio acceso con su contraseña de siempre`);

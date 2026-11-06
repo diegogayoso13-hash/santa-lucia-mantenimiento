@@ -1,7 +1,8 @@
 // Edge Function "mant-usuarios" (proyecto ncughlkgdgigwkggnxri).
 // Lo que la app no puede hacer con su clave pública, porque necesita la service role:
-//   crear      -> el admin_empresa da de alta a alguien (email, rol, barcos). Si el email es nuevo se crea la
-//                 cuenta con una contraseña temporal que se devuelve UNA vez; si ya tenía cuenta, solo se le da acceso.
+//   crear      -> el admin_empresa da de alta a alguien (email, rol, barcos y departamento opcional: null = todo
+//                 el barco). Si el email es nuevo se crea la cuenta con una contraseña temporal que se devuelve
+//                 UNA vez; si ya tenía cuenta, solo se le da acceso.
 //   clave_temporal -> el admin genera una contraseña temporal nueva para un usuario que está SOLO en sus empresas.
 //   cambiar_mi_clave -> cualquier usuario cambia su contraseña (pide la actual, salvo en el primer ingreso).
 // Quien llama se identifica con su sesión (Authorization: Bearer <token>). Los accesos se guardan con la RPC
@@ -12,6 +13,7 @@ const URL_SUPABASE = Deno.env.get('SUPABASE_URL')!;
 const CLAVE_ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
 const CLAVE_SERVICIO = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ROLES = ['admin_empresa', 'jefe', 'operador', 'lectura'];
+const DEPARTAMENTOS = ['Máquinas', 'Cubierta'];
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -61,9 +63,11 @@ Deno.serve(async (req: Request) => {
       const email = String(cuerpo.email || '').trim().toLowerCase();
       const rol = String(cuerpo.rol || '');
       const barcos = Array.isArray(cuerpo.barcos) ? cuerpo.barcos.map(Number).filter(Number.isInteger) : [];
+      const departamento = cuerpo.departamento && rol !== 'admin_empresa' ? String(cuerpo.departamento) : null;
       if (!empresasAdmin.has(empresa)) return error('Solo el administrador de la empresa puede dar de alta usuarios', 403);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return error('El email no es válido');
       if (!ROLES.includes(rol)) return error('Elegí un rol');
+      if (departamento && !DEPARTAMENTOS.includes(departamento)) return error('Departamento no válido');
       if (rol !== 'admin_empresa' && !barcos.length) return error('Elegí al menos un barco');
 
       // ¿Ya tiene cuenta? (todas las cuentas tienen su fila en mant_perfiles)
@@ -85,7 +89,8 @@ Deno.serve(async (req: Request) => {
         const { error: ePerfil } = await servicio.from('mant_perfiles').insert({ user_id: userId, email, debe_cambiar_clave: true });
         if (ePerfil) { await servicio.auth.admin.deleteUser(userId); return error('No se pudo crear el usuario'); }
       }
-      const { error: eAcc } = await comoYo.rpc('mant_accesos_guardar', { p_user: userId, p_empresa: empresa, p_rol: rol, p_barcos: barcos });
+      const { error: eAcc } = await comoYo.rpc('mant_accesos_guardar',
+        { p_user: userId, p_empresa: empresa, p_rol: rol, p_barcos: barcos, p_departamento: departamento });
       if (eAcc) {
         if (clave) await servicio.auth.admin.deleteUser(userId!);  // no dejar una cuenta nueva sin acceso
         return error(eAcc.message || 'No se pudo dar el acceso', eAcc.code === '42501' ? 403 : 400);

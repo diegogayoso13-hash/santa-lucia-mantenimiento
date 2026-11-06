@@ -44,7 +44,7 @@ The top bar has these sections, each with its sub-tabs underneath:
 | 🔧 Mantenimiento | Tareas, Deficiencias, Horas, Historial |
 | ⚓ Barco | Mi Barco, Equipos, Certificados |
 | 📦 Pañol | Stock, Herramientas |
-| ⛽ Consumos | Combustible, Sondas, Rellenos (for now only `admin_empresa`, see "Combustible", "Sondas" and "Rellenos de aceite"). Internal section key: `combustible` |
+| ⛽ Consumos | Combustible, Sondas, Rellenos (everyone with the ship sees it; Máquinas and whole-ship roles edit it, see "Combustible", "Sondas" and "Rellenos de aceite"). Internal section key: `combustible` |
 | ⚙️ Admin | Barcos, Usuarios (only `admin_empresa`) |
 
 - **Restricted sections:** `puedeVerSeccion()` says who may open a section. `cambiarTab()` and `renderEncabezado()` send everyone else back to the dashboard, and the buttons are hidden with `.solo-admin` / `.solo-combustible`.
@@ -254,7 +254,7 @@ Stages 1 and 2 of 3 (section `============ COMBUSTIBLE ============`). Fuel is t
   - operador adds and edits only periods en curso, and their loads. It can type the end, which closes the period for it, and can't insert an already-closed period: the modal disables "fin" on a new period for non-jefes.
   - jefe and admin edit any period. Deleting is jefe and admin only.
   - `guardarComb()` saves the loads before the period update, so an operador closing a period can still save its loads.
-- **Visibility:** for now the tab is only for `admin_empresa`. `puedeVerCombustible()` is the single switch (body class `puede-combustible`, elements `.solo-combustible`); the database rules are already per role.
+- **Visibility:** everyone with access to the ship sees the section; only Máquinas and whole-ship users edit (buttons with `data-dep="maquinas"`, JS checks with `DEPTO_PANOL`). `puedeVerCombustible()` is the single switch (body class `puede-combustible`, elements `.solo-combustible`); the database rules are per role and department.
 - **Authorship:** `creado_por` comes from `mant_priv.registrar_autor`, and `actualizado_por`/`actualizado_en` from `mant_priv.combustible_actualizado`. The modal shows them through `nombreUsuarioComb()`, which only knows emails of the admin's company users.
 - **Excel:** `exportarCombExcel()` writes two sheets to `Combustible_<barco>_<fecha>.xlsx`:
   - "Combustible": Período, Inicio, Consumo, Trasvase a otro buque (= entregado), Recibido de otro buque, Cargado, Fin, MMPP, MGAs, Millas, Hr navegación, Consumo promedio (l/h).
@@ -382,11 +382,11 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 `docs/esquema.sql` documents all `mant_*` tables of `ncughlkgdgigwkggnxri` plus their indexes, functions/triggers and RLS policies, as of 2026-11-01. **Keep it in sync**: whenever you apply a migration, update the file too. The live Supabase project is the source of truth if they ever disagree. Tables added beyond the original six (besides `mant_empresas`, `mant_accesos` and `mant_perfiles`, described below):
 
 - `mant_buque` — the ships table, one row per ship. `capacidad_combustible_litros` (nullable, ≥ 0) is the total tank capacity, edited in Mi Barco.
-- `mant_equipos` — equipment fichas; includes `activo` (soft delete) and `critico boolean not null default false`.
+- `mant_equipos` — equipment fichas; includes `activo` (soft delete), `critico boolean not null default false`, `departamento` (`'Máquinas'|'Cubierta'`, default Máquinas) and the optional `mmsi` / `id_hex` (deck electronics, EPIRB).
 - `mant_lecturas_horas` — `equipo` (text name), `fecha`, `horas_mes`, `hrs_total`.
 - `mant_deficiencias` — `anio`, `numero` (unique together, set by trigger `mant_deficiencias_numerar`), `equipo_id` → `mant_equipos(id)`, `descripcion`, `fecha_detectada`, `detectada_por`, `critica`, `fecha_limite`, `estado` (`'abierta'|'cerrada'`), `fecha_cierre`, `accion_realizada`, `creado_en`.
 - `mant_tripulantes` — `nombre`, `cargo`, `departamento` (`'Cubierta'|'Máquinas'`, inherited by their documents), `activo`.
-- `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `departamento`, `fecha_vencimiento` (nullable, see "Certificates without a date"), `dias_aviso` (default 30), `observaciones`, `activo`.
+- `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `equipo_id` → `mant_equipos(barco_id, id)` (optional, never on a personal document; may be from another department than the certificate), `departamento`, `fecha_vencimiento` (nullable, see "Certificates without a date"), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
 - `mant_tareas` extra columns: `equipo_id` → `mant_equipos(barco_id, id)` (`not null`; equipment with tasks can't be hard-deleted), `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
@@ -410,7 +410,7 @@ Every `mant_*` table has RLS enabled, with policies by company, ship and role (s
 
 ## Several ships, companies and roles
 
-`localStorage` keys: `nav`, `cert-solapa`, `barco` (last ship) and `exportar-plan`.
+`localStorage` keys: `nav`, `cert-solapa`, `barco` (last ship), `exportar-plan` and `depto-<user id>` (department filter).
 
 - **Several ships:**
   - **Ships table:** `mant_buque` is the ships table, one row per ship (id 1 = B/M Santa Lucía).
@@ -429,6 +429,36 @@ Every `mant_*` table has RLS enabled, with policies by company, ship and role (s
     - `lectura` can only see.
     - The admin can create ships and manage access in their company, except their own access row.
   - **RLS:** every table's policies call `SECURITY DEFINER` helpers in the `mant_priv` schema, which the API doesn't expose. `mant_priv.barcos(nivel)` returns the user's ships at that level or higher, with levels 1 lectura, 2 operador, 3 jefe. Policies wrap the helpers as `(select …)::integer[]` so they run once per query.
+  - **Departments (Máquinas / Cubierta), database side since 2026-11-06:**
+    - `mant_accesos.departamento` (null = the whole ship; always null for `admin_empresa`). A department access sees the whole ship and edits only its department, e.g. the captain is `jefe` + `Cubierta`. It's set with `mant_accesos_guardar(..., p_departamento)`.
+    - **Where the department comes from:**
+      - `mant_equipos.departamento` (default `'Máquinas'`);
+      - tasks, history, task spare parts, hour readings (by name) and deficiencies (with photos and reopenings) take their equipment's;
+      - certificates (and renewals) and crew members have their own column.
+    - **Helpers:**
+      - `mant_priv.nivel_depto(barco, depto)` and `mant_priv.puede(barco, depto, nivel)` (called per row in write policies, with `mant_priv.depto_equipo/depto_equipo_nombre/depto_tarea/depto_deficiencia/depto_certificado`);
+      - `barcos_depto(nivel, depto)`;
+      - `barcos_alguno(nivel)` (any department).
+      - `barcos(n)` for n ≥ 2 and `nivel()` now count only whole-ship accesses, so anything still on them (Mi Barco, Herramientas, the ship photo) is whole-ship only.
+    - **Pañol and Consumos** (stock, movements, fuel, transfers, soundings, tanks, oils, top-ups, tank loads) are Máquinas (`barcos_depto(n, 'Máquinas')`, `nivel_depto(b, 'Máquinas')`).
+    - **New write policies:** a new table that belongs to a department must use `mant_priv.puede(...)`; one that belongs to the whole ship uses `barcos(n)`.
+    - **App side** (section `BARCOS Y ROLES`):
+      - `barcoActual.departamento` comes from the access row.
+      - `nivelActual(depto)`, `puedeRegistrar(depto)`, `puedeEditar(depto)`: without `depto` they mean the whole ship. Pañol and Consumos pass `DEPTO_PANOL` ('Máquinas').
+      - `deptoEquipo(id)` / `deptoTarea(t)` / `deptoDefId(id)` give an item's department; `deptosEditables()` / `deptosRegistrables()` feed the form selects (`llenarSelectDepto()`).
+    - **Role buttons by department:** `body` also gets `edita-maquinas|cubierta|alguno` and `registra-…`. A `.solo-jefe` / `.solo-operador` element with `data-dep="maquinas|cubierta|alguno"` follows that department; one without `data-dep` follows the whole ship.
+      - Rendered items use `attrDepto(depto)`.
+      - Modals mark their fixed buttons when opened with `marcarDepto(modal, depto)`: Registrar, equipment, deficiency detail.
+      - A new action button on a departmental item needs one of these.
+    - **Shared department filter** (`filtroDepto`, `.sel-depto` in Inicio, Equipos and Tareas, `cambiarFiltroDepto()`, `pasaFiltroDepto()`): remembered per user in `localStorage` key `depto-<user id>`; the first time it starts on the user's department.
+      - Inicio filters tasks and deficiencies by their equipment and certificates by their own department.
+      - Tab badges count everything.
+    - **Forms by department:**
+      - Task, deficiency, hours-entry and "Registrar varias" lists show only equipment/tasks of departments the user can edit/register.
+      - Equipment modal: `#eq-departamento` (only a whole-ship user changes an existing one's department). Cubierta hides "Toma las horas de" and the engine/oil block and shows MMSI / ID HEX.
+      - Certificate modal: `#c-equipo` (optional, any department).
+      - The equipment ficha lists its certificates (`renderCertificadosFicha()`, refreshed from `renderTodo()`) with "➕ Certificado".
+    - **Admin → Usuarios:** `#u-departamento`, saved with `mant_accesos_guardar(..., p_departamento)` and the Edge Function `crear` (`departamento`).
   - **Authorship:** `creado_por` (history, hour readings, movements, deficiencies) and `cerrada_por` (deficiencies) are set by triggers from `auth.uid()`, so the app can't fake them. Rows written straight from SQL or the dashboard (no app session) keep whatever is sent.
   - **New users:** sign-ups are meant to be off. Users are created in the dashboard (Authentication → Users), then given a `mant_accesos` row.
   - The full rules are in `docs/esquema.sql`.
