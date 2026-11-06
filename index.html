@@ -1393,6 +1393,9 @@
     <h2 class="panel-titulo solo-operador" data-dep="alguno">Cargar horas del mes</h2>
     <div class="carga-form solo-operador" data-dep="alguno">
       <h3>Actualización mensual de horas por equipo</h3>
+      <!-- Sin equipos para cargar, renderCarga() muestra el mensaje en lugar del formulario -->
+      <div id="carga-vacio" class="empty" style="display:none"></div>
+      <div id="carga-campos">
       <p style="font-size:13px;color:var(--texto-suave);margin-bottom:16px">
         Poné solo <strong>las horas navegadas este mes</strong> por equipo. La app las suma al total y recalcula los vencimientos sola. Los equipos que toman las horas de otro (por ejemplo, las cajas reductoras) se actualizan solos junto con él.
       </p>
@@ -1404,6 +1407,7 @@
       <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-sec" onclick="resetCarga()">Limpiar</button>
         <button class="btn" onclick="guardarCarga()">💾 Guardar horas</button>
+      </div>
       </div>
     </div>
 
@@ -1448,7 +1452,7 @@
     <h2 class="panel-titulo">Sondas</h2>
     <div class="acciones-globales">
       <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalSonda()">➕ Nueva sonda</button>
-      <button class="btn btn-sec" onclick="abrirModalTanques()">🛢 Tanques</button>
+      <button class="btn btn-sec" id="btn-tanques" onclick="abrirModalTanques()">🛢 Tanques</button>
       <button class="btn btn-acento" onclick="exportarSondasExcel()">📥 Exportar Excel</button>
     </div>
     <div id="sondas-lista"></div>
@@ -1460,7 +1464,7 @@
     <div class="acciones-globales">
       <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalRelleno()">➕ Relleno</button>
       <button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalCargaAceite()">➕ Carga a tanque</button>
-      <button class="btn btn-sec" onclick="abrirModalAceites()">🛢️ Aceites</button>
+      <button class="btn btn-sec" id="btn-aceites" onclick="abrirModalAceites()">🛢️ Aceites</button>
       <button class="btn btn-acento" onclick="exportarRellenosExcel()">📥 Exportar Excel</button>
     </div>
     <!-- Consumo de aceite por sonda: tanques, reserva, sistema, tambor/bidón y cargas a tanque -->
@@ -2751,9 +2755,23 @@ function toast(msg, error = false) {
 }
 // Texto para mostrar un error de Supabase; los rechazos por permisos (RLS o triggers de control) salen en criollo
 function textoError(err) {
-  const msg = (err && err.message) || String(err || '');
-  if ((err && err.code === '42501') || /row-level security|permission denied/i.test(msg)) return 'No tenés permiso para esto';
-  return 'Error: ' + msg;
+  const msg = (err && err.message) || '';
+  if (err && err.code === SIN_CAMBIOS) return msg;
+  if (/row-level security|permission denied/i.test(msg)) return 'No tenés permiso para esto';
+  // Los triggers de permisos explican el motivo con su propio mensaje
+  if (err && err.code === '42501') return msg || 'No tenés permiso para esto';
+  return 'Error: ' + (msg || String(err || ''));
+}
+// Un update/delete que la base rechaza por permisos (RLS) no da error: solo no cambia ninguna fila. cambiarFilas()
+// pide de vuelta lo cambiado y, si no hay nada, lo trata como error. Todo update/delete de la app pasa por acá.
+const SIN_CAMBIOS = 'SIN_CAMBIOS';
+async function cambiarFilas(consulta) {
+  const { data, error } = await consulta.select('id');
+  if (error) throw error;
+  if (!data || !data.length) {
+    throw Object.assign(new Error('No se guardó: no tenés permiso para esto o el registro ya no existe'), { code: SIN_CAMBIOS });
+  }
+  return data;
 }
 function diasEntre(fechaStr) {
   if (!fechaStr) return null;
@@ -2986,6 +3004,10 @@ function renderEncabezado() {
   document.body.classList.toggle('edita-alguno', deptosEditables().length > 0);
   document.body.classList.toggle('puede-administrar', puedeAdministrar());
   document.body.classList.toggle('puede-combustible', puedeVerCombustible());
+  // Tanques y aceites los gestiona jefe/admin de Máquinas; para los demás esos botones solo abren la lista
+  const gestionaConsumos = puedeEditar(DEPTO_PANOL);
+  document.getElementById('btn-tanques').textContent = gestionaConsumos ? '🛢 Tanques' : '👁 Ver tanques';
+  document.getElementById('btn-aceites').textContent = gestionaConsumos ? '🛢️ Aceites' : '👁 Ver aceites';
   // Si estaba en una sección que en este barco no le corresponde, vuelve al inicio
   const tabActiva = document.querySelector('.tab.active');
   if (barcoActual && tabActiva && !puedeVerSeccion(SECCION_DE_TAB[tabActiva.dataset.tab])) cambiarTab('dashboard');
@@ -3368,7 +3390,7 @@ function renderPostergadasDashboard() {
 
   const items = [
     ...pTareas.map(t => ({ hasta: t.postergada_hasta, html: `
-      <div class="postergada-item" onclick="abrirModal(${t.id})">
+      <div class="postergada-item" onclick="abrirTareaDesdeDashboard(${t.id})">
         <div><strong>${escape(t.equipo)}</strong> — ${escape(t.tarea)}${esTareaCritica(t) ? ' <span class="badge-critico">⚠️ CRÍTICO</span>' : ''}</div>
         <div class="meta">Revisar el ${fmtFecha(t.postergada_hasta)} · ${escape(t.motivo_postergacion)}</div>
       </div>` })),
@@ -3395,12 +3417,24 @@ function togglePostergadas() {
   renderPostergadasDashboard();
 }
 
+// Postergadas del Inicio: lo que el usuario no puede tocar se abre solo para mirar, nunca un formulario sin salida.
+// Una tarea ajena abre la ficha de su equipo, donde se ve con su postergación.
+function abrirTareaDesdeDashboard(id) {
+  const t = tareas.find(x => x.id === id);
+  if (!t) return;
+  if (puedeRegistrar(deptoTarea(t))) abrirModal(id);
+  else abrirFichaEquipo(t.equipo_id);
+}
 function abrirCertDesdeDashboard(id) {
   const c = certificados.find(x => x.id === id);
   if (!c) return;
   cambiarTab('certificados');
   cambiarSolapaCert(c.tripulante_id ? 'tripulacion' : 'barco');
-  abrirModalCert(id);
+  if (puedeEditar(c.departamento)) { abrirModalCert(id); return; }
+  // Solo para mirar: la lista filtrada en ese certificado (sin Renovar ni Editar, que son de su departamento)
+  document.getElementById('cert-buscador').value = c.nombre;
+  ['cert-filtro-depto', 'cert-filtro-cat', 'cert-filtro-trip'].forEach(f => { document.getElementById(f).value = ''; });
+  renderCertificados();
 }
 
 // Botón / estado de la postergación dentro de los modales de Registrar (tareas) y Editar (certificados).
@@ -3444,8 +3478,7 @@ function cerrarModalPost() {
 async function guardarPostergacion(datos) {
   const { tipo, item } = postActual;
   const tabla = tipo === 'tarea' ? 'mant_tareas' : 'mant_certificados';
-  const { error } = await sb.from(tabla).update(datos).eq('id', item.id);
-  if (error) throw error;
+  await cambiarFilas(sb.from(tabla).update(datos).eq('id', item.id));
 }
 
 async function guardarPost() {
@@ -3605,8 +3638,10 @@ function renderTaskCardBaja(t) {
 
 // ============ MODAL ============
 function abrirModal(id) {
-  tareaActual = tareas.find(t => t.id === id);
-  if (!tareaActual) return;
+  const t = tareas.find(x => x.id === id);
+  // Solo quien registra en el departamento de la tarea (los botones ya lo filtran; esto cubre cualquier otra entrada)
+  if (!t || !puedeRegistrar(deptoTarea(t))) return;
+  tareaActual = t;
   document.getElementById('modal-info').innerHTML = `<strong>${escape(tareaActual.equipo)}</strong> — ${escape(tareaActual.tarea)}`;
   document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('m-hrs').value = tareaActual.hrs_totales || '';
@@ -3652,10 +3687,9 @@ async function bajaOBorrarTarea() {
     if (!confirm(`¿Borrar la tarea "${t.tarea}" del equipo ${t.equipo}?\n\nNo tiene registros en el historial.${txtRep}\n\nEsta acción no se puede deshacer.`)) return;
   }
   try {
-    const { error } = nHist > 0
-      ? await sb.from('mant_tareas').update({ activa: false }).eq('id', t.id)
-      : await sb.from('mant_tareas').delete().eq('id', t.id);
-    if (error) throw error;
+    await cambiarFilas(nHist > 0
+      ? sb.from('mant_tareas').update({ activa: false }).eq('id', t.id)
+      : sb.from('mant_tareas').delete().eq('id', t.id));
     toast(nHist > 0 ? '✓ Tarea dada de baja' : '✓ Tarea borrada');
     cerrarModal();
     await cargarTodo();
@@ -3672,8 +3706,7 @@ async function reactivarTarea(id) {
   if (!confirm(`¿Reactivar la tarea "${t.tarea}" del equipo ${t.equipo}?\n\n` +
     `Vuelve con sus datos de antes (última realización y próximo vencimiento): si ya pasó, va a aparecer vencida.`)) return;
   try {
-    const { error } = await sb.from('mant_tareas').update({ activa: true }).eq('id', t.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_tareas').update({ activa: true }).eq('id', t.id));
     toast('✓ Tarea reactivada');
     await cargarTodo();
   } catch (err) {
@@ -3714,8 +3747,7 @@ async function guardarMant() {
   if (usaFecha(tareaActual) && cMeses) update.proxima_fecha = sumarMeses(fecha, cMeses);
 
   try {
-    const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tareaActual.id);
-    if (e1) throw e1;
+    await cambiarFilas(sb.from('mant_tareas').update(update).eq('id', tareaActual.id));
     const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
       tarea_id: tareaActual.id,
       fecha_realizado: fecha,
@@ -3738,8 +3770,7 @@ async function guardarSoloTipo() {
   if (!tareaActual) return;
   const tipo = document.getElementById('m-tipo-trabajo').value || null;
   try {
-    const { error } = await sb.from('mant_tareas').update({ tipo_trabajo: tipo }).eq('id', tareaActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_tareas').update({ tipo_trabajo: tipo }).eq('id', tareaActual.id));
     tareaActual.tipo_trabajo = tipo;
     const t = tareas.find(x => x.id === tareaActual.id);
     if (t) t.tipo_trabajo = tipo;
@@ -4030,8 +4061,7 @@ async function guardarEdicionTarea() {
   }
 
   try {
-    const { error } = await sb.from('mant_tareas').update(data).eq('id', t.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_tareas').update(data).eq('id', t.id));
     toast((data.unidad ? '✓ Tarea actualizada y vencimientos recalculados' : '✓ Tarea actualizada') +
       (cambiaEquipo ? ` · ahora en ${eq.nombre}` : ''));
     cerrarModalTarea();
@@ -4100,7 +4130,14 @@ function renderCarga() {
           <div class="nuevo-total" data-total-de="${eq.id}" style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--azul-profundo);padding-top:4px">${hrs_actuales}</div>
         </div>
       </div>`;
-  }).join('') || '<div class="empty">No hay equipos con tareas por horas para cargar.</div>';
+  }).join('');
+  // Sin equipos: un mensaje en lugar del formulario vacío
+  document.getElementById('carga-campos').style.display = lista.length ? '' : 'none';
+  const vacio = document.getElementById('carga-vacio');
+  vacio.style.display = lista.length ? 'none' : '';
+  vacio.textContent = puedeRegistrar('Máquinas')
+    ? 'No hay equipos con tareas por horas para cargar.'
+    : 'No tenés equipos con tareas por horas para cargar. Las horas de los equipos de Máquinas las carga Máquinas.';
 
   const inputF = document.getElementById('fch-fecha');
   if (inputF && !inputF.value) inputF.value = new Date().toISOString().split('T')[0];
@@ -4253,8 +4290,8 @@ async function aplicarChequeos() {
   const ids = Array.from(checks).map(c => parseInt(c.dataset.fchTareaId));
   if (!confirm(`Vas a marcar ${ids.length} tarea${ids.length>1?'s':''} como realizada${ids.length>1?'s':''} el ${fecha}.\n\n¿Confirmás?`)) return;
 
+  let aplicadas = 0;
   try {
-    let aplicadas = 0;
     for (const id of ids) {
       const t = tareas.find(x => x.id === id);
       if (!t) continue;
@@ -4263,8 +4300,7 @@ async function aplicarChequeos() {
       const update = { fecha_ult: fecha, realizado_por: quien, postergada_hasta: null, motivo_postergacion: null };
       if (meses) update.proxima_fecha = sumarMeses(fecha, meses);
 
-      const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', id);
-      if (e1) throw e1;
+      await cambiarFilas(sb.from('mant_tareas').update(update).eq('id', id));
 
       const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: id,
@@ -4281,7 +4317,9 @@ async function aplicarChequeos() {
     await cargarTodo();
   } catch (err) {
     console.error(err);
-    toast(textoError(err), true);
+    // Las que ya se guardaron quedan guardadas: se avisa y se recarga para que no se vuelvan a marcar
+    toast(textoError(err) + (aplicadas ? ` (antes del error se registraron ${aplicadas})` : ''), true);
+    if (aplicadas) await cargarTodo();
   }
 }
 
@@ -4344,7 +4382,9 @@ async function guardarCarga() {
   }
 }
 
-// hrs_totales de todas las tareas de cada equipo (también las dadas de baja, así al reactivarlas tienen las horas al día)
+// hrs_totales de todas las tareas de cada equipo (también las dadas de baja, así al reactivarlas tienen las horas al día).
+// Sin cambiarFilas(): un equipo que toma horas de otro puede no tener tareas. Va después de guardarLecturas(), que
+// sí da error si la base no deja, así sin permiso no se llega a tocar ninguna tarea.
 async function actualizarHorasTareas(horasNuevas) {
   for (const [equipoId, hrs] of horasNuevas) {
     const { error } = await sb.from('mant_tareas').update({ hrs_totales: hrs }).eq('barco_id', barcoActual.id).eq('equipo_id', equipoId);
@@ -4404,8 +4444,8 @@ async function aplicarSoloHoras() {
   if (!cargaPendiente) return;
   const { horasNuevas, lecturasNuevas } = cargaPendiente;
   try {
-    await actualizarHorasTareas(horasNuevas);
     await guardarLecturas(lecturasNuevas);
+    await actualizarHorasTareas(horasNuevas);
     const n = horasNuevas.size;
     toast(`✓ Actualizadas horas de ${n} equipo${n>1?'s':''}`);
     cargaPendiente = null;
@@ -4430,9 +4470,9 @@ async function aplicarConfirm() {
   }));
 
   try {
-    // 2) Actualizar horas totales de todos los equipos
-    await actualizarHorasTareas(horasNuevas);
+    // 2) Guardar las lecturas y actualizar las horas totales de todos los equipos
     await guardarLecturas(lecturasNuevas);
+    await actualizarHorasTareas(horasNuevas);
 
     // 3) Para cada tarea marcada como realizada, actualizarla y crear historial
     for (const tr of tareasRealizadas) {
@@ -4451,8 +4491,7 @@ async function aplicarConfirm() {
       if (per) update.proxima_hrs = tr.hrs + per;
       // "Lo que ocurra primero": registrar también recalcula la próxima fecha
       if (meses) update.proxima_fecha = sumarMeses(fechaHoy, meses);
-      const { error: e1 } = await sb.from('mant_tareas').update(update).eq('id', tr.id);
-      if (e1) throw e1;
+      await cambiarFilas(sb.from('mant_tareas').update(update).eq('id', tr.id));
 
       const { error: e2 } = await sb.from('mant_historial').insert(conBarco({
         tarea_id: tr.id,
@@ -4684,8 +4723,7 @@ function actualizarRecalculoHist() {
 // Aplica el recálculo a la tarea (si corresponde y está tildado)
 async function aplicarRecalculoHist(t, update) {
   if (!t || !Object.keys(update).length || !document.getElementById('h-recalcular').checked) return false;
-  const { error } = await sb.from('mant_tareas').update(update).eq('id', t.id);
-  if (error) throw error;
+  await cambiarFilas(sb.from('mant_tareas').update(update).eq('id', t.id));
   return true;
 }
 
@@ -4707,13 +4745,12 @@ async function guardarRegistroHist() {
   const { antes, despues } = registrosTarea(ed);
   const { update } = t ? recalculoTarea(t, antes, despues) : { update: {} };
   try {
-    const { error } = await sb.from('mant_historial').update({
+    await cambiarFilas(sb.from('mant_historial').update({
       fecha_realizado: ed.fecha_realizado,
       hrs_equipo: ed.hrs_equipo,
       realizado_por: ed.realizado_por,
       notas: ed.notas
-    }).eq('id', histActual.id);
-    if (error) throw error;
+    }).eq('id', histActual.id));
     const recalculada = await aplicarRecalculoHist(t, update);
     await despuesDeCambioHist(recalculada ? '✓ Registro corregido y tarea recalculada' : '✓ Registro corregido');
   } catch (err) {
@@ -4743,8 +4780,7 @@ async function borrarRegistroHist() {
   if (!confirm(msg)) return;
 
   try {
-    const { error } = await sb.from('mant_historial').delete().eq('id', h.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_historial').delete().eq('id', h.id));
     const recalculada = await aplicarRecalculoHist(t, update);
     await despuesDeCambioHist(recalculada ? '✓ Registro borrado y tarea recalculada' : '✓ Registro borrado');
   } catch (err) {
@@ -4962,14 +4998,14 @@ async function guardarMinimosEditados() {
   const ids = Object.keys(minimosEditados);
   if (!ids.length) { toast('No hay cambios para guardar'); return; }
   try {
-    const resultados = await Promise.all(ids.map(id =>
-      sb.from('mant_repuestos').update({ minimo: minimosEditados[id] }).eq('id', Number(id))
+    const resultados = await Promise.allSettled(ids.map(id =>
+      cambiarFilas(sb.from('mant_repuestos').update({ minimo: minimosEditados[id] }).eq('id', Number(id)))
     ));
-    const fallidos = resultados.filter(r => r.error);
+    const fallidos = resultados.filter(r => r.status === 'rejected');
     const exitosos = resultados.length - fallidos.length;
     if (fallidos.length) {
-      console.error(fallidos.map(f => f.error));
-      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${textoError(fallidos[0].error)}`, true);
+      console.error(fallidos.map(f => f.reason));
+      toast(`Se guardaron ${exitosos} de ${resultados.length}. ${fallidos.length} fallaron: ${textoError(fallidos[0].reason)}`, true);
     } else {
       toast(`✓ ${exitosos} mínimo${exitosos > 1 ? 's' : ''} actualizado${exitosos > 1 ? 's' : ''}`);
       modoEditarMinimos = false;
@@ -5040,8 +5076,7 @@ async function guardarRepuesto() {
   };
   try {
     if (repuestoActual) {
-      const { error } = await sb.from('mant_repuestos').update(data).eq('id', repuestoActual.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_repuestos').update(data).eq('id', repuestoActual.id));
       toast('✓ Repuesto actualizado');
     } else {
       const { error } = await sb.from('mant_repuestos').insert(conBarco(data));
@@ -5060,8 +5095,7 @@ async function borrarRepuesto() {
   if (!repuestoActual) return;
   if (!confirm(`¿Borrar "${repuestoActual.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
   try {
-    const { error } = await sb.from('mant_repuestos').delete().eq('id', repuestoActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_repuestos').delete().eq('id', repuestoActual.id));
     toast('✓ Repuesto borrado');
     cerrarModalRep();
     await cargarTodo();
@@ -5098,8 +5132,7 @@ async function guardarMovimiento() {
   else nuevoStock = cant;
 
   try {
-    const { error: e1 } = await sb.from('mant_repuestos').update({ cantidad: nuevoStock }).eq('id', movRepuestoActual.id);
-    if (e1) throw e1;
+    await cambiarFilas(sb.from('mant_repuestos').update({ cantidad: nuevoStock }).eq('id', movRepuestoActual.id));
     const { error: e2 } = await sb.from('mant_movimientos').insert(conBarco({
       repuesto_id: movRepuestoActual.id,
       tipo,
@@ -5239,8 +5272,7 @@ async function guardarHerr() {
   };
   try {
     if (herrActual) {
-      const { error } = await sb.from('mant_herramientas').update(data).eq('id', herrActual.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_herramientas').update(data).eq('id', herrActual.id));
       toast('✓ Herramienta actualizada');
     } else {
       const { error } = await sb.from('mant_herramientas').insert(conBarco(data));
@@ -5258,8 +5290,7 @@ async function borrarHerr() {
   if (!herrActual) return;
   if (!confirm(`¿Borrar "${herrActual.nombre}"?`)) return;
   try {
-    const { error } = await sb.from('mant_herramientas').delete().eq('id', herrActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_herramientas').delete().eq('id', herrActual.id));
     toast('✓ Herramienta borrada');
     cerrarModalHerr();
     await cargarTodo();
@@ -5515,8 +5546,7 @@ async function guardarDef() {
 
   try {
     if (defActual) {
-      const { error } = await sb.from('mant_deficiencias').update(data).eq('id', defActual.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_deficiencias').update(data).eq('id', defActual.id));
       toast('✓ Deficiencia actualizada');
     } else {
       data.fecha_detectada = fecha;
@@ -5557,10 +5587,9 @@ async function guardarCierreDef() {
   if (fecha < defActual.fecha_detectada) { toast('La fecha de cierre no puede ser anterior a la detectada', true); return; }
   if (!confirm(`¿Marcar la deficiencia ${numeroDef(defActual)} como resuelta?\n\nDeja de figurar como abierta y ya no se puede editar. Si fue un error, jefe o admin puede reabrirla desde el detalle.`)) return;
   try {
-    const { error } = await sb.from('mant_deficiencias')
+    await cambiarFilas(sb.from('mant_deficiencias')
       .update({ estado: 'cerrada', fecha_cierre: fecha, accion_realizada: accion })
-      .eq('id', defActual.id);
-    if (error) throw error;
+      .eq('id', defActual.id));
     toast(`✓ Deficiencia ${numeroDef(defActual)} marcada como resuelta`);
     cerrarModalDefCerrar();
     await cargarTodo();
@@ -5849,9 +5878,10 @@ function llenarSelectDepto(sel, actual) {
   sel.innerHTML = opciones.map(d => `<option value="${d}">${d}</option>`).join('');
   sel.value = actual || (opciones.includes(filtroDepto) ? filtroDepto : opciones[0] || '');
 }
-// Equipo de un certificado: los activos, agrupados por departamento (y el actual aunque esté de baja)
+// Equipo de un certificado: los activos de los departamentos que el usuario edita (todo el barco: todos), agrupados
+// por departamento, y el actual aunque esté de baja o sea de otro departamento (ver certificado_equipo_permitido)
 function llenarSelectorEquipoCert(elegido) {
-  const lista = equiposTodos.filter(e => e.activo || e.id === elegido);
+  const lista = equiposTodos.filter(e => e.id === elegido || (e.activo && puedeEditar(e.departamento)));
   document.getElementById('c-equipo').innerHTML = '<option value="">— Sin equipo (del barco) —</option>' +
     DEPARTAMENTOS.map(d => {
       const deD = lista.filter(e => e.departamento === d).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -5864,15 +5894,21 @@ function llenarSelectorEquipoCert(elegido) {
 // id = certificado a editar; tripulanteId = agregar un documento nuevo a ese tripulante;
 // equipoId = agregar un certificado de ese equipo (desde su ficha)
 function abrirModalCert(id, tripulanteId, equipoId) {
-  certActual = id ? certificados.find(c => c.id === id) : null;
-  certTripNuevo = !certActual && tripulanteId ? tripulantes.find(t => t.id === tripulanteId) : null;
+  const cert = id ? certificados.find(c => c.id === id) : null;
+  const tripNuevo = !cert && tripulanteId ? tripulantes.find(t => t.id === tripulanteId) : null;
+  // Solo quien edita: uno existente, por su departamento; uno nuevo, por el del tripulante o el del equipo
+  const deptoQueManda = cert ? cert.departamento : tripNuevo ? tripNuevo.departamento : equipoId ? deptoEquipo(equipoId) : null;
+  if (deptoQueManda ? !puedeEditar(deptoQueManda) : !deptosEditables().length) return;
+  certActual = cert;
+  certTripNuevo = tripNuevo;
   const trip = certActual ? tripulanteDe(certActual) : certTripNuevo;
   const nombreInput = document.getElementById('c-nombre');
 
   // Los documentos personales no eligen categoría, departamento ni equipo (vienen del tripulante)
   document.getElementById('c-campos-barco').style.display = trip ? 'none' : 'grid';
   document.getElementById('c-campo-equipo').style.display = trip ? 'none' : '';
-  llenarSelectDepto(document.getElementById('c-departamento'), certActual?.departamento);
+  // Uno nuevo desde la ficha arranca en el departamento del equipo
+  llenarSelectDepto(document.getElementById('c-departamento'), certActual?.departamento || (equipoId ? deptoEquipo(equipoId) : null));
   llenarSelectorEquipoCert(certActual ? certActual.equipo_id : equipoId);
   if (trip) {
     nombreInput.setAttribute('list', 'c-sugerencias-trip');
@@ -5955,12 +5991,19 @@ async function guardarCert() {
     data.categoria = document.getElementById('c-categoria').value;
     data.departamento = document.getElementById('c-departamento').value;
     data.equipo_id = parseInt(document.getElementById('c-equipo').value) || null;
+    // Agregar o vincular a un equipo: lo edita quien edita el departamento del equipo, y del mismo departamento,
+    // salvo quien tiene todo el barco (la base lo exige igual: mant_priv.certificado_equipo_permitido)
+    const cambiaEquipo = data.equipo_id && (!certActual || data.equipo_id !== certActual.equipo_id || data.departamento !== certActual.departamento);
+    if (cambiaEquipo && !puedeEditar()) {
+      const dEq = deptoEquipo(data.equipo_id);
+      if (!puedeEditar(dEq)) { toast('Solo quien edita el departamento del equipo puede agregarle certificados', true); return; }
+      if (data.departamento !== dEq) { toast(`El certificado tiene que ser de ${dEq}, como su equipo: uno de otro departamento lo carga quien tiene todo el barco`, true); return; }
+    }
   }
 
   try {
     if (certActual) {
-      const { error } = await sb.from('mant_certificados').update(data).eq('id', certActual.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_certificados').update(data).eq('id', certActual.id));
       toast(trip ? '✓ Documento actualizado' : '✓ Certificado actualizado');
     } else {
       const { error } = await sb.from('mant_certificados').insert(conBarco(data));
@@ -5980,8 +6023,7 @@ async function darDeBajaCert() {
   if (!certActual) return;
   if (!confirm(`¿Dar de baja "${certActual.nombre}"?\n\nDeja de aparecer en la lista y en las alertas. El historial de renovaciones se conserva en la base.`)) return;
   try {
-    const { error } = await sb.from('mant_certificados').update({ activo: false }).eq('id', certActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_certificados').update({ activo: false }).eq('id', certActual.id));
     toast('✓ Dado de baja');
     cerrarModalCert();
     await cargarTodo();
@@ -6019,8 +6061,7 @@ async function guardarTrip() {
   try {
     if (tripActual) {
       // Si cambia el departamento, el trigger mant_tripulantes_propagar_depto lo copia a sus documentos
-      const { error } = await sb.from('mant_tripulantes').update(data).eq('id', tripActual.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_tripulantes').update(data).eq('id', tripActual.id));
       toast('✓ Tripulante actualizado');
     } else {
       const { error } = await sb.from('mant_tripulantes').insert(conBarco(data));
@@ -6042,8 +6083,7 @@ async function darDeBajaTrip() {
   const docsTxt = n ? `\n\nSus ${n} documento${n>1?'s':''} dejan de aparecer en la lista y en las alertas (se conservan en la base).` : '';
   if (!confirm(`¿Dar de baja a "${tripActual.nombre}"?${docsTxt}`)) return;
   try {
-    const { error } = await sb.from('mant_tripulantes').update({ activo: false }).eq('id', tripActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_tripulantes').update({ activo: false }).eq('id', tripActual.id));
     toast('✓ Tripulante dado de baja');
     cerrarModalTrip();
     await cargarTodo();
@@ -6060,8 +6100,7 @@ async function reactivarTrip() {
   const docsTxt = n ? `\n\nSus ${n} documento${n>1?'s':''} vuelve${n>1?'n':''} a aparecer en la lista y en las alertas.` : '';
   if (!confirm(`¿Reactivar a "${tripActual.nombre}"?${docsTxt}`)) return;
   try {
-    const { error } = await sb.from('mant_tripulantes').update({ activo: true }).eq('id', tripActual.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_tripulantes').update({ activo: true }).eq('id', tripActual.id));
     toast(`✓ ${tripActual.nombre} reactivado`);
     cerrarModalTrip();
     await cargarTodo();
@@ -6765,8 +6804,7 @@ async function guardarComb() {
       periodoId = combActual.id;
       // Primero las cargas: si el operador carga el fin, después el período queda cerrado para él
       await guardarCargasComb(periodoId, cargas);
-      const { error } = await sb.from('mant_combustible_periodos').update(datos).eq('id', periodoId);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_combustible_periodos').update(datos).eq('id', periodoId));
     } else {
       const { data: nuevo, error } = await sb.from('mant_combustible_periodos').insert(conBarco(datos)).select().single();
       if (error) throw error;
@@ -6791,15 +6829,14 @@ async function guardarCargasComb(periodoId, cargas) {
   const quedan = new Set(cargas.filter(c => c.id).map(c => c.id));
   const borrar = antes.filter(c => !quedan.has(c.id)).map(c => c.id);
   if (borrar.length) {
-    const { error } = await sb.from('mant_combustible_cargas').delete().in('id', borrar);
-    if (error) throw error;
+    const borradas = await cambiarFilas(sb.from('mant_combustible_cargas').delete().in('id', borrar));
+    if (borradas.length < borrar.length) throw new Error(`Se borraron ${borradas.length} de ${borrar.length} cargas: no tenés permiso para las demás`);
   }
   for (const c of cargas.filter(c => c.id)) {
     const vieja = antes.find(a => a.id === c.id);
     if (vieja && vieja.fecha === c.fecha && Number(vieja.litros) === c.litros && (vieja.proveedor || null) === c.proveedor) continue;
-    const { error } = await sb.from('mant_combustible_cargas')
-      .update({ fecha: c.fecha, litros: c.litros, proveedor: c.proveedor }).eq('id', c.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_combustible_cargas')
+      .update({ fecha: c.fecha, litros: c.litros, proveedor: c.proveedor }).eq('id', c.id));
   }
   const nuevas = cargas.filter(c => !c.id).map(c => ({ periodo_id: periodoId, fecha: c.fecha, litros: c.litros, proveedor: c.proveedor }));
   if (nuevas.length) {
@@ -6818,8 +6855,7 @@ async function borrarComb(id) {
     (nt ? `\n\nSus ${nt} trasvase${nt > 1 ? 's' : ''} no se borran: quedan sin período hasta que cargues otro período con esas fechas.` : '') +
     '\n\nEsta acción no se puede deshacer.')) return;
   try {
-    const { error } = await sb.from('mant_combustible_periodos').delete().eq('id', id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_combustible_periodos').delete().eq('id', id));
     toast('✓ Período borrado');
     await cargarTodo();
   } catch (err) {
@@ -7331,13 +7367,12 @@ async function guardarLecturasSonda(sondaId, valores) {
     if (v.litros == null) { if (vieja) borrar.push(vieja.id); continue; }
     if (!vieja) { nuevas.push({ sonda_id: sondaId, tanque_id: v.tanque_id, litros: v.litros }); continue; }
     if (Number(vieja.litros) !== v.litros) {
-      const { error } = await sb.from('mant_sondas_lecturas').update({ litros: v.litros }).eq('id', vieja.id);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_sondas_lecturas').update({ litros: v.litros }).eq('id', vieja.id));
     }
   }
   if (borrar.length) {
-    const { error } = await sb.from('mant_sondas_lecturas').delete().in('id', borrar);
-    if (error) throw error;
+    const borradas = await cambiarFilas(sb.from('mant_sondas_lecturas').delete().in('id', borrar));
+    if (borradas.length < borrar.length) throw new Error(`Se borraron ${borradas.length} de ${borrar.length} lecturas: no tenés permiso para las demás`);
   }
   if (nuevas.length) {
     const { error } = await sb.from('mant_sondas_lecturas').insert(conBarco(nuevas));
@@ -8356,8 +8391,10 @@ async function reemplazarMiniatura(ruta, mini) {
 }
 async function borrarFoto(ruta) {
   urlsFotos.delete(ruta); urlsFotos.delete(rutaMiniatura(ruta));
-  const { error } = await sb.storage.from(FOTOS_BUCKET).remove([ruta, rutaMiniatura(ruta)]);
+  const { data, error } = await sb.storage.from(FOTOS_BUCKET).remove([ruta, rutaMiniatura(ruta)]);
   if (error) throw error;
+  // Sin permiso (o si ya no estaba) Storage no da error: solo no borra. Nadie muestra "✓" por esto; queda el rastro
+  if (!data || !data.length) console.warn('No se borró ningún archivo de', ruta);
 }
 // Enlace firmado (de corta duración) de una foto o de su miniatura
 async function urlFoto(ruta, miniatura) {
@@ -8895,8 +8932,7 @@ async function guardarBuque() {
   if (capacidad != null && capacidad < 0) { toast('La capacidad de combustible no puede ser negativa', true); return; }
   data.capacidad_combustible_litros = capacidad;
   try {
-    const { error } = await sb.from('mant_buque').update(data).eq('id', buque.id);
-    if (error) throw error;
+    await cambiarFilas(sb.from('mant_buque').update(data).eq('id', buque.id));
     toast('✓ Ficha del buque actualizada');
     cerrarModalBuque();
     await cargarTodo();
@@ -9196,7 +9232,7 @@ function renderCertificadosFicha() {
   div.innerHTML = `
     <div class="ficha-hist-barra">
       <h3 class="panel-titulo" style="margin:0">📋 Certificados (${certs.length})</h3>
-      ${equipoActualFicha.activo ? `<button class="btn btn-pequeno solo-jefe"${attrDepto('alguno')} onclick="abrirModalCert(null, null, ${equipoActualFicha.id})">➕ Certificado</button>` : ''}
+      ${equipoActualFicha.activo ? `<button class="btn btn-pequeno solo-jefe"${attrDepto(equipoActualFicha.departamento)} onclick="abrirModalCert(null, null, ${equipoActualFicha.id})">➕ Certificado</button>` : ''}
     </div>
     ${certs.length
       ? `<div class="task-list">${certs.map(c => renderCertCard(c, true)).join('')}</div>`
@@ -9635,8 +9671,7 @@ async function guardarEquipo() {
   }
   try {
     if (editId) {
-      const { error } = await sb.from('mant_equipos').update(data).eq('id', idEdit);
-      if (error) throw error;
+      await cambiarFilas(sb.from('mant_equipos').update(data).eq('id', idEdit));
       toast('✓ Equipo actualizado');
     } else {
       const { error } = await sb.from('mant_equipos').insert(conBarco(data));

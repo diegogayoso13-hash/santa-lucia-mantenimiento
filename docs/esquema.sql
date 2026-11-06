@@ -1995,3 +1995,34 @@ END;
 $$;
 REVOKE EXECUTE ON FUNCTION public.mant_deficiencias_reabrir(BIGINT) FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.mant_deficiencias_reabrir(BIGINT) TO authenticated;
+
+-- =============== CERTIFICADOS CON EQUIPO ===============
+-- Agregar un certificado a un equipo (o vincularlo) exige poder editar el departamento DEL EQUIPO; un certificado
+-- de otro departamento que su equipo solo lo crea o vincula quien tiene todo el barco (admin o jefe sin depto).
+-- Editar o renovar sin cambiar equipo ni departamento sigue la regla de siempre (el departamento del certificado).
+CREATE FUNCTION mant_priv.certificado_equipo_permitido() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE v_depto_equipo TEXT;
+BEGIN
+  IF auth.uid() IS NULL OR NEW.equipo_id IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'UPDATE' AND NEW.equipo_id IS NOT DISTINCT FROM OLD.equipo_id
+     AND NEW.departamento IS NOT DISTINCT FROM OLD.departamento THEN
+    RETURN NEW;
+  END IF;
+  IF mant_priv.nivel_depto(NEW.barco_id, NULL) >= 3 THEN RETURN NEW; END IF;  -- todo el barco
+  v_depto_equipo := mant_priv.depto_equipo(NEW.barco_id, NEW.equipo_id);
+  IF NOT mant_priv.puede(NEW.barco_id, v_depto_equipo, 3) THEN
+    RAISE EXCEPTION 'Solo quien edita el departamento del equipo puede agregarle certificados' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.departamento IS DISTINCT FROM v_depto_equipo THEN
+    RAISE EXCEPTION 'Un certificado de otro departamento que el equipo solo lo carga quien tiene todo el barco' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION mant_priv.certificado_equipo_permitido() FROM public;
+GRANT EXECUTE ON FUNCTION mant_priv.certificado_equipo_permitido() TO authenticated, service_role;
+-- Corre después de mant_certificados_depto_tripulante (orden alfabético), con el departamento ya definitivo
+CREATE TRIGGER mant_certificados_equipo_permitido
+  BEFORE INSERT OR UPDATE OF equipo_id, departamento ON public.mant_certificados
+  FOR EACH ROW EXECUTE FUNCTION mant_priv.certificado_equipo_permitido();
