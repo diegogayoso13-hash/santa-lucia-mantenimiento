@@ -301,7 +301,7 @@ Stage 1 (section `============ SONDAS ============`, sub-tab `sondas` of ⛽ Con
 
 ### Rellenos de aceite (oil top-ups)
 
-Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos, same visibility switch as Combustible. It started on 2026-11-03 with no history. Not built yet: importing history, and an automatic oil change when a task is completed.
+Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos, same visibility switch as Combustible. It started on 2026-11-03 with no history. Not built yet: importing history. An oil change done as a task isn't copied to `mant_rellenos`; it's read from the history (see "Since the last change").
 
 - **Oils (`mant_aceites`):**
   - Each oil has `nombre` (unique per ship), `tipo`, and `tanque_id` (where it's stored: a tank of `mant_tanques`; null = "tambor/bidón").
@@ -320,10 +320,14 @@ Section `============ RELLENOS ============`, sub-tab `rellenos` of ⛽ Consumos
   - Filters by equipment, oil and date range (`filtrosRellenos()` / `rellenosFiltrados()`, shared with the Excel), with the total litres of what's filtered.
   - A table on PC (newest first) and cards at 700 px or less.
   - `exportarRellenosExcel()` exports what's on screen; the file name carries the filters.
-- **Equipment ficha:** `renderRellenosFicha()` fills `#ficha-rellenos` with:
-  - the "🛢️ Relleno" button (`abrirModalRelleno(null, equipoId)`);
-  - the totals of the last 30 and 90 days, counting today;
+- **Only equipment with oil** (`llevaAceite(eq)`: `aceite_id` set) shows top-up things: the "Equipo" filter and the `#modal-relleno` equipment list offer only those (plus the equipment of the top-up being edited, and in the filter any equipment that already has top-ups). Old top-ups of equipment without oil are never hidden.
+- **Since the last change** (`desdeUltimoCambio(equipoId)`): the last change is the most recent of the equipment's latest `'Cambio'` top-up and the latest `mant_historial` record of a task marked `mant_tareas.cambio_aceite` (retired tasks included; on the same day the task wins). It returns the litres and count of `'Relleno'` rows after it: after a `'Cambio'` top-up, same-day ones by `id`; after a task, same-day ones don't count. It's null when there's no change at all ("Sin cambio registrado", the whole history is not summed). The card shows where the change came from ("(tarea)" / "(Rellenos)").
+  - `cambio_aceite` is set with the "🛢️ Esta tarea es un cambio de aceite" checkbox (`#nt-cambio-aceite`) in `#modal-tarea`, when creating and editing (jefe/admin: the operador trigger rejects it). `mant_barco_crear` copies it. It's shown as a third card after the oil tank cards of the sub-tab (`htmlCartelUltimoCambio()`, for the equipment chosen in the "Equipo" filter, else "Elegí un equipo"), and in the ficha.
+- **Equipment ficha:** `renderRellenosFicha()` fills `#ficha-rellenos` (empty for equipment without oil and without top-ups) with:
+  - the "🛢️ Relleno" button (`abrirModalRelleno(null, equipoId)`), only if the equipment has oil;
+  - the totals of the last 30 and 90 days, counting today, and since the last change;
   - the last 5 top-ups.
+  - The ficha history's "🛢️ Aceite" filter follows the same rule (oil assigned or top-ups already loaded).
 - **Oil consumption by sounding:** it sits at the top of the same sub-tab (`renderConsumoAceite()`, called from `renderRellenos()`).
   - **Tank use:** each oil tank has `mant_tanques.uso_aceite`: `'Reserva'` (equipment is topped up from it) or `'Sistema'` (a system's reservoir, whose level should hold).
     - A check allows it only on oil tanks. It's set with the "Uso" select in the tank modal (`tanqueServicioCambiado()`, `SERVICIOS_ACEITE`), and `guardarTanque()` clears it for other services.
@@ -390,7 +394,7 @@ Supabase email/password auth (`sb.auth`). `chequearSesion()` runs on load; `onAu
 - `mant_certificados` — `nombre`, `categoria`, `tripulante_id` → `mant_tripulantes(id)` (nullable; set ⇔ `categoria = 'Tripulación'`), `equipo_id` → `mant_equipos(barco_id, id)` (optional, never on a personal document; of another department than the certificate only if a whole-ship user linked it, see "Certificates with equipment"), `departamento`, `fecha_vencimiento` (nullable, see "Certificates without a date"), `dias_aviso` (default 30), `observaciones`, `activo`.
 - `mant_certificados_historial` — `certificado_id` → `mant_certificados(id)`, `fecha_renovacion`, `vencimiento_anterior`, `vencimiento_nuevo`, `notas`; written only by `mant_certificados_renovar()`.
 - `mant_tareas` and `mant_certificados` both have `postergada_hasta` + `motivo_postergacion` (both null or both set).
-- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(barco_id, id)` (`not null`; equipment with tasks can't be hard-deleted), `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals). `unidad` also allows `'ambos'` and `'ninguna'`.
+- `mant_tareas` extra columns: `equipo_id` → `mant_equipos(barco_id, id)` (`not null`; equipment with tasks can't be hard-deleted), `tipo_trabajo` (check-constrained code, nullable), `cada_hrs` / `cada_meses` (control intervals), `cambio_aceite` (boolean, default false: the task is an oil change, see "Rellenos de aceite"). `unidad` also allows `'ambos'` and `'ninguna'`.
 - `mant_combustible_periodos` — `desde`, `hasta`, `inicio_litros`, `fin_litros` (null = en curso), `horas_mmpp`, `horas_mga`, `millas`, `horas_navegacion`, `observaciones`, `creado_en/por`, `actualizado_en/por`; `unique (barco_id, id)`.
 - `mant_combustible_cargas` — `periodo_id` → `mant_combustible_periodos(barco_id, id)` on delete cascade, `fecha`, `litros` (> 0), `proveedor`, `creado_en/por`.
 - `mant_combustible_trasvases` — `origen_barco_id` / `destino_barco_id` → `mant_buque(id)` (one may be null), `otro_buque` (name, only when one side is null), `fecha`, `litros` (> 0), `notas`, `creado_en/por`, `actualizado_en/por`. It has no `barco_id`: it belongs to both ships.

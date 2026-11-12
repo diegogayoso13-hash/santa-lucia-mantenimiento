@@ -2611,6 +2611,12 @@
       </div>
     </div>
     <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="nt-cambio-aceite" style="width:auto">
+        🛢️ Esta tarea es un cambio de aceite <span style="font-weight:normal;color:var(--texto-suave)">(cuenta como último cambio en Rellenos)</span>
+      </label>
+    </div>
+    <div class="field">
       <label>¿Cómo se controla?</label>
       <!-- No confundir con el tipo de trabajo: esto es mant_tareas.unidad -->
       <select id="nt-tipo" onchange="toggleTipoTarea()">
@@ -3847,6 +3853,7 @@ function abrirModalTarea() {
   llenarSelectorEquipoTarea(null);
   document.getElementById('nt-tarea').value = '';
   document.getElementById('nt-tipo-trabajo').value = '';
+  document.getElementById('nt-cambio-aceite').checked = false;
   document.getElementById('nt-tipo').value = 'hrs';
   document.getElementById('nt-opcion-ninguna').hidden = true;  // al crear siempre hay control
   document.getElementById('nt-cada-hrs').value = '';
@@ -3872,6 +3879,7 @@ function abrirEditarTarea() {
   llenarSelectorEquipoTarea(t.equipo_id);
   document.getElementById('nt-tarea').value = t.tarea;
   document.getElementById('nt-tipo-trabajo').value = t.tipo_trabajo || '';
+  document.getElementById('nt-cambio-aceite').checked = !!t.cambio_aceite;
   document.getElementById('nt-prioridad').value = t.prioridad || 'MEDIA';
   document.getElementById('nt-opcion-ninguna').hidden = false;
   document.getElementById('nt-tipo').value = t.unidad || 'ninguna';
@@ -3975,6 +3983,7 @@ async function guardarTarea() {
     activa: true,
     observaciones: notas || null,
     tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null,
+    cambio_aceite: document.getElementById('nt-cambio-aceite').checked,
     unidad: c.unidad,
     cada_hrs: usaHoras(c) ? c.hrs : null,
     cada_meses: usaFecha(c) ? c.meses : null,
@@ -4028,7 +4037,8 @@ async function guardarEdicionTarea() {
   const data = {
     tarea: nombre,
     prioridad: document.getElementById('nt-prioridad').value,
-    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null
+    tipo_trabajo: document.getElementById('nt-tipo-trabajo').value || null,
+    cambio_aceite: document.getElementById('nt-cambio-aceite').checked
   };
   // Cambio de equipo: id, nombre de la ficha y horas del equipo nuevo van juntos (el historial sigue a la tarea)
   const cambiaEquipo = eq.id !== t.equipo_id;
@@ -7616,6 +7626,29 @@ function rellenosFiltrados() {
     (!f.desde || r.fecha >= f.desde) && (!f.hasta || r.fecha <= f.hasta));
 }
 function sumaLitros(lista) { return redondearLitros(lista.reduce((s, r) => s + Number(r.litros), 0)); }
+// Solo los equipos con aceite asignado muestran lo de rellenos (botón, carteles, filtros); los rellenos viejos
+// de un equipo que ya no lo tiene se siguen viendo
+function llevaAceite(eq) { return !!eq?.aceite_id; }
+// Rellenos desde el último cambio de aceite del equipo. El último cambio es el más reciente entre un "Cambio" de
+// Rellenos y el último registro del historial de una tarea marcada como cambio de aceite (mant_tareas.cambio_aceite,
+// también las dadas de baja). Se suman los "Relleno" posteriores: tras un "Cambio" de Rellenos, el mismo día por id;
+// tras un cambio por tarea, los del mismo día no (son parte del cambio); con los dos el mismo día, manda la tarea.
+// null = el equipo nunca tuvo un cambio registrado (no se suma todo el historial).
+function desdeUltimoCambio(equipoId) {
+  const posterior = (a, b) => a.fecha.localeCompare(b.fecha) || a.id - b.id;   // > 0 si a va después de b
+  const delEquipo = rellenos.filter(r => r.equipo_id === equipoId);
+  const cambio = delEquipo.filter(r => r.tipo === 'Cambio').reduce((u, r) => !u || posterior(r, u) > 0 ? r : u, null);
+  const tareasCambio = new Set(tareasTodas.filter(t => t.cambio_aceite && t.equipo_id === equipoId).map(t => t.id));
+  const porTarea = historial.filter(h => tareasCambio.has(h.tarea_id))
+    .reduce((u, h) => !u || h.fecha_realizado > u.fecha_realizado ? h : u, null);
+  if (!cambio && !porTarea) return null;
+  const usaTarea = porTarea && (!cambio || porTarea.fecha_realizado >= cambio.fecha);
+  const lista = delEquipo.filter(r => r.tipo === 'Relleno' &&
+    (usaTarea ? r.fecha > porTarea.fecha_realizado : posterior(r, cambio) > 0));
+  return { fecha: usaTarea ? porTarea.fecha_realizado : cambio.fecha, origen: usaTarea ? 'tarea' : 'Rellenos',
+    cantidad: lista.length, litros: sumaLitros(lista) };
+}
+function textoCantRellenos(n) { return `${n} relleno${n !== 1 ? 's' : ''}`; }
 
 function renderRellenos() {
   if (!puedeVerCombustible()) {
@@ -7626,9 +7659,8 @@ function renderRellenos() {
     renderRellenosFicha();
     return;
   }
-  renderConsumoAceite();
-  // Filtros: equipos y aceites que tienen rellenos, más los activos
-  const eqIds = new Set([...equipos.map(e => e.id), ...rellenos.map(r => r.equipo_id)]);
+  // Filtros: equipos y aceites que tienen rellenos, más los activos (equipos: solo los que llevan aceite)
+  const eqIds = new Set([...equipos.filter(llevaAceite).map(e => e.id), ...rellenos.map(r => r.equipo_id)]);
   const eqOpc = [...eqIds].map(id => ({ id, nombre: equipos.find(e => e.id === id)?.nombre || nombreEquipoRelleno(rellenos.find(r => r.equipo_id === id)) }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
   llenarSelectConservando(document.getElementById('rl-filtro-equipo'),
@@ -7636,6 +7668,8 @@ function renderRellenos() {
   llenarSelectConservando(document.getElementById('rl-filtro-aceite'),
     '<option value="">Todos los aceites</option>' + aceites.filter(a => a.activo || rellenos.some(r => r.aceite_id === a.id))
       .map(a => `<option value="${a.id}">${escape(a.nombre)}</option>`).join(''));
+  // Después de los filtros: el cartel "Desde el último cambio" toma el equipo elegido
+  renderConsumoAceite();
 
   const lista = rellenosFiltrados();
   document.getElementById('rl-total').innerHTML = rellenos.length
@@ -7680,21 +7714,27 @@ function renderRellenos() {
   renderRellenosFicha();
 }
 
-// Bloque de la ficha del equipo: botón, totales de los últimos 30 y 90 días (contando hoy) y últimos 5 rellenos
+// Bloque de la ficha del equipo: botón, totales de los últimos 30 y 90 días (contando hoy), desde el último cambio
+// y últimos 5 rellenos. Solo en equipos con aceite; uno sin aceite pero con rellenos viejos los muestra, sin botón.
 function renderRellenosFicha() {
   const div = document.getElementById('ficha-rellenos');
   if (!div || !equipoActualFicha) return;
-  if (!puedeVerCombustible()) { div.innerHTML = ''; return; }
   const id = equipoActualFicha.id;
+  const eq = equiposTodos.find(e => e.id === id) || equipoActualFicha;
   const delEquipo = rellenos.filter(r => r.equipo_id === id);
+  if (!puedeVerCombustible() || (!llevaAceite(eq) && !delEquipo.length)) { div.innerHTML = ''; return; }
   const hoy = hoyLocalISO();
   const ultimos = dias => sumaLitros(delEquipo.filter(r => r.fecha >= sumarDias(hoy, -(dias - 1)) && r.fecha <= hoy));
+  const dc = desdeUltimoCambio(id);
   div.innerHTML = `
     <h3 class="panel-titulo" style="margin-top:6px">🛢️ Rellenos de aceite</h3>
-    <div class="acciones-globales"><button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalRelleno(null, ${id})">🛢️ Relleno</button></div>
+    ${llevaAceite(eq) ? `<div class="acciones-globales"><button class="btn solo-operador" data-dep="maquinas" onclick="abrirModalRelleno(null, ${id})">🛢️ Relleno</button></div>`
+      : '<div style="font-size:12.5px;color:var(--texto-suave);margin-bottom:8px">El equipo no tiene aceite asignado en su ficha.</div>'}
     <div class="ficha-rellenos-tot">
       <div><strong>${fmtLitros(ultimos(30))} L</strong>últimos 30 días</div>
       <div><strong>${fmtLitros(ultimos(90))} L</strong>últimos 90 días</div>
+      ${dc ? `<div><strong>${fmtLitros(dc.litros)} L</strong>desde el cambio del ${fmtFechaDMA(dc.fecha)} (${dc.origen}) · ${textoCantRellenos(dc.cantidad)}</div>`
+        : '<div><strong>—</strong>Sin cambio registrado</div>'}
     </div>
     ${delEquipo.length ? `<div>${delEquipo.slice(0, 5).map(r => `
       <div class="hist-item">
@@ -7712,9 +7752,10 @@ function abrirModalRelleno(id, equipoId) {
   if (rellenoActual ? !puedeEditarRelleno(rellenoActual) : !puedeRegistrar(DEPTO_PANOL)) { toast('No tenés permiso para esto', true); return; }
   if (!aceites.some(a => a.activo)) { toast('Primero cargá los aceites del barco ("🛢️ Aceites")', true); return; }
   const eqElegido = rellenoActual ? rellenoActual.equipo_id : (equipoId || null);
-  // Equipos activos y, si hace falta, el del relleno aunque esté dado de baja
-  const opciones = equipos.map(e => ({ id: e.id, nombre: e.nombre }));
+  // Equipos activos con aceite y, si hace falta, el del relleno aunque esté dado de baja o ya no tenga aceite
+  const opciones = equipos.filter(llevaAceite).map(e => ({ id: e.id, nombre: e.nombre }));
   if (rellenoActual && !opciones.some(e => e.id === rellenoActual.equipo_id)) opciones.push({ id: rellenoActual.equipo_id, nombre: nombreEquipoRelleno(rellenoActual) });
+  if (!opciones.length) { toast('Ningún equipo tiene aceite asignado: asignalo en la ficha del equipo', true); return; }
   opciones.sort((a, b) => a.nombre.localeCompare(b.nombre));
   document.getElementById('rl-equipo').innerHTML = '<option value="">— Elegí un equipo —</option>' +
     opciones.map(e => `<option value="${e.id}">${escape(e.nombre)}</option>`).join('');
@@ -7968,6 +8009,22 @@ function tablaConTarjetas(titulos, filas, numericas) {
       </div>`).join('')}</div>`;
 }
 
+// Cartel "Desde el último cambio": del equipo elegido en el filtro de la lista de rellenos
+function htmlCartelUltimoCambio() {
+  const id = filtrosRellenos().equipo;
+  const nombre = id ? equiposTodos.find(e => e.id === id)?.nombre || nombreEquipoRelleno(rellenos.find(r => r.equipo_id === id) || {}) : '';
+  const dc = id ? desdeUltimoCambio(id) : null;
+  return `
+    <div class="ac-tanque-card">
+      <div class="cab"><strong>Desde el último cambio</strong></div>
+      <div class="contenido">${id ? escape(nombre) : 'Aceite rellenado desde el último cambio'}</div>
+      ${!id ? '<div class="meta">Elegí un equipo en el filtro de abajo</div>'
+        : dc ? `<div class="litros">${fmtLitros(dc.litros)} L</div>
+          <div class="meta">${textoCantRellenos(dc.cantidad)} · cambio del ${fmtFechaDMA(dc.fecha)} (${dc.origen})</div>`
+        : '<div class="meta">Sin cambio registrado</div>'}
+    </div>`;
+}
+
 function renderConsumoAceite() {
   const tqs = tanquesDeAceite();
   // Tarjetas: última sonda de cada tanque de aceite
@@ -7983,7 +8040,7 @@ function renderConsumoAceite() {
           <div class="meta">${pct} % de ${fmtLitros(t.capacidad_litros)} L · sonda del ${fmtFechaDMA(u.fecha)}</div>`
           : '<div class="meta">Sin sondas que lo midan</div>'}
       </div>`;
-  }).join('');
+  }).join('') + htmlCartelUltimoCambio();
 
   const faltanSondas = '<div class="empty">Hacen falta al menos dos sondas con el tanque medido</div>';
   const bloques = [];
@@ -9403,10 +9460,12 @@ function renderHistorialFicha() {
   const lista = document.getElementById('ficha-historial-list');
   if (!lista || !equipoActualFicha) return;
   const eq = equiposTodos.find(e => e.id === equipoActualFicha.id) || equipoActualFicha;
-  if (filtroHistFicha === 'aceite' && !puedeVerCombustible()) filtroHistFicha = 'todo';
   const { abiertas, resto, cuentas } = itemsHistorialEquipo(eq);
+  // "Aceite" solo en equipos con aceite asignado o con rellenos ya cargados
+  const verAceite = puedeVerCombustible() && (llevaAceite(eq) || cuentas.aceite > 0);
+  if (filtroHistFicha === 'aceite' && !verAceite) filtroHistFicha = 'todo';
   const opciones = [['todo', 'Todo'], ['tareas', '🔧 Tareas'], ['deficiencias', '⚠️ Deficiencias']];
-  if (puedeVerCombustible()) opciones.push(['aceite', '🛢️ Aceite']);
+  if (verAceite) opciones.push(['aceite', '🛢️ Aceite']);
   document.getElementById('ficha-hist-filtros').innerHTML = opciones.map(([k, t]) =>
     `<button class="${filtroHistFicha === k ? 'activo' : ''}" onclick="cambiarFiltroHistFicha('${k}')">${t} (${cuentas[k]})</button>`).join('');
   const verAbiertas = ['todo', 'deficiencias'].includes(filtroHistFicha) ? abiertas : [];

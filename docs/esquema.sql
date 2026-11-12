@@ -179,6 +179,8 @@ CREATE TABLE public.mant_tareas (
   -- T Chequeo/Test, R Reemplazo, A Análisis, MT Chequeo con Megger, E Engrase/Lubricación
   tipo_trabajo TEXT CONSTRAINT mant_tareas_tipo_trabajo_check
     CHECK (tipo_trabajo IN ('I', 'IL', 'O', 'OH', 'L', 'T', 'R', 'A', 'MT', 'E')),
+  -- La tarea es un cambio de aceite del equipo: su último registro cuenta como último cambio en Rellenos
+  cambio_aceite BOOLEAN NOT NULL DEFAULT false,
   realizado_por TEXT,
   estado_op TEXT DEFAULT 'Operativo',
   observaciones TEXT,
@@ -1171,9 +1173,9 @@ BEGIN
   END IF;
 
   IF 'tareas' = ANY (p_copiar) THEN
-    INSERT INTO public.mant_tareas (barco_id, equipo, equipo_id, tarea, periodicidad, unidad, cada_hrs, cada_meses, prioridad, tipo_trabajo)
+    INSERT INTO public.mant_tareas (barco_id, equipo, equipo_id, tarea, periodicidad, unidad, cada_hrs, cada_meses, prioridad, tipo_trabajo, cambio_aceite)
     SELECT v_id, eq.nombre, (v_mapa ->> t.equipo_id::TEXT)::INTEGER, t.tarea, t.periodicidad, t.unidad, t.cada_hrs, t.cada_meses,
-           t.prioridad, t.tipo_trabajo
+           t.prioridad, t.tipo_trabajo, t.cambio_aceite
       FROM public.mant_tareas t
       JOIN public.mant_equipos eq ON eq.barco_id = t.barco_id AND eq.id = t.equipo_id
      WHERE t.barco_id = p_origen AND t.activa AND v_mapa ? t.equipo_id::TEXT
